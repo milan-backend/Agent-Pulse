@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+alembic
+python-dotenv
+passlib[bcrypt]
+python-jose
+bcrypt==4.0.1
+celery
+redis
+email-validator
+openai>=1.0.0
+websockets==12.0
