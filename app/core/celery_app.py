@@ -9,5 +9,13 @@ celery = Celery(
     backend=REDIS_URL
 )
 
+celery.conf.broker_use_ssl = {
+    "ssl_cert_reqs": "none"
+}
+
+celery.conf.redis_backend_use_ssl = {
+    "ssl_cert_reqs" : "none"
+}
+
 celery.conf.task_track_started = True
 celery.conf.result_expires = 3600
