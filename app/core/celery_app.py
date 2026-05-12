@@ -18,6 +18,11 @@ celery.conf.redis_backend_use_ssl = {
     "ssl_cert_reqs" : "none"
 }
 
+celery.conf.broker_connection_retry_on_startup = True
+celery.conf.broker_connection_retry = True
+celery.conf.broker_connection_max_retries = None
+celery.conf.redis_socket_keepalive = True
+
 celery.conf.task_ignore_result = True
 celery.conf.task_track_started = True
 celery.conf.result_expires = 3600
