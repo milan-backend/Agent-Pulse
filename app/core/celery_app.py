@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+import app.tasks.step_tasks 
 
 REDIS_URL = os.getenv("REDIS_URL")
 
