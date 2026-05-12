@@ -127,7 +127,7 @@ export default function DashboardPage() {
         : "ws:"
 
     const ws = new WebSocket(
-      `${protocol}//${window.location.hostname}:8000/ws/live`
+      process.env.NEXT_PUBLIC_WS_URL!
     )
 
     ws.onopen = () => {
