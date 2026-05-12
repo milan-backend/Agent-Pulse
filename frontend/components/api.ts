@@ -98,7 +98,7 @@ export async function fetchStepById(
   token: string
 ) {
   const response = await fetch(
-    `http://127.0.0.1:8000/steps/${stepId}`,
+    `${API_BASE}/${stepId}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
