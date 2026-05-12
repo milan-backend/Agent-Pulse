@@ -1,5 +1,6 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL
 
+
 export async function signupUser(data: {
   name: string
   email: string
