@@ -1,10 +1,11 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_KEY
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 
 export async function fetchDashboardSummary(
   token: string
 ) {
   const res = await fetch(
-    `${API_BASE}/dashboard/summary`,
+    `${API_URL}/dashboard/summary`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -19,7 +20,7 @@ export async function fetchDashboardUsage(
   token: string
 ) {
   const res = await fetch(
-    `${API_BASE}/dashboard/usage`,
+    `${API_URL}/dashboard/usage`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -34,7 +35,7 @@ export async function fetchDashboardSteps(
   token: string
 ) {
   const res = await fetch(
-    `${API_BASE}/dashboard/steps`,
+    `${API_URL}/dashboard/steps`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -49,7 +50,7 @@ export async function fetchUsageLogs(
   token: string
 ) {
   const res = await fetch(
-    `${API_BASE}/dashboard/usage/logs`,
+    `${API_URL}/dashboard/usage/logs`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -79,7 +80,7 @@ export async function regenerateApiKey(
 ) {
 
   const res = await fetch(
-    `${API_BASE}/agents/regenerate-key`,
+    `${API_URL}/agents/regenerate-key`,
     {
       method: "POST",
 
@@ -98,7 +99,7 @@ export async function fetchStepById(
   token: string
 ) {
   const response = await fetch(
-    `${API_BASE}/${stepId}`,
+    `${API_URL}/${stepId}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
