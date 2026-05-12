@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from app.tasks.step_tasks import process_step
 
 REDIS_URL = os.getenv("REDIS_URL")
 
@@ -16,8 +17,6 @@ celery.conf.broker_use_ssl = {
 celery.conf.redis_backend_use_ssl = {
     "ssl_cert_reqs" : "none"
 }
-
-celery.autodiscover_tasks(["app.tasks"])
 
 celery.conf.task_ignore_result = True
 celery.conf.task_track_started = True

@@ -1,4 +1,4 @@
-from app.core.celery_app import celery
+from celery import shared_task
 from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
@@ -7,7 +7,7 @@ from datetime import datetime
 import time
 
 
-@celery.task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=3)
 def process_step(self, step_id: str):
 
     db = SessionLocal()
