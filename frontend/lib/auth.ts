@@ -1,11 +1,11 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_KEY
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export async function signupUser(data: {
   name: string
   email: string
   password: string
 }) {
-  const res = await fetch(`${API_BASE}/auth/signup`, {
+  const res = await fetch(`${API_URL}/auth/signup`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -20,7 +20,7 @@ export async function loginUser(
   email: string,
   password: string
 ) {
-  const res = await fetch(`${API_BASE}/auth/login`, {
+  const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
