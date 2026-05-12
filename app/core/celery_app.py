@@ -1,9 +1,12 @@
+import os
 from celery import Celery
+
+REDIS_URL = os.getenv("REDIS_URL")
 
 celery = Celery(
     "dag_worker",
-    broker="redis://redis:6379/0",
-    backend="redis://redis:6379/0"
+    broker=REDIS_URL,
+    backend=REDIS_URL
 )
 
 celery.conf.task_track_started = True
