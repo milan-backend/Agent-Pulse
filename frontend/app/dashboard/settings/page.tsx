@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+const API_URL = process.env.NEXT_PUBLIC_API_URL
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -20,7 +21,7 @@ export default function SettingsPage() {
       const token = localStorage.getItem("token")
 
       const response = await fetch(
-        "http://127.0.0.1:8000/auth/me",
+        `${API_URL}/auth/me`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -43,7 +44,7 @@ export default function SettingsPage() {
       const token = localStorage.getItem("token")
 
       const response = await fetch(
-        "http://127.0.0.1:8000/agents/regenerate-key",
+        `${API_URL}/agents/regenerate-key`,
         {
           method: "POST",
           headers: {
@@ -88,7 +89,7 @@ export default function SettingsPage() {
       const token = localStorage.getItem("token")
 
       const response = await fetch(
-        "http://127.0.0.1:8000/agents/kill",
+        `${API_URL}/agents/kill`,
         {
           method: "POST",
           headers: {
@@ -112,7 +113,7 @@ export default function SettingsPage() {
      const token = localStorage.getItem("token")
 
      const response = await fetch(
-      "http://127.0.0.1:8000/agents/resume",
+      `${API_URL}/agents/resume`,
       {
         method: "POST",
         headers: {

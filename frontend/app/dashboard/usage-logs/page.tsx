@@ -14,6 +14,8 @@ import StatusBadge from "@/components/ui/StatusBadge"
 
 import TimelineEvent from "@/components/ui/TimelineEvent"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 export default function UsageLogsPage() {
 
   const router = useRouter()
@@ -38,7 +40,7 @@ export default function UsageLogsPage() {
       try {
 
         const response = await fetch(
-          "http://127.0.0.1:8000/dashboard/usage/logs",
+          `${API_URL}/dashboard/usage/logs`,
           {
             headers: {
               Authorization: `Bearer ${token}`,

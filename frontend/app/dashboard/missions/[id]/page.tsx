@@ -14,6 +14,8 @@ import LiveIndicator from "@/components/ui/LiveIndicator"
 
 import StatusBadge from "@/components/ui/StatusBadge"
 
+const API_URL = process.env.NEXT_PUBLIC_API_KEY
+
 export default function MissionDetailPage() {
 
   const router = useRouter()

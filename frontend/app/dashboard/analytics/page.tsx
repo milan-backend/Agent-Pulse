@@ -12,6 +12,8 @@ import LiveIndicator from "@/components/ui/LiveIndicator"
 
 import StatusBadge from "@/components/ui/StatusBadge"
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL
+
 export default function AnalyticsPage() {
 
   const router = useRouter()
@@ -35,7 +37,7 @@ export default function AnalyticsPage() {
       const token = localStorage.getItem("token");
 
       const costRes = await fetch(
-        "http://127.0.0.1:8000/analytics/costs",
+        `${API_URL}/analytics/costs`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -44,7 +46,7 @@ export default function AnalyticsPage() {
       );
 
       const blockedRes = await fetch(
-        "http://127.0.0.1:8000/analytics/blocked",
+        `${API_URL}/analytics/blocked`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -53,7 +55,7 @@ export default function AnalyticsPage() {
       );
 
       const agentsRes = await fetch(
-        "http://127.0.0.1:8000/analytics/agents",
+        `${API_URL}/analytics/agents`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
