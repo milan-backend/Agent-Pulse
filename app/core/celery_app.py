@@ -17,5 +17,7 @@ celery.conf.redis_backend_use_ssl = {
     "ssl_cert_reqs" : "none"
 }
 
+celery.autodiscover_tasks(["app.tasks"])
+
 celery.conf.task_track_started = True
 celery.conf.result_expires = 3600
