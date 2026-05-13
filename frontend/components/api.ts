@@ -99,7 +99,7 @@ export async function fetchStepById(
   token: string
 ) {
   const response = await fetch(
-    `${API_URL}/steps/${stepId}`,
+    `${API_URL}/${stepId}`,
     {
       headers: {
         Authorization: `Bearer ${token}`,
