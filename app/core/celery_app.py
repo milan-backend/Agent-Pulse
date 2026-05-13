@@ -1,6 +1,7 @@
 import os
 from celery import Celery
 from app.tasks.step_tasks import process_step
+import ssl
 
 REDIS_URL = os.getenv("REDIS_URL")
 
@@ -11,11 +12,11 @@ celery = Celery(
 )
 
 celery.conf.broker_use_ssl = {
-    "ssl_cert_reqs": "none"
+    "ssl_cert_reqs": ssl.CERT_NONE
 }
 
 celery.conf.redis_backend_use_ssl = {
-    "ssl_cert_reqs" : "none"
+    "ssl_cert_reqs" : ssl.CERT_NONE
 }
 
 
