@@ -19,6 +19,7 @@ celery = Celery(
 },
 )
 
+celery.autodiscover_tasks(["app.tasks"])
 
 celery.conf.task_ignore_result = True
 celery.conf.task_track_started = True
