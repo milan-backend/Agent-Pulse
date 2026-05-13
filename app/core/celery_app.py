@@ -11,6 +11,15 @@ celery = Celery(
     backend=REDIS_URL
 )
 
+celery.conf.broker_use_ssl = {
+
+    "ssl_cert_reqs": ssl.CERT_NONE
+}
+
+celery.conf.backend_use_ssl ={
+    "ssl_cert_reqs": ssl.CERT_NONE
+}
+
 
 
 celery.conf.task_ignore_result = True
