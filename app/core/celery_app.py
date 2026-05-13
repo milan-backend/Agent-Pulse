@@ -15,9 +15,6 @@ celery.conf.broker_use_ssl = {
     "ssl_cert_reqs": ssl.CERT_NONE
 }
 
-celery.conf.redis_backend_use_ssl = {
-    "ssl_cert_reqs" : ssl.CERT_NONE
-}
 
 
 
