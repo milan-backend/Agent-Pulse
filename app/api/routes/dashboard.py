@@ -411,7 +411,7 @@ def get_agents(
 
     # VALIDATE MEMBERSHIP
 
-    get_workspace_membership(
+    membership = get_workspace_membership(
         db=db,
         user_id=current_user.id,
         workspace_id=workspace_id
@@ -428,8 +428,8 @@ def get_agents(
 
     return {
 
-        "total_agents":
-            len(agents),
+         "total_agents": len(agents),
+         "role" : membership.role,
 
         "agents": [
 
