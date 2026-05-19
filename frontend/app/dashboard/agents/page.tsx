@@ -52,11 +52,6 @@ export default function AgentsPage() {
 
   useEffect(() => {
 
-    const userRole =
-      localStorage.getItem("role");
-
-    setRole(userRole || "");
-
     fetchAgents();
 
   }, []);
@@ -102,6 +97,10 @@ export default function AgentsPage() {
 
       setAgents(
         data.agents || []
+      );
+
+      setRole(
+        data.role || "viewer"
       );
 
     } catch (error) {
