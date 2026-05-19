@@ -97,7 +97,8 @@ async def execute_step(
 
     # 🔍 Idempotency check
     existing = db.query(DurableStep).filter(
-        DurableStep.idempotency_key == request.idempotency_key
+        DurableStep.idempotency_key == request.idempotency_key,
+        DurableStep.workspace_id == current_agent.workspace_id
     ).first()
 
     if existing:
