@@ -1,117 +1,452 @@
 # Agent-Pulse
 
-Agent-Pulse is an AI runtime orchestration, observability, and governance platform designed to monitor, control, and manage autonomous AI workflows in real time.
+Agent-Pulse is an AI runtime orchestration, observability, governance, and execution-control platform designed for modern autonomous AI systems.
 
-The platform provides durable task execution, distributed background processing, live runtime telemetry, mission tracing, governance controls, retry orchestration, and real-time execution visibility using FastAPI, Celery, Redis, PostgreSQL, WebSockets, and Docker.
+The platform provides durable task execution, distributed orchestration, runtime telemetry, mission tracing, governance enforcement, agent management, RBAC-based workspace collaboration, budget controls, execution analytics, and real-time operational visibility.
 
-Agent-Pulse focuses on solving one of the biggest challenges in modern AI systems:
+Built using FastAPI, Celery, Redis, PostgreSQL, WebSockets, Docker, and Next.js, Agent-Pulse focuses on solving one of the biggest operational challenges in modern AI systems:
 
-> Running AI agents reliably, safely, observably, and controllably at scale.
+Running AI agents reliably, observably, controllably, and safely at scale.
 
----
+# 🚀 Platform Highlights
 
-# 🚀 Core Features
+* Multi-tenant workspace architecture
 
-## 🔭 Runtime Observability
+* AI runtime orchestration
 
-- Real-time mission monitoring
-- Live execution telemetry
-- WebSocket-powered dashboard updates
-- Mission lifecycle tracking
-- Step execution visibility
-- Runtime execution analytics
-- Mission summaries and metrics
-- Worker activity monitoring
-- Execution timelines
-- Live activity feeds
+* Durable execution pipelines
 
----
+* Real-time observability
 
-## ⚙️ AI Workflow Orchestration
+* Agent lifecycle management
 
-- Durable background execution
-- Celery-based distributed worker architecture
-- Redis-backed task queue system
-- Concurrent workflow execution
-- Retry orchestration engine
-- Async execution pipelines
-- Queue-driven execution model
-- Worker lifecycle coordination
-- Durable step execution
-- Idempotent retry-safe execution model
+* Role-Based Access Control (RBAC)
 
----
+* Runtime governance & safety controls
 
-## 🛡️ Runtime Governance & Controls
+* Distributed worker execution
 
-- Kill switch for active missions
-- Runtime safeguard enforcement
-- Dynamic retry limits
-- Max-step execution protection
-- Infinite-loop protection
-- Repeated task detection
-- Runtime execution guards
-- Budget control architecture
-- Safe execution boundaries
-- Failure recovery workflows
+* Mission tracing & analytics
 
----
+* Budget-aware AI execution
 
-## 📊 AI Runtime Analytics
+* Live WebSocket telemetry
 
-- Token usage tracking
-- Runtime cost monitoring
-- Mission execution analytics
-- Retry analytics
-- Failure analytics
-- Step performance metrics
-- Worker execution visibility
-- Execution throughput tracking
-- Runtime telemetry aggregation
+* Retry-safe execution architecture
 
----
-
-## 🧱 Durable Execution Architecture
-
-- PostgreSQL-backed durable state
-- Persistent mission storage
-- Durable step persistence
-- Execution recovery architecture
-- Distributed worker coordination
-- Background task infrastructure
-- Queue durability model
-- Async processing pipelines
-- Execution replay-ready architecture
-
----
+* Idempotent durable workflows
 
 # 🧠 Why Agent-Pulse Exists
 
-Modern AI agents are becoming increasingly autonomous and operationally complex.
+Modern AI systems are becoming increasingly autonomous, distributed, and operationally complex.
 
-However, most AI systems still lack:
+However, most AI workflows still lack:
 
-- Runtime visibility
-- Durable execution
-- Governance controls
-- Execution tracing
-- Failure recovery
-- Cost monitoring
-- Safe orchestration
-- Runtime telemetry
-- Real-time observability
+* Runtime visibility
 
-Agent-Pulse is designed to solve these problems by combining:
+* Durable execution
 
-- observability,
-- orchestration,
-- governance,
-- runtime analytics,
-- and distributed execution
+* Governance controls
 
-into a unified AI runtime platform.
+* Execution tracing
 
----
+* Failure recovery
+
+* Cost monitoring
+
+* Multi-agent management
+
+* Runtime analytics
+
+* Safe orchestration
+
+* Real-time observability
+
+* Workspace collaboration
+
+* Runtime control systems
+
+Agent-Pulse is designed to unify:
+
+* observability,
+
+* orchestration,
+
+* governance,
+
+* analytics,
+
+* durable execution,
+
+* and runtime control
+
+into a single operational AI runtime platform.
+
+# 🏢 Multi-Tenant Workspace Architecture
+
+Agent-Pulse now supports a fully workspace-based SaaS architecture.
+
+Every:
+
+* agent,
+
+* mission,
+
+* runtime event,
+
+* task,
+
+* usage metric,
+
+* and governance operation
+
+is securely isolated per workspace.
+
+## Workspace Features
+
+* Workspace-based tenant isolation
+
+* Organization-style collaboration model
+
+* Workspace membership system
+
+* Workspace-aware APIs
+
+* Secure workspace validation
+
+* Workspace-scoped runtime telemetry
+
+* Workspace-specific analytics
+
+* Multi-organization support
+
+# 🔐 Role-Based Access Control (RBAC)
+
+Agent-Pulse includes backend-enforced RBAC infrastructure.
+
+## Roles
+
+### Admin
+
+* Full platform access
+
+* Agent creation
+
+* Budget controls
+
+* API key regeneration
+
+* Runtime governance access
+
+* Workspace member management
+
+### Operator
+
+* Operational runtime controls
+
+* Kill/resume permissions
+
+* Mission visibility
+
+* Runtime monitoring
+
+### Viewer
+
+* Read-only access
+
+* Runtime observability
+
+* Analytics visibility
+
+* Mission tracking
+
+## Security Enforcement
+
+* Backend role enforcement
+
+* Workspace membership validation
+
+* Protected runtime operations
+
+* Permission-aware execution control
+
+* Secure authorization layers
+
+# 🤖 Agent Management System
+
+Agent-Pulse includes a complete agent lifecycle management system.
+
+## Agents Dashboard
+
+* Real-time agent overview
+
+* Workspace-scoped agents
+
+* Responsive agents UI
+
+* Agent runtime summaries
+
+* Agent operational statistics
+
+* Runtime state visibility
+
+## Create Agent System
+
+* Secure agent creation flow
+
+* Runtime configuration support
+
+* API key generation
+
+* One-time API key visibility
+
+* Copy API key functionality
+
+* Workspace-bound agents
+
+* Role-protected creation access
+
+# 📄 Agent Detail Dashboard
+
+Each agent includes a dedicated operational dashboard.
+
+## Per-Agent Features
+
+* Runtime details
+
+* Agent metadata
+
+* Agent status visibility
+
+* Mission tracking
+
+* Usage monitoring
+
+* Budget controls
+
+* API key regeneration
+
+* Kill/resume controls
+
+* Task visibility
+
+* Runtime analytics
+
+* Execution telemetry
+
+# ⚙️ AI Workflow Orchestration
+
+Agent-Pulse provides durable distributed orchestration infrastructure.
+
+## Execution Features
+
+* Durable background execution
+
+* Celery distributed workers
+
+* Redis-backed execution queues
+
+* Concurrent workflow execution
+
+* Async execution pipelines
+
+* Queue-driven orchestration
+
+* Worker lifecycle coordination
+
+* Retry-safe execution model
+
+* Durable step tracking
+
+* Distributed task execution
+
+# 🧱 Durable Execution System
+
+The platform includes a durable runtime execution architecture.
+
+## Durable Runtime Features
+
+* Idempotent execution support
+
+* Duplicate request prevention
+
+* Cached execution reuse
+
+* Durable step persistence
+
+* Persistent mission state
+
+* PostgreSQL-backed runtime state
+
+* Execution replay-ready design
+
+* Failure recovery architecture
+
+* Runtime state synchronization
+
+# 🛡️ Runtime Governance & Controls
+
+Agent-Pulse includes runtime governance systems for operational AI safety.
+
+## Governance Features
+
+* Kill running agents
+
+* Resume paused agents
+
+* Runtime safeguard enforcement
+
+* Dynamic retry controls
+
+* Infinite-loop protection
+
+* Repeated task detection
+
+* Runtime execution guards
+
+* Mission execution protection
+
+* Safe execution boundaries
+
+* Runtime control enforcement
+
+* Failure containment architecture
+
+# 💰 Budget Control System
+
+Per-agent runtime budget management is built directly into the platform.
+
+## Budget Features
+
+* Runtime budget limits
+
+* Agent-level budget control
+
+* Usage restriction controls
+
+* Runtime spend visibility
+
+* AI usage monitoring
+
+* Operational cost awareness
+
+# 📋 Mission Runtime Infrastructure
+
+Mission orchestration is a core operational layer inside Agent-Pulse.
+
+## Mission Features
+
+* Mission execution engine
+
+* Step orchestration
+
+* Mission lifecycle tracking
+
+* Runtime mission visibility
+
+* Durable mission execution
+
+* Mission state persistence
+
+* Mission telemetry collection
+
+* Retry-aware execution tracking
+
+# 🧩 Task Management System
+
+Each agent contains task-level runtime visibility.
+
+## Task Features
+
+* Agent-specific task dashboard
+
+* Runtime task monitoring
+
+* Task execution tracking
+
+* Input/output visibility
+
+* Runtime timestamps
+
+* Success/failure visibility
+
+* Mission-linked task tracing
+
+* Execution lifecycle tracking
+
+# 📡 Real-Time Runtime Infrastructure
+
+Agent-Pulse includes real-time runtime synchronization using WebSockets.
+
+## Real-Time Features
+
+* WebSocket connectivity
+
+* Heartbeat monitoring
+
+* Live runtime updates
+
+* Real-time dashboard synchronization
+
+* Runtime activity feeds
+
+* Live mission telemetry
+
+* Runtime event streaming
+
+# 📊 Usage & Analytics System
+
+The platform provides workspace-wide and agent-specific analytics.
+
+## Analytics Features
+
+* Usage event logging
+
+* Cache-hit tracking
+
+* Runtime analytics
+
+* Agent activity monitoring
+
+* Mission analytics
+
+* Token usage tracking
+
+* Runtime cost monitoring
+
+* Execution metrics
+
+* Retry analytics
+
+* Failure analytics
+
+* Runtime telemetry aggregation
+
+* Throughput tracking
+
+# 🔭 Runtime Observability
+
+Agent-Pulse provides operational observability for AI systems.
+
+## Observability Features
+
+* Real-time mission monitoring
+
+* Live execution telemetry
+
+* Mission lifecycle tracking
+
+* Runtime execution visibility
+
+* Worker activity monitoring
+
+* Execution timelines
+
+* Runtime event monitoring
+
+* Agent telemetry systems
+
+* Distributed runtime analytics
 
 # 🏗️ System Architecture
 
@@ -121,6 +456,8 @@ User Request
 FastAPI API Layer
       ↓
 Execution Guard Layer
+      ↓
+Workspace / RBAC Validation
       ↓
 Redis Queue
       ↓
@@ -133,12 +470,14 @@ PostgreSQL Durable State
 WebSocket Live Dashboard
 ```
 
----
-
 # 🔄 Runtime Execution Flow
 
 ```text
 Mission Created
+      ↓
+Workspace Validation
+      ↓
+Execution Policies Applied
       ↓
 Mission Queued
       ↓
@@ -157,44 +496,103 @@ Governance Rules Applied
 Mission Completed / Failed
 ```
 
----
-
 # 🛠️ Tech Stack
 
 ## Backend
 
-- FastAPI
-- SQLAlchemy
-- Alembic
-- PostgreSQL
-- Celery
-- Redis
-- Python
+* FastAPI
 
----
+* Python
+
+* SQLAlchemy
+
+* Alembic
+
+* PostgreSQL
+
+* Celery
+
+* Redis
+
+* WebSockets
 
 ## Frontend
 
-- Next.js
-- TypeScript
-- Tailwind CSS
-- Recharts
+* Next.js App Router
 
----
+* TypeScript
+
+* Tailwind CSS
+
+* Recharts
 
 ## Infrastructure
 
-- Docker
-- Docker Compose
-- WebSockets
-- Async Workers
-- Distributed Queue System
+* Docker
 
----
+* Docker Compose
+
+* Async Workers
+
+* Distributed Queue System
+
+* Vercel Deployment
+
+* Render Deployment
+
+# 🔐 Security Features
+
+* Workspace isolation
+
+* RBAC enforcement
+
+* Workspace membership validation
+
+* Secure token validation
+
+* API key hashing
+
+* Key regeneration infrastructure
+
+* Permission-protected runtime controls
+
+* Workspace-scoped authentication
+
+# 🧪 Engineering Concepts Used
+
+* Distributed task orchestration
+
+* Durable execution workflows
+
+* Runtime governance systems
+
+* Retry-safe execution architecture
+
+* Real-time observability
+
+* Queue-based execution systems
+
+* Async execution pipelines
+
+* AI runtime telemetry
+
+* Distributed worker coordination
+
+* Execution lifecycle monitoring
+
+* Multi-tenant SaaS architecture
+
+* Workspace isolation systems
+
+* RBAC authorization design
+
+* Runtime analytics pipelines
+
+* Operational AI governance
 
 # 📂 Project Structure
 
-```bash
+```text
 Agent-Pulse/
 │
 ├── app/                     # Backend application
@@ -207,8 +605,6 @@ Agent-Pulse/
 ├── .gitignore
 └── README.md
 ```
-
----
 
 # ⚙️ Environment Variables
 
@@ -225,8 +621,6 @@ OPENAI_API_KEY=your_openai_api_key
 DEBUG=True
 ```
 
----
-
 # 🐳 Running with Docker
 
 Start all services:
@@ -240,8 +634,6 @@ Stop services:
 ```bash
 docker compose down
 ```
-
----
 
 # 💻 Local Development
 
@@ -258,8 +650,6 @@ Run FastAPI server:
 ```bash
 uvicorn app.main:app --reload
 ```
-
----
 
 ## Frontend
 
@@ -281,8 +671,6 @@ Start development server:
 npm run dev
 ```
 
----
-
 # 🧱 Database Migration
 
 Run Alembic migrations:
@@ -291,178 +679,167 @@ Run Alembic migrations:
 alembic upgrade head
 ```
 
----
-
 # 🌐 Application URLs
 
 ## Frontend
 
-```bash
+```text
 http://localhost:3000
 ```
 
 ## Backend
 
-```bash
+```text
 http://localhost:8000
 ```
 
 ## API Documentation
 
-```bash
+```text
 http://localhost:8000/docs
 ```
 
----
+# 🚀 Production Infrastructure
 
-# 📡 Real-Time Runtime Features
+## Frontend Infrastructure
 
-## Mission Management
+* Next.js App Router
 
-- Mission creation
-- Mission tracking
-- Mission execution monitoring
-- Runtime mission analytics
-- Mission telemetry collection
+* Responsive dashboard architecture
 
----
+* Workspace-aware UI system
 
-## Step Execution Engine
+* Vercel deployment
 
-- Async step processing
-- Retry-safe execution model
-- Durable execution pipeline
-- Concurrent execution support
-- Worker coordination system
+## Backend Infrastructure
 
----
+* FastAPI backend services
 
-## Runtime Governance
+* PostgreSQL durable storage
 
-- Mission stop controls
-- Runtime guardrails
-- Retry protection
-- Execution safety limits
-- Failure containment architecture
+* SQLAlchemy ORM architecture
 
----
+* Redis task queue
 
-## Observability Dashboard
+* Celery worker orchestration
 
-- Real-time telemetry
-- Live mission updates
-- Runtime analytics
-- Worker execution visibility
-- Runtime event monitoring
+* Render deployment
 
----
+# 🧑‍💻 Developer Experience
 
-# 🔬 Load Testing & Scalability
+* Modular route architecture
 
-The platform has been tested using concurrent execution and load-testing workflows to validate:
+* Typed frontend interfaces
 
-- Queue durability
-- Worker orchestration
-- Retry behavior
-- Runtime safeguards
-- Governance enforcement
-- Distributed task execution
-- Mission execution stability
-- WebSocket telemetry handling
+* Reusable runtime services
 
----
+* Workspace-based backend structure
 
-# 🧪 Engineering Concepts Used
+* Durable runtime abstractions
 
-- Distributed task orchestration
-- Durable execution workflows
-- Runtime governance systems
-- Retry-safe execution architecture
-- Real-time observability
-- Queue-based execution systems
-- Async execution pipelines
-- AI runtime telemetry
-- Distributed worker coordination
-- Execution lifecycle monitoring
+* Clean orchestration layers
 
----
+* Scalable API organization
 
 # 🚧 Future Roadmap
 
-- Multi-agent coordination
-- Agent memory systems
-- Advanced workflow graphs
-- MCP-compatible tool execution endpoints
-- Distributed scaling architecture
-- Production telemetry pipelines
-- Kubernetes deployment
-- Advanced observability tooling
-- AI runtime tracing
-- Cloud-native scaling support
+* Multi-agent coordination
+
+* Agent memory systems
+
+* Advanced workflow graphs
+
+* MCP-compatible tool execution endpoints
+
+* Distributed scaling architecture
+
+* Kubernetes deployment
+
+* Cloud-native orchestration
+
+* Advanced runtime tracing
+
+* AI runtime anomaly detection
+
+* Advanced telemetry pipelines
+
+* Tool-level execution analytics
+
+* Agent dependency graphs
+
+## Screenshots
+
+### Dashboard Overview
+Central runtime dashboard with live telemetry, execution monitoring and infrastructure health.
+
+![Dashboard Overview](./assets/dashboard-overview.png)
 
 ---
 
-# 📸 Screenshots
+### Mission Runtime
+Track autonomous AI mission execution in real time with mission lifecycle telemetry.
 
-## Dashboard Overview
-
-Real-time AI runtime observability dashboard with live WebSocket connectivity, mission telemetry, runtime analytics, and execution tracking.
-
-![Dashboard Overview](assets/dashboard-overview.png)
+![Mission Runtime](./assets/Mission.png)
 
 ---
 
-## Runtime Analytics
+### Runtime Analytics
+Execution analytics, runtime feeds and live observability for AI agents.
 
-Analytics dashboard showing execution metrics, cache efficiency, runtime telemetry, retries, and system health.
-
-![Analytics Dashboard](assets/analytics-dashboard.png)
-
----
-
-## Live Missions
-
-Real-time mission execution monitoring with durable workflow tracking and mission lifecycle visibility.
-
-![Live Missions](assets/live-missions.png)
+![Analytics](./assets/Analytics.png)
 
 ---
 
-## Mission Details
+### Runtime Usage Logs
+Detailed token usage, completion metrics and execution cost monitoring.
 
-Detailed mission execution view including runtime traces, retries, token usage, and execution metadata.
-
-![Mission Details](assets/mission-details.png)
-
----
-
-## Usage Logs
-
-Runtime activity feed and execution telemetry showing live agent events and observability logs.
-
-![Usage Logs](assets/usage-logs.png)
+![Usage Logs](./assets/Usage-Logs.png)
 
 ---
 
-## Settings & Governance
+### Workspace Management
+Manage team members, runtime roles and collaborative AI infrastructure.
 
-Runtime governance controls, configuration management, retry limits, and execution safeguards.
-
-![Settings Page](assets/settings-page.png)
+![Workspace Management](./assets/Workspace-Management.png)
 
 ---
 
-## Full Platform View
+### Agent Infrastructure
+Create and manage autonomous runtime agents with operational controls.
 
-Complete observability platform showcasing orchestration, governance, analytics, mission control, and live telemetry systems.
+![Agents](./assets/Agents.png)
 
-![Full Dashboard](assets/full-dashboard.png)
+---
+
+### Dashboard Settings
+Global runtime controls, API gateway management and infrastructure operations.
+
+![Dashboard Settings](./assets/Dashboard-Settings.png)
+
+---
+
+### Agent Summary
+Detailed agent runtime overview including missions, retries, execution state and cost telemetry.
+
+![Agent Summary](./assets/agent-summary.png)
+
+---
+
+### Agent Settings
+Configure API security, execution budgets, runtime limits and governance policies.
+
+![Agent Settings](./assets/agent-settings.png)
+
+---
+
+### Agent Task Details
+Inspect execution logs, cache states, input/output payloads and runtime task telemetry.
+
+![Agent Task Details](./assets/Agent-task-details.png)
 
 # 👨‍💻 Author
 
 Milan Charan
-
----
 
 # 📄 License
 
