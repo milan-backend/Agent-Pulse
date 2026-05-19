@@ -3,6 +3,7 @@ from sqlalchemy import Column, String, JSON, Integer,DateTime,Boolean
 from app.db.session import Base
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import UniqueConstraint
 
 
 class DurableStep(Base):
@@ -18,7 +19,15 @@ class DurableStep(Base):
     input_data = Column(JSON)
     output_data = Column(JSON)
 
-    idempotency_key = Column(String, unique=True)
+    idempotency_key = Column(String)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "idempotency_key",
+            name = "uq_workspace_idempotency"
+        ),
+    )
 
     retry_count = Column(Integer, default=0)
 

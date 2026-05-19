@@ -150,6 +150,7 @@ async def execute_step(
     
     
     # 🔥 Background execution
+    
     process_step.delay(step.id)
 
     await broadcast_message(json.dumps({"type": "mission_updated"}))
