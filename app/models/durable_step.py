@@ -2,6 +2,7 @@ import uuid
 from sqlalchemy import Column, String, JSON, Integer,DateTime,Boolean
 from app.db.session import Base
 from sqlalchemy.sql import func
+from sqlalchemy.dialects.postgresql import UUID
 
 
 class DurableStep(Base):
@@ -27,7 +28,24 @@ class DurableStep(Base):
 
     created_at = Column(DateTime(timezone=True),server_default=func.now())
     updated_at = Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
 
     cache_hit = Column(Boolean, default=False)
 
     event_type = Column(String, nullable=True)
+
+    paused_at = Column(DateTime(timezone=True), nullable=True)
+
+    killed_at = Column(DateTime(timezone=True), nullable=True)
+
+    resumed_at = Column(DateTime(timezone=True), nullable=True)
+
+    killed_by = Column(String, nullable=True)
+
+    resumed_by = Column(String, nullable=True)
+
+    pause_reason = Column(String, nullable=True)
+
+    runtime_controlled = Column(Boolean, default=False)
+
+    workspace_id = Column(UUID(as_uuid=True), nullable=True)

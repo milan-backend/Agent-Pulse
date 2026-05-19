@@ -1,310 +1,520 @@
-"use client"
+// frontend/app/dashboard/settings/page.tsx
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+"use client";
+
+import { useState } from "react";
+
+import {
+  KeyRound,
+  ShieldCheck,
+  Power,
+  PlayCircle,
+  LogOut,
+  Settings,
+  Cpu,
+  AlertTriangle,
+} from "lucide-react";
+
+import {
+  stopAllAgents,
+  resumeAllAgents,
+  logout,
+} from "@/components/api";
 
 export default function SettingsPage() {
-  const router = useRouter()
 
-  const [apiKey, setApiKey] = useState("")
-  const [maxSteps, setMaxSteps] = useState(20)
-  const [maxRuntime, setMaxRuntime] = useState(2)
-  const [maxCost, setMaxCost] = useState(3)
+  const [loadingKill, setLoadingKill] =
+    useState(false);
 
-  useEffect(() => {
-    loadCurrentApiKey()
-  }, [])
+  const [loadingResume, setLoadingResume] =
+    useState(false);
 
-  async function loadCurrentApiKey() {
+  async function handleKillAll() {
+
     try {
-      const token = localStorage.getItem("token")
 
-      const response = await fetch(
-        `${API_URL}/auth/me`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
+      setLoadingKill(true);
 
-      const data = await response.json()
+      await stopAllAgents();
 
-      if (data.api_key) {
-        setApiKey(data.api_key)
-      }
-    } catch (error) {
-      console.log(error)
+      alert(
+        "All agents stopped."
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+      alert(
+        "Failed to stop agents."
+      );
+
+    } finally {
+
+      setLoadingKill(false);
     }
   }
 
-  async function regenerateApiKey() {
+  async function handleResumeAll() {
+
     try {
-      const token = localStorage.getItem("token")
 
-      const response = await fetch(
-        `${API_URL}/agents/regenerate-key`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
+      setLoadingResume(true);
 
-      const data = await response.json()
+      await resumeAllAgents();
 
-      console.log(data)
+      alert(
+        "All agents resumed."
+      );
 
-      setApiKey(data.api_key)
+    } catch (err) {
 
-      alert("API Key Regenerated Successfully")
-    } catch (error) {
-      console.log(error)
-      alert("Failed to regenerate API key")
+      console.error(err);
+
+      alert(
+        "Failed to resume agents."
+      );
+
+    } finally {
+
+      setLoadingResume(false);
     }
   }
-
-  async function copyApiKey() {
-    try {
-      await navigator.clipboard.writeText(apiKey)
-
-      alert("API Key Copied")
-    } catch (error) {
-      console.log(error)
-    }
-  }
-
-  async function saveSettings() {
-    try {
-      alert("Settings Saved Successfully")
-    } catch (error) {
-      console.log(error)
-    }
-  }
-
-  async function stopAllAgents() {
-    try {
-      const token = localStorage.getItem("token")
-
-      const response = await fetch(
-        `${API_URL}/agents/kill`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-
-      if (response.ok) {
-        alert("All Agents Stopped")
-      } else {
-        alert("Failed To Stop Agents")
-      }
-    } catch (error) {
-      console.log(error)
-    }
-  }
-
-  async function resumeAgents() {
-    try {
-     const token = localStorage.getItem("token")
-
-     const response = await fetch(
-      `${API_URL}/agents/resume`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      }
-    )
-
-     const data = await response.json()
-
-     if (response.ok) {
-      alert(data.message)
-      console.log("Resumed Agents:", data.resumed_agents)
-    }else {
-      alert(data.detail || "Failed To Resume Agents")
-    }
-
-  } catch (error) {
-     console.log(error)
-     alert("Server Error")
-  }
-}
 
   return (
-    <div className="min-h-screen bg-black text-white p-8">
-      <div className="flex items-center justify-between mb-10">
-        <div>
-          <h1 className="text-6xl font-black text-cyan-400 mb-3">
-            Settings
-          </h1>
 
-          <p className="text-gray-400 text-lg">
-            Manage platform security, runtime controls and emergency systems.
-          </p>
-        </div>
+    <div className="space-y-8">
+      {/* HERO */}
 
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="px-6 py-3 rounded-xl bg-gray-900 border border-cyan-500 hover:bg-cyan-500 hover:text-black transition-all"
-        >
-          Back To Dashboard
-        </button>
-      </div>
+      <div
+        className="
+          rounded-[32px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-8
+          overflow-hidden
+          relative
+        "
+      >
+        {/* GLOW */}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-[#07111f] border border-cyan-500 rounded-3xl p-8">
-          <h2 className="text-5xl font-black text-cyan-400 mb-3">
-            API Security
-          </h2>
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-72
+            w-72
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
 
-          <p className="text-gray-400 mb-8">
-            Regenerate your platform API credentials.
-          </p>
+        {/* CONTENT */}
 
-          <div className="bg-black border border-gray-800 rounded-2xl px-6 py-5 mb-6 overflow-x-auto">
-            <p className="text-green-400 font-bold text-lg">
-              {apiKey || "Loading API Key..."}
-            </p>
-          </div>
-
-          <div className="flex gap-4">
-            <button
-              onClick={regenerateApiKey}
-              className="flex-1 bg-cyan-400 text-black py-4 rounded-2xl font-bold text-lg hover:scale-105 transition-all"
-            >
-              Regenerate API Key
-            </button>
-
-            <button
-              onClick={copyApiKey}
-              className="px-8 bg-gray-700 rounded-2xl font-bold hover:bg-gray-600 transition-all"
-            >
-              Copy
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-[#07111f] border border-cyan-500 rounded-3xl p-8">
-          <h2 className="text-5xl font-black text-cyan-400 mb-3">
-            Budget Controls
-          </h2>
-
-          <p className="text-gray-400 mb-8">
-            Configure mission safety limits and runtime caps.
-          </p>
-
-          <div className="space-y-6">
-            <div>
-              <label className="block mb-2 text-gray-300">
-                Max Mission Steps
-              </label>
-
-              <input
-                type="number"
-                value={maxSteps}
-                onChange={(e) =>
-                  setMaxSteps(Number(e.target.value))
-                }
-                className="w-full bg-black border border-gray-800 rounded-2xl px-5 py-4"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 text-gray-300">
-                Max Runtime (mins)
-              </label>
-
-              <input
-                type="number"
-                value={maxRuntime}
-                onChange={(e) =>
-                  setMaxRuntime(Number(e.target.value))
-                }
-                className="w-full bg-black border border-gray-800 rounded-2xl px-5 py-4"
-              />
-            </div>
-
-            <div>
-              <label className="block mb-2 text-gray-300">
-                Max Cost ($)
-              </label>
-
-              <input
-                type="number"
-                value={maxCost}
-                onChange={(e) =>
-                  setMaxCost(Number(e.target.value))
-                }
-                className="w-full bg-black border border-gray-800 rounded-2xl px-5 py-4"
-              />
-            </div>
-
-            <button
-              onClick={saveSettings}
-              className="w-full bg-cyan-400 text-black py-4 rounded-2xl font-bold text-lg hover:scale-105 transition-all"
-            >
-              Save Settings
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-10 bg-[#1a0707] border border-red-500 rounded-3xl p-8">
-        <h2 className="text-5xl font-black text-red-400 mb-3">
-          Danger Zone
-        </h2>
-
-        <p className="text-gray-400 mb-8">
-          Emergency controls for shutting down all agents.
-        </p>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-black border border-gray-800 rounded-2xl p-6">
-            <h3 className="text-3xl font-black text-white mb-3">
-              Emergency Stop
-            </h3>
-
-            <p className="text-gray-400">
-              Instantly terminate all running AI missions.
-            </p>
-          </div>
-
-          <button
-            onClick={stopAllAgents}
-            className="bg-red-500 hover:bg-red-600 rounded-2xl text-3xl font-black transition-all"
-          >
-            STOP ALL AGENTS
-          </button>
-          <button
-            onClick={resumeAgents}
+        <div className="relative z-10">
+          <div
             className="
-              bg-green-500
-              hover:bg-green-600
-              active:scale-95
-              rounded-2xl
-              text-3xl
-              font-black
-              text-white
-              transition-all
-              duration-200
-              shadow-lg
-              p-6
-              mt-4
-              w-full
+              flex
+              items-center
+              gap-4
+              mb-6
             "
+          >
+            <div
+              className="
+                h-16
+                w-16
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+              <Settings
+                className="
+                  text-cyan-300
+                "
+                size={32}
+              />
+            </div>
+
+            <div>
+              <h1
+                className="
+                  text-5xl
+                  font-black
+                "
+              >
+                Runtime Settings
+              </h1>
+
+              <p
+                className="
+                  mt-2
+                  text-slate-400
+                "
+              >
+                Configure global runtime
+                infrastructure controls.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* GRID */}
+
+      <div
+        className="
+          grid
+          grid-cols-1
+          xl:grid-cols-2
+          gap-8
+        "
+      >
+        {/* AGENT CONTROL */}
+
+        <div
+          className="
+            rounded-[32px]
+            border
+            border-red-500/20
+            bg-[linear-gradient(180deg,#071120_0%,#140808_100%)]
+            p-8
+          "
         >
-            RESUME AGENTS
-           </button>
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              mb-8
+            "
+          >
+            <div>
+              <h2
+                className="
+                  text-3xl
+                  font-black
+                "
+              >
+                Runtime Control
+              </h2>
+
+              <p
+                className="
+                  text-slate-400
+                  mt-2
+                "
+              >
+                Manage global agent runtime.
+              </p>
+            </div>
+
+            <div
+              className="
+                h-14
+                w-14
+                rounded-2xl
+                border
+                border-red-500/20
+                bg-red-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+              <Cpu
+                className="
+                  text-red-300
+                "
+                size={28}
+              />
+            </div>
+          </div>
+
+          {/* BUTTONS */}
+
+          <div className="space-y-5">
+            {/* STOP */}
+
+            <button
+              onClick={
+                handleKillAll
+              }
+              disabled={loadingKill}
+              className="
+                w-full
+                rounded-3xl
+                border
+                border-red-500/20
+                bg-red-500/10
+                hover:bg-red-500/20
+                transition-all
+                p-6
+                flex
+                items-center
+                justify-between
+              "
+            >
+              <div className="flex items-center gap-4">
+                <Power
+                  className="
+                    text-red-300
+                  "
+                  size={28}
+                />
+
+                <div className="text-left">
+                  <h3
+                    className="
+                      text-xl
+                      font-black
+                      text-red-300
+                    "
+                  >
+                    Kill All Agents
+                  </h3>
+
+                  <p className="text-sm text-slate-400 mt-1">
+                    Emergency runtime stop.
+                  </p>
+                </div>
+              </div>
+
+              <AlertTriangle
+                className="
+                  text-red-300
+                "
+                size={24}
+              />
+            </button>
+
+            {/* RESUME */}
+
+            <button
+              onClick={
+                handleResumeAll
+              }
+              disabled={loadingResume}
+              className="
+                w-full
+                rounded-3xl
+                border
+                border-green-500/20
+                bg-green-500/10
+                hover:bg-green-500/20
+                transition-all
+                p-6
+                flex
+                items-center
+                justify-between
+              "
+            >
+              <div className="flex items-center gap-4">
+                <PlayCircle
+                  className="
+                    text-green-300
+                  "
+                  size={28}
+                />
+
+                <div className="text-left">
+                  <h3
+                    className="
+                      text-xl
+                      font-black
+                      text-green-300
+                    "
+                  >
+                    Resume Runtime
+                  </h3>
+
+                  <p className="text-sm text-slate-400 mt-1">
+                    Restart all autonomous
+                    agents.
+                  </p>
+                </div>
+              </div>
+
+              <ShieldCheck
+                className="
+                  text-green-300
+                "
+                size={24}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* SECURITY */}
+
+        <div
+          className="
+            rounded-[32px]
+            border
+            border-cyan-500/20
+            bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+            p-8
+          "
+        >
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              mb-8
+            "
+          >
+            <div>
+              <h2
+                className="
+                  text-3xl
+                  font-black
+                "
+              >
+                Security
+              </h2>
+
+              <p
+                className="
+                  text-slate-400
+                  mt-2
+                "
+              >
+                Session and API controls.
+              </p>
+            </div>
+
+            <div
+              className="
+                h-14
+                w-14
+                rounded-2xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+              <KeyRound
+                className="
+                  text-cyan-300
+                "
+                size={28}
+              />
+            </div>
+          </div>
+
+          {/* CARDS */}
+
+          <div className="space-y-5">
+            {/* API */}
+
+            <div
+              className="
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                p-6
+              "
+            >
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                "
+              >
+                <div>
+                  <h3
+                    className="
+                      text-xl
+                      font-black
+                      text-cyan-300
+                    "
+                  >
+                    API Gateway
+                  </h3>
+
+                  <p className="text-sm text-slate-400 mt-2">
+                    Runtime authentication
+                    active.
+                  </p>
+                </div>
+
+                <ShieldCheck
+                  className="
+                    text-cyan-300
+                  "
+                  size={28}
+                />
+              </div>
+            </div>
+
+            {/* LOGOUT */}
+
+            <button
+              onClick={logout}
+              className="
+                w-full
+                rounded-3xl
+                border
+                border-red-500/20
+                bg-red-500/10
+                hover:bg-red-500/20
+                transition-all
+                p-6
+                flex
+                items-center
+                justify-between
+              "
+            >
+              <div className="flex items-center gap-4">
+                <LogOut
+                  className="
+                    text-red-300
+                  "
+                  size={28}
+                />
+
+                <div className="text-left">
+                  <h3
+                    className="
+                      text-xl
+                      font-black
+                      text-red-300
+                    "
+                  >
+                    Logout Session
+                  </h3>
+
+                  <p className="text-sm text-slate-400 mt-1">
+                    Terminate current admin
+                    session.
+                  </p>
+                </div>
+              </div>
+
+              <LogOut
+                className="
+                  text-red-300
+                "
+                size={24}
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -2,399 +2,652 @@
 
 import { useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation"
+import {
+  DollarSign,
+  ShieldAlert,
+  Bot,
+  Activity,
+  TrendingUp,
+} from "lucide-react";
 
-import MetricCard from "@/components/ui/MetricCard"
+import {
+  getAnalyticsOverview,
+} from "@/components/api";
 
-import SectionHeader from "@/components/ui/SectionHeader"
-
-import LiveIndicator from "@/components/ui/LiveIndicator"
-
-import StatusBadge from "@/components/ui/StatusBadge"
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+import CacheChart from "@/components/CacheChart";
+import UsageCharts from "@/components/UsageCharts";
 
 export default function AnalyticsPage() {
 
-  const router = useRouter()
+  // =========================
+  // STATES
+  // =========================
 
-  const [costs, setCosts] = useState<any>(null);
+  const [costs, setCosts] =
+    useState<any>({});
 
-  const [blocked, setBlocked] = useState<any>(null);
+  const [blocked, setBlocked] =
+    useState<number>(0);
 
-  const [agents, setAgents] = useState<any>({});
+  const [agents, setAgents] =
+    useState<number>(0);
 
-  useEffect(() => {
+  const [blockedList, setBlockedList] =
+    useState<any[]>([]);
 
-    fetchAnalytics();
+  const [loading, setLoading] =
+    useState(true);
 
-  }, []);
+  // =========================
+  // LOAD ANALYTICS
+  // =========================
 
-  const fetchAnalytics = async () => {
+  async function loadAnalytics() {
 
     try {
 
-      const token = localStorage.getItem("token");
+      const analyticsData =
+        await getAnalyticsOverview();
 
-      const costRes = await fetch(
-        `${API_URL}/analytics/costs`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      // =========================
+      // COSTS
+      // =========================
+
+      setCosts({
+
+        total_steps:
+          analyticsData?.overview?.total_steps || 0,
+
+        total_cost:
+          analyticsData?.costs?.total_cost || 0,
+
+        average_cost:
+          analyticsData?.costs?.average_cost || 0,
+
+        successful_steps:
+          analyticsData?.overview?.successful_steps || 0,
+
+        failed_steps:
+          analyticsData?.overview?.failed_steps || 0,
+
+        success_rate:
+          analyticsData?.overview?.success_rate || 0,
+
+        cache_hits:
+          analyticsData?.cache?.cache_hits || 0,
+
+        cache_misses:
+          analyticsData?.cache?.cache_misses || 0,
+
+        cache_hit_rate:
+          analyticsData?.cache?.cache_hit_rate || 0,
+
+        total_tokens:
+          analyticsData?.tokens?.total_tokens || 0,
+      });
+
+      // =========================
+      // BLOCKED MISSIONS COUNT
+      // =========================
+
+      setBlocked(
+        analyticsData?.overview?.blocked_missions || 0
       );
 
-      const blockedRes = await fetch(
-        `${API_URL}/analytics/blocked`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      // =========================
+      // TOTAL AGENTS
+      // =========================
+
+      setAgents(
+        analyticsData?.overview?.total_agents || 0
       );
 
-      const agentsRes = await fetch(
-        `${API_URL}/analytics/agents`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      // =========================
+      // LIVE FEED
+      // =========================
+
+      setBlockedList(
+        analyticsData?.live_feed || []
       );
 
-      const costData = await costRes.json();
+    } catch (err) {
 
-      const blockedData = await blockedRes.json();
+      console.error(err);
 
-      const agentsData = await agentsRes.json();
+    } finally {
 
-      setCosts(costData);
-
-      setBlocked(blockedData);
-
-      setAgents(agentsData);
-
-    } catch (error) {
-
-      console.error(error);
-
+      setLoading(false);
     }
-  };
+  }
+
+  // =========================
+  // INIT
+  // =========================
+
+  useEffect(() => {
+
+    loadAnalytics();
+
+  }, []);
+
+  // =========================
+  // LOADER
+  // =========================
+
+  if (loading) {
+
+    return (
+
+      <div
+        className="
+          min-h-[80vh]
+          flex
+          items-center
+          justify-center
+        "
+      >
+        <div className="text-center">
+
+          <div
+            className="
+              h-16
+              w-16
+              rounded-full
+              border-4
+              border-cyan-500/20
+              border-t-cyan-400
+              animate-spin
+              mx-auto
+            "
+          />
+
+          <p
+            className="
+              mt-6
+              text-xl
+              font-bold
+              text-cyan-300
+            "
+          >
+            Loading Analytics...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // =========================
+  // PAGE
+  // =========================
 
   return (
 
-    <div className="
-      min-h-screen
-      bg-black
-      text-white
-      p-8
-    ">
+    <div className="space-y-8">
 
-      {/* HEADER */}
-      <div className="
-        flex
-        items-center
-        justify-between
-        mb-10
-      ">
+      {/* HERO */}
 
-        <div>
+      <div
+        className="
+          rounded-[32px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-8
+          overflow-hidden
+          relative
+        "
+      >
 
-          <SectionHeader
-            title="Analytics Center"
-            subtitle="AI infrastructure intelligence dashboard."
-          />
+        {/* GLOW */}
 
-        </div>
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-72
+            w-72
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
 
-        <div className="
-          flex
-          items-center
-          gap-4
-        ">
+        {/* CONTENT */}
 
-          <LiveIndicator />
+        <div className="relative z-10">
 
-          <button
-            onClick={() => router.push("/dashboard")}
+          <div
             className="
-              px-6
-              py-3
-              rounded-xl
-              bg-gray-900
-              border
-              border-cyan-500
-              hover:bg-cyan-500
-              hover:text-black
-              transition-all
-              font-bold
+              flex
+              items-center
+              gap-5
+              flex-wrap
             "
           >
-            Back To Dashboard
-          </button>
 
-        </div>
+            <div
+              className="
+                h-20
+                w-20
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+              <TrendingUp
+                className="
+                  text-cyan-300
+                "
+                size={40}
+              />
+            </div>
 
-      </div>
+            <div>
 
-      {/* TOP CARDS */}
-      <div className="
-        grid
-        grid-cols-1
-        md:grid-cols-2
-        xl:grid-cols-4
-        gap-6
-        mb-10
-      ">
+              <h1
+                className="
+                  text-5xl
+                  font-black
+                "
+              >
+                Runtime Analytics
+              </h1>
 
-        <MetricCard
-          title="Total Agents"
-          value={agents?.total_agents ?? 0}
-          color="text-cyan-400"
-          subtitle="Registered AI agents"
-        />
+              <p
+                className="
+                  mt-3
+                  text-slate-400
+                  text-lg
+                "
+              >
+                AI observability telemetry,
+                mission performance and
+                runtime spend analysis.
+              </p>
 
-        <MetricCard
-          title="Blocked Missions"
-          value={blocked?.blocked_missions || 0}
-          color="text-red-400"
-          subtitle="Guardrail interventions"
-        />
-
-        <MetricCard
-          title="Total Cost"
-          value={`$${costs?.total_cost || 0}`}
-          color="text-green-400"
-          subtitle="AI runtime expenditure"
-        />
-
-        <MetricCard
-          title="Average Cost"
-          value={`$${costs?.average_cost || 0}`}
-          color="text-yellow-400"
-          subtitle="Average execution spend"
-        />
-
-      </div>
-
-      {/* COST SECTION */}
-      <div className="
-        bg-[#08111f]
-        border
-        border-cyan-500/20
-        rounded-2xl
-        p-8
-        mb-10
-      ">
-
-        <div className="
-          flex
-          items-center
-          justify-between
-          mb-6
-        ">
-
-          <div>
-
-            <h2 className="
-              text-3xl
-              font-bold
-              text-cyan-400
-            ">
-              Cost Intelligence
-            </h2>
-
-            <p className="
-              text-gray-400
-              mt-1
-            ">
-              AI runtime expenditure overview.
-            </p>
-
+            </div>
           </div>
-
-          <LiveIndicator />
-
         </div>
+      </div>
 
-        <div className="
+      {/* TOP METRICS */}
+
+      <div
+        className="
           grid
           grid-cols-1
           md:grid-cols-3
           gap-6
-        ">
+        "
+      >
 
-          <div className="
-            bg-black/40
-            rounded-xl
-            p-6
-          ">
+        {/* COST */}
 
-            <p className="
-              text-gray-400
-              mb-2
-            ">
-              Total Steps
-            </p>
+        <div
+          className="
+            rounded-[30px]
+            border
+            border-green-500/20
+            bg-green-500/10
+            p-7
+          "
+        >
 
-            <h3 className="
-              text-4xl
-              font-bold
-              text-white
-            ">
-              {costs?.total_steps ?? 0}
-            </h3>
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
 
+            <div>
+
+              <p className="text-sm text-slate-400">
+                Total Runtime Cost
+              </p>
+
+              <h2
+                className="
+                  text-5xl
+                  font-black
+                  mt-4
+                  text-green-300
+                "
+              >
+                $
+                {Number(
+                  costs?.total_cost || 0
+                ).toFixed(2)}
+              </h2>
+
+            </div>
+
+            <DollarSign
+              className="
+                text-green-300
+              "
+              size={34}
+            />
           </div>
-
-          <div className="
-            bg-black/40
-            rounded-xl
-            p-6
-          ">
-
-            <p className="
-              text-gray-400
-              mb-2
-            ">
-              Current Spend
-            </p>
-
-            <h3 className="
-              text-4xl
-              font-bold
-              text-cyan-400
-            ">
-              ${costs?.total_cost ?? 0}
-            </h3>
-
-          </div>
-
-          <div className="
-            bg-black/40
-            rounded-xl
-            p-6
-          ">
-
-            <p className="
-              text-gray-400
-              mb-2
-            ">
-              Avg / Execution
-            </p>
-
-            <h3 className="
-              text-4xl
-              font-bold
-              text-yellow-400
-            ">
-              ${costs?.average_cost ?? 0}
-            </h3>
-
-          </div>
-
         </div>
 
+        {/* BLOCKED */}
+
+        <div
+          className="
+            rounded-[30px]
+            border
+            border-red-500/20
+            bg-red-500/10
+            p-7
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
+
+            <div>
+
+              <p className="text-sm text-slate-400">
+                Blocked Missions
+              </p>
+
+              <h2
+                className="
+                  text-5xl
+                  font-black
+                  mt-4
+                  text-red-300
+                "
+              >
+                {blocked}
+              </h2>
+
+            </div>
+
+            <ShieldAlert
+              className="
+                text-red-300
+              "
+              size={34}
+            />
+          </div>
+        </div>
+
+        {/* AGENTS */}
+
+        <div
+          className="
+            rounded-[30px]
+            border
+            border-cyan-500/20
+            bg-cyan-500/10
+            p-7
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
+
+            <div>
+
+              <p className="text-sm text-slate-400">
+                Agent Analytics
+              </p>
+
+              <h2
+                className="
+                  text-5xl
+                  font-black
+                  mt-4
+                  text-cyan-300
+                "
+              >
+                {agents}
+              </h2>
+
+            </div>
+
+            <Bot
+              className="
+                text-cyan-300
+              "
+              size={34}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* AGENT TABLE */}
-      <div className="
-        bg-[#08111f]
-        border
-        border-cyan-500/20
-        rounded-2xl
-        p-8
-      ">
+      {/* CHARTS */}
 
-        <div className="mb-6">
+      <UsageCharts usage={costs} />
 
-          <h2 className="
-            text-3xl
-            font-bold
-            text-white
-          ">
-            Agent Operations
-          </h2>
+      <CacheChart usage={costs} />
 
-          <p className="
-            text-gray-400
-            mt-1
-          ">
-            Live AI mission execution overview.
-          </p>
+      {/* BLOCKED MISSIONS */}
 
-        </div>
-
-        <div className="
-          bg-black/40
+      <div
+        className="
+          rounded-[32px]
           border
-          border-white/5
-          rounded-xl
-          p-5
-          flex
-          justify-between
-          items-center
-        ">
+          border-red-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#130909_100%)]
+          p-8
+        "
+      >
+
+        {/* HEADER */}
+
+        <div
+          className="
+            flex
+            items-center
+            justify-between
+            mb-8
+          "
+        >
 
           <div>
 
-            <p className="
-              text-cyan-400
-              font-bold
-            ">
-              {agents?.total_agents ?? 0} Registered Agents
-            </p>
+            <h2
+              className="
+                text-4xl
+                font-black
+              "
+            >
+              Runtime Feed
+            </h2>
 
-            <p className="
-              text-gray-500
-              text-sm
-              mt-1
-            ">
-              Active AI Agent Infrastructure
+            <p
+              className="
+                mt-2
+                text-slate-400
+              "
+            >
+              Recent runtime activity,
+              execution logs and failures.
             </p>
 
           </div>
 
-          <div className="
-            flex
-            gap-10
-          ">
+          <div
+            className="
+              h-14
+              w-14
+              rounded-2xl
+              border
+              border-red-500/20
+              bg-red-500/10
+              flex
+              items-center
+              justify-center
+            "
+          >
 
-            <div>
-
-              <p className="
-                text-gray-500
-                text-sm
-                mb-2
-              ">
-                Status
-              </p>
-
-              <StatusBadge status="running" />
-
-            </div>
-
-            <div>
-
-              <p className="
-                text-gray-500
-                text-sm
-                mb-2
-              ">
-                Security
-              </p>
-
-              <StatusBadge status="completed" />
-
-            </div>
-
+            <ShieldAlert
+              className="
+                text-red-300
+              "
+              size={28}
+            />
           </div>
-
         </div>
 
-      </div>
+        {/* EMPTY */}
 
+        {blockedList.length === 0 && (
+
+          <div
+            className="
+              rounded-3xl
+              border
+              border-white/10
+              bg-white/[0.03]
+              p-10
+              text-center
+            "
+          >
+
+            <Activity
+              size={48}
+              className="
+                mx-auto
+                text-slate-500
+              "
+            />
+
+            <h3
+              className="
+                mt-5
+                text-2xl
+                font-black
+              "
+            >
+              No Runtime Activity
+            </h3>
+
+            <p
+              className="
+                mt-3
+                text-slate-400
+              "
+            >
+              Runtime execution is healthy.
+            </p>
+
+          </div>
+        )}
+
+        {/* LIST */}
+
+        {blockedList.length > 0 && (
+
+          <div className="space-y-5">
+
+            {blockedList.map(
+              (
+                item: any,
+                index: number
+              ) => (
+
+                <div
+                  key={index}
+                  className="
+                    rounded-3xl
+                    border
+                    border-red-500/20
+                    bg-red-500/10
+                    p-6
+                  "
+                >
+
+                  <div
+                    className="
+                      flex
+                      items-start
+                      justify-between
+                      gap-5
+                      flex-wrap
+                    "
+                  >
+
+                    <div>
+
+                      <h3
+                        className="
+                          text-2xl
+                          font-black
+                          text-red-300
+                        "
+                      >
+                        {item?.action ||
+                          "Runtime Event"}
+                      </h3>
+
+                      <p
+                        className="
+                          mt-3
+                          text-slate-400
+                        "
+                      >
+                        Agent ID:
+                        {" "}
+                        {item?.agent_id}
+                      </p>
+
+                      <p
+                        className="
+                          mt-1
+                          text-slate-500
+                          text-sm
+                        "
+                      >
+                        Cost:
+                        {" "}
+                        ${item?.cost || 0}
+                      </p>
+
+                    </div>
+
+                    <div
+                      className="
+                        rounded-full
+                        border
+                        border-red-500/20
+                        bg-red-500/10
+                        px-4
+                        py-2
+                        text-sm
+                        font-bold
+                        text-red-300
+                      "
+                    >
+                      LIVE
+                    </div>
+
+                  </div>
+                </div>
+              )
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

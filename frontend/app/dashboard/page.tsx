@@ -1,561 +1,297 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useState } from "react";
 
 import {
-  fetchDashboardSummary,
-  fetchDashboardUsage,
-  fetchDashboardSteps,
-  fetchUsageLogs,
-} from "@/components/api"
+  Activity,
+} from "lucide-react";
 
-import MissionTable from "@/components/MissionTable"
-import StepTimeline from "@/components/StepTimeline"
-import UsageCharts from "@/components/UsageCharts"
-import LiveFeed from "@/components/LiveFeed"
-import LiveStatus from "@/components/LiveStatus"
+import {
+  getDashboardSummary,
+  createDashboardSocket,
+} from "@/components/api";
 
-import MetricCard from "@/components/ui/MetricCard"
-
-import SectionHeader from "@/components/ui/SectionHeader"
-
-import LiveIndicator from "@/components/ui/LiveIndicator"
-
-import { getToken, logout } from "@/lib/auth"
-import { connected } from "process"
+import SummaryCards from "@/components/SummaryCards";
+import LiveStatus from "@/components/LiveStatus";
 
 export default function DashboardPage() {
 
-  const router = useRouter()
-
   const [summary, setSummary] =
-    useState<any>({})
+    useState<any>({});
 
-  const [usage, setUsage] =
-    useState<any>({})
-
-  const [steps, setSteps] =
-    useState<any[]>([])
-
-  const [logs, setLogs] =
-    useState<any[]>([])
+  const [connected, setConnected] =
+    useState(false);
 
   const [loading, setLoading] =
-    useState(true)
+    useState(true);
 
-  const [liveUpdates, setLiveUpdates] =
-    useState<any[]>([])
+  const [lastEvent, setLastEvent] =
+    useState<any>(null);
 
-  const [wsConnected, setWsConnected] =
-    useState(false)
-
-  async function loadDashboard(token: string) {
+  async function loadDashboard() {
 
     try {
 
       const summaryData =
-        await fetchDashboardSummary(
-          token as string
-        )
+        await getDashboardSummary();
 
-      console.log(
-        "Dashboard Summary:",
-        summaryData
-      )
-
-      const usageData =
-        await fetchDashboardUsage(
-          token as string
-        )
-
-      const stepsData =
-        await fetchDashboardSteps(
-          token as string
-        )
-
-      const logsData =
-        await fetchUsageLogs(
-          token as string
-        )
-
-      setSummary(summaryData)
-
-      setUsage(usageData)
-
-      setSteps(
-        Array.isArray(stepsData)
-          ? stepsData
-          : []
-      )
-
-      setLogs(
-        Array.isArray(logsData)
-          ? logsData
-          : []
-      )
-
-      setLoading(false)
+      setSummary(
+        summaryData || {}
+      );
 
     } catch (err) {
 
-      console.error(err)
+      console.error(err);
 
-      logout()
+    } finally {
 
-      window.location.href =
-        "/login"
+      setLoading(false);
     }
   }
 
   useEffect(() => {
 
-    const token = getToken()
+    loadDashboard();
 
-    if (!token) {
+    const interval =
+      setInterval(() => {
 
-      window.location.href = "/login"
+        loadDashboard();
 
-      return
-    }
+      }, 10000);
 
-    loadDashboard(token)
+    const socket =
+      createDashboardSocket(
 
-    const protocol =
-      window.location.protocol === "https:"
-        ? "wss:"
-        : "ws:"
+        (data) => {
 
-    const ws = new WebSocket(
-      process.env.NEXT_PUBLIC_WS_URL!
-    )
+          console.log(data);
 
-    ws.onopen = () => {
+          setConnected(true);
 
-      console.log(
-        "WebSocket Connected"
-      )
-      setWsConnected(true)
-    }
+          if (data.summary) {
+            setSummary(data.summary);
+          }
 
-    ws.onmessage = (event) => {
+          setLastEvent(data);
+        },
 
-      try {
+        () => {
+          setConnected(true);
+        },
 
-        const data = JSON.parse(
-          event.data
-        )
 
-        console.log(
-          "Live Update:",
-          data
-        )
-
-        setLiveUpdates((prev) => [
-
-          data,
-
-          ...prev.slice(0, 9)
-
-        ]) 
-        loadDashboard(token)
-
-        
-
-      } catch (err) {
-
-        console.log(
-          "WebSocket Parse Error:",
-          err
-        )
-      }
-    }
-
-    ws.onerror = (error) => {
-
-      console.log(
-        "WebSocket Error:",
-        error
-      )
-    }
-
-    ws.onclose = () => {
-      setWsConnected(false)
-
-      console.log(
-        "WebSocket Disconnected"
-      )
-      
-    }
+        () => {
+          setConnected(false);
+        }
+      );
 
     return () => {
 
-      ws.close()
-    }
+      clearInterval(interval);
 
-  }, [])
-    
-  
+      socket.close();
+    };
+
+  }, []);
+
   if (loading) {
+
     return (
-      <div className="
-        min-h-screen
-        bg-black
-        text-white
-        flex
-        items-center
-        justify-center
-        text-3xl
-        font-black
-      ">
-        Loading Dashboard...
+
+      <div
+        className="
+          min-h-[80vh]
+          flex
+          items-center
+          justify-center
+        "
+      >
+        <div className="text-center">
+          <div
+            className="
+              h-16
+              w-16
+              rounded-full
+              border-4
+              border-cyan-500/20
+              border-t-cyan-400
+              animate-spin
+              mx-auto
+            "
+          />
+
+          <p
+            className="
+              mt-6
+              text-xl
+              font-bold
+              text-cyan-300
+            "
+          >
+            Loading Runtime Dashboard...
+          </p>
+        </div>
       </div>
-    )
+    );
   }
 
   return (
 
-    <div className="
-      min-h-screen
-      bg-black
-      text-white
-      relative
-      overflow-hidden
-    ">
+    <div className="space-y-8">
 
-      {/* Matrix Background */}
-      <div className="
-        absolute
-        inset-0
-        opacity-20
-      ">
-        <div className="
-          matrix-bg
-          h-full
-          w-full
-        " />
+      {/* HERO */}
+
+      <div
+        className="
+          rounded-[40px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-10
+          overflow-hidden
+          relative
+        "
+      >
+        {/* GLOW */}
+
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-96
+            w-96
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
+
+        {/* CONTENT */}
+
+        <div className="relative z-10">
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              gap-8
+              flex-wrap
+            "
+          >
+            {/* LEFT */}
+
+            <div>
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-5
+                  flex-wrap
+                "
+              >
+                <div
+                  className="
+                    h-24
+                    w-24
+                    rounded-[32px]
+                    border
+                    border-cyan-500/20
+                    bg-cyan-500/10
+                    flex
+                    items-center
+                    justify-center
+                  "
+                >
+                  <Activity
+                    className="
+                      text-cyan-300
+                    "
+                    size={44}
+                  />
+                </div>
+
+                <div>
+                  <h1
+                    className="
+                      text-6xl
+                      font-black
+                      leading-none
+                    "
+                  >
+                    Runtime Dashboard
+                  </h1>
+
+                  <p
+                    className="
+                      mt-4
+                      text-slate-400
+                      text-xl
+                    "
+                  >
+                    Autonomous AI telemetry,
+                    orchestration and mission
+                    observability.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* STATUS */}
+
+            <div
+              className="
+                flex
+                items-center
+                gap-4
+                rounded-full
+                border
+                border-green-500/20
+                bg-green-500/10
+                px-6
+                py-4
+              "
+            >
+              <div
+                className="
+                  h-3
+                  w-3
+                  rounded-full
+                  bg-green-400
+                  animate-pulse
+                "
+              />
+
+              <span
+                className="
+                  text-lg
+                  font-black
+                  text-green-300
+                "
+              >
+                LIVE SYSTEM
+              </span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Overlay */}
-      <div className="
-        absolute
-        inset-0
-        bg-gradient-to-br
-        from-slate-950
-        via-slate-900
-        to-black
-      " />
+      {/* SUMMARY */}
 
-      <div className="
-        relative
-        z-10
-        flex
-      ">
+      <SummaryCards
+        summary={summary}
+      />
 
-        {/* Sidebar */}
-        <aside className="
-          hidden
-          md:flex
-          w-72
-          min-h-screen
-          flex-col
-          border-r
-          border-white/10
-          bg-white/5
-          backdrop-blur-xl
-          p-6
-        ">
+      {/* LIVE STATUS */}
 
-          <div>
-
-            <h1 className="
-              text-4xl
-              font-black
-              glow-text
-              bg-gradient-to-r
-              from-cyan-400
-              to-purple-400
-              bg-clip-text
-              text-transparent
-            ">
-              AgentPulse
-            </h1>
-
-            <p className="
-              mt-2
-              text-sm
-              text-gray-400
-            ">
-              AI Observability Platform
-            </p>
-
-          </div>
-
-          <nav className="
-            mt-10
-            space-y-3
-          ">
-
-            <button
-              onClick={() =>
-                router.push("/dashboard")
-              }
-              className="
-                w-full
-                rounded-2xl
-                bg-cyan-500/20
-                border
-                border-cyan-400/30
-                p-4
-                text-left
-                font-semibold
-              "
-            >
-              Dashboard
-            </button>
-
-            <button
-              onClick={() =>
-                window.location.href =
-                "/dashboard/analytics"
-              }
-              className="
-                w-full
-                rounded-2xl
-                bg-white/5
-                border
-                border-white/10
-                p-4
-                text-left
-                hover:bg-white/10
-                transition
-              "
-            >
-              Analytics
-            </button>
-
-            <button
-              onClick={() =>
-                router.push("/dashboard/steps")
-              }
-              className="
-                w-full
-                rounded-2xl
-                bg-white/5
-                border
-                border-white/10
-                p-4
-                text-left
-                hover:bg-white/10
-                transition
-              "
-            >
-              Missions
-            </button>
-
-            <button
-              onClick={() =>
-                router.push(
-                  "/dashboard/usage-logs"
-                )
-              }
-              className="
-                w-full
-                rounded-2xl
-                bg-white/5
-                border
-                border-white/10
-                p-4
-                text-left
-                hover:bg-white/10
-                transition
-              "
-            >
-              Usage Logs
-            </button>
-
-            <button
-              onClick={() =>
-                router.push(
-                  "/dashboard/settings"
-                )
-              }
-              className="
-                w-full
-                rounded-2xl
-                bg-white/5
-                border
-                border-white/10
-                p-4
-                text-left
-                hover:bg-white/10
-                transition
-              "
-            >
-              Settings
-            </button>
-
-            <button
-              onClick={() => {
-                logout()
-                window.location.href =
-                  "/login"
-              }}
-              className="
-                w-full
-                rounded-2xl
-                bg-red-500/20
-                border
-                border-red-400/30
-                p-4
-                text-left
-                hover:bg-red-500/30
-                transition
-              "
-            >
-              Logout
-            </button>
-
-          </nav>
-
-          <div className="
-            mt-auto
-            bg-green-500/10
-            border
-            border-green-400/20
-            rounded-2xl
-            p-5
-          ">
-
-            <p className="
-              text-sm
-              text-gray-300
-            ">
-              System Health
-            </p>
-
-            <h2 className="
-              text-4xl
-              font-black
-              text-green-400
-              mt-2
-            ">
-              99.9%
-            </h2>
-
-            <p className="
-              text-xs
-              text-gray-400
-              mt-2
-            ">
-              All systems operational
-            </p>
-
-          </div>
-
-        </aside>
-
-        {/* Main */}
-        <main className="
-          flex-1
-          p-6
-          md:p-10
-        ">
-
-          {/* Header */}
-          <div className="
-            flex
-            items-center
-            justify-between
-            mb-10
-          ">
-
-            <SectionHeader
-              title="Mission Control"
-              subtitle="AI runtime observability center."
-            />
-
-            <LiveIndicator />
-
-          </div>
-
-          <div className="mt-6">
-
-            <LiveStatus connected={wsConnected} />
-
-          </div>
-
-          {/* Metrics */}
-          <div className="
-            mt-10
-            grid
-            grid-cols-1
-            md:grid-cols-2
-            xl:grid-cols-3
-            gap-6
-          ">
-
-            <MetricCard
-              title="Total Steps"
-              value={summary.total_steps || 0}
-              color="text-cyan-400"
-              subtitle="Total AI executions"
-            />
-
-            <MetricCard
-              title="Completed"
-              value={summary.completed || 0}
-              color="text-green-400"
-              subtitle="Successful missions"
-            />
-
-            <MetricCard
-              title="Failed"
-              value={summary.failed || 0}
-              color="text-red-400"
-              subtitle="Execution failures"
-            />
-
-            <MetricCard
-              title="Pending"
-              value={summary.pending || 0}
-              color="text-yellow-400"
-              subtitle="Waiting executions"
-            />
-
-            <MetricCard
-              title="Success Rate"
-              value={`${summary.success_rate || 0}%`}
-              color="text-pink-400"
-              subtitle="Runtime reliability"
-            />
-
-          </div>
-
-          {/* Charts */}
-          <UsageCharts
-            usage={usage}
-          />
-
-          {/* Missions */}
-          <MissionTable
-            steps={steps}
-          />
-
-          {/* Timeline */}
-          <StepTimeline
-            logs={logs}
-          />
-
-          {/* Live Feed */}
-          <LiveFeed
-            logs={logs}
-          />
-
-        </main>
-
-      </div>
+      <LiveStatus
+        connected={connected}
+        summary={summary}
+        lastEvent={lastEvent}
+      />
 
     </div>
-  )
+  );
 }

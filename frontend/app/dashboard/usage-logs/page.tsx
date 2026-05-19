@@ -1,285 +1,588 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { useRouter } from "next/navigation"
+import {
+  ScrollText,
+  Activity,
+  Clock3,
+  Zap,
+  Coins,
+  Cpu,
+  Bot,
+} from "lucide-react";
 
-import { getToken } from "@/lib/auth"
+import {
+  getDashboardUsageLogs,
+} from "@/components/api";
 
-import SectionHeader from "@/components/ui/SectionHeader"
-
-import LiveIndicator from "@/components/ui/LiveIndicator"
-
-import StatusBadge from "@/components/ui/StatusBadge"
-
-import TimelineEvent from "@/components/ui/TimelineEvent"
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+import LiveFeed from "@/components/LiveFeed";
 
 export default function UsageLogsPage() {
 
-  const router = useRouter()
+  // =========================
+  // STATE
+  // =========================
 
   const [logs, setLogs] =
-    useState<any[]>([])
+    useState<any[]>([]);
 
   const [loading, setLoading] =
-    useState(true)
+    useState(true);
+
+  // =========================
+  // LOAD LOGS
+  // =========================
+
+  async function loadLogs() {
+
+    try {
+
+      const response =
+        await getDashboardUsageLogs();
+
+      setLogs(
+        Array.isArray(response)
+          ? response
+          : response?.logs || []
+      );
+
+    } catch (err) {
+
+      console.error(err);
+
+    } finally {
+
+      setLoading(false);
+    }
+  }
+
+  // =========================
+  // INITIAL LOAD
+  // =========================
 
   useEffect(() => {
 
-    const token = getToken()
+    loadLogs();
 
-    if (!token) {
-      window.location.href = "/login"
-      return
-    }
+  }, []);
 
-    async function loadLogs() {
+  // =========================
+  // METRICS
+  // =========================
 
-      try {
-
-        const response = await fetch(
-          `${API_URL}/dashboard/usage/logs`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
+  const totalCost =
+    logs.reduce(
+      (
+        total,
+        log
+      ) => (
+        total +
+        Number(
+          log?.cost || 0
         )
+      ),
+      0
+    );
 
-        const data = await response.json()
-
-        console.log(data)
-
-        setLogs(
-          Array.isArray(data)
-            ? data
-            : []
+  const totalTokens =
+    logs.reduce(
+      (
+        total,
+        log
+      ) => (
+        total +
+        Number(
+          log?.total_tokens || 0
         )
+      ),
+      0
+    );
 
-      } catch (err) {
+  const totalPromptTokens =
+    logs.reduce(
+      (
+        total,
+        log
+      ) => (
+        total +
+        Number(
+          log?.prompt_tokens || 0
+        )
+      ),
+      0
+    );
 
-        console.error(err)
+  const totalCompletionTokens =
+    logs.reduce(
+      (
+        total,
+        log
+      ) => (
+        total +
+        Number(
+          log?.completion_tokens || 0
+        )
+      ),
+      0
+    );
 
-      } finally {
+  // =========================
+  // FORMAT NUMBERS
+  // =========================
 
-        setLoading(false)
+  function formatNumber(
+    value: number
+  ) {
 
+    return new Intl.NumberFormat(
+      "en-US",
+      {
+        notation: "compact",
+        maximumFractionDigits: 1,
       }
-    }
-
-    loadLogs()
-
-  }, [])
-
-  if (loading) {
-    return (
-      <div className="
-        min-h-screen
-        bg-black
-        text-white
-        flex
-        items-center
-        justify-center
-        text-3xl
-        font-black
-      ">
-        Loading Usage Logs...
-      </div>
-    )
+    ).format(value);
   }
 
-  return (
-    <div className="
-      min-h-screen
-      bg-gradient-to-br
-      from-slate-950
-      via-slate-900
-      to-black
-      text-white
-      p-8
-    ">
+  // =========================
+  // CARD DATA
+  // =========================
 
-      {/* HEADER */}
-      <div className="
-        flex
-        items-center
-        justify-between
-        mb-10
-      ">
+  const cards = [
 
-        <div>
+    {
+      title: "Total Logs",
+      value: formatNumber(
+        logs.length
+      ),
+      icon: Activity,
+      color: `
+        border-cyan-500/20
+        bg-cyan-500/10
+        text-cyan-300
+      `,
+    },
 
-          <SectionHeader
-            title="Usage Telemetry"
-            subtitle="Real-time AI activity stream."
-          />
+    {
+      title: "Prompt Tokens",
+      value: formatNumber(
+        totalPromptTokens
+      ),
+      icon: Bot,
+      color: `
+        border-blue-500/20
+        bg-blue-500/10
+        text-blue-300
+      `,
+    },
 
-        </div>
+    {
+      title: "Completion Tokens",
+      value: formatNumber(
+        totalCompletionTokens
+      ),
+      icon: Cpu,
+      color: `
+        border-green-500/20
+        bg-green-500/10
+        text-green-300
+      `,
+    },
 
-        <div className="
+    {
+      title: "Total Tokens",
+      value: formatNumber(
+        totalTokens
+      ),
+      icon: Zap,
+      color: `
+        border-purple-500/20
+        bg-purple-500/10
+        text-purple-300
+      `,
+    },
+
+    {
+      title: "Runtime Cost",
+      value:
+        `$${totalCost.toFixed(2)}`,
+      icon: Coins,
+      color: `
+        border-yellow-500/20
+        bg-yellow-500/10
+        text-yellow-300
+      `,
+    },
+  ];
+
+  // =========================
+  // LOADING
+  // =========================
+
+  if (loading) {
+
+    return (
+
+      <div
+        className="
+          min-h-[80vh]
           flex
           items-center
-          gap-4
-        ">
+          justify-center
+        "
+      >
 
-          <LiveIndicator />
+        <div className="text-center">
 
-          <button
-            onClick={() =>
-              router.push("/dashboard")
-            }
+          <div
             className="
-              px-6
-              py-3
-              rounded-xl
-              bg-gray-900
-              border
-              border-cyan-500
-              hover:bg-cyan-500
-              hover:text-black
-              transition-all
+              h-16
+              w-16
+              rounded-full
+              border-4
+              border-cyan-500/20
+              border-t-cyan-400
+              animate-spin
+              mx-auto
+            "
+          />
+
+          <p
+            className="
+              mt-6
+              text-xl
               font-bold
+              text-cyan-300
             "
           >
-            Back To Dashboard
-          </button>
+            Loading Runtime Logs...
+          </p>
 
         </div>
-
       </div>
+    );
+  }
 
-      {/* TELEMETRY FEED */}
-      <div className="space-y-6">
+  // =========================
+  // PAGE
+  // =========================
 
-        {logs.map(
-          (log: any, index: number) => (
+  return (
+
+    <div className="space-y-8">
+
+      {/* HERO */}
+
+      <div
+        className="
+          rounded-[32px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-8
+          overflow-hidden
+          relative
+        "
+      >
+
+        {/* GLOW */}
+
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-72
+            w-72
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
+
+        <div className="relative z-10">
+
+          <div
+            className="
+              flex
+              items-center
+              gap-5
+              flex-wrap
+            "
+          >
+
+            {/* ICON */}
 
             <div
-              key={index}
               className="
-                bg-[#091121]
+                h-20
+                w-20
+                rounded-3xl
                 border
                 border-cyan-500/20
-                rounded-3xl
-                p-6
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
               "
             >
 
-              <div className="
-                flex
-                items-center
-                justify-between
-                mb-5
-              ">
-
-                <div>
-
-                  <h2 className="
-                    text-2xl
-                    font-bold
-                    text-cyan-400
-                  ">
-                    {log.action}
-                  </h2>
-
-                  <p className="
-                    mt-2
-                    text-gray-500
-                    text-sm
-                  ">
-                    Step ID:
-                    {" "}
-                    {log.step_id}
-                  </p>
-
-                </div>
-
-                <StatusBadge
-                  status={
-                    log.status ||
-                    "running"
-                  }
-                />
-
-              </div>
-
-              <TimelineEvent
-                event={
-                  log.event_type ||
-                  "completed"
-                }
-                timestamp={
-                  log.created_at ||
-                  log.timestamp
-                }
-                cost={log.cost}
+              <ScrollText
+                className="
+                  text-cyan-300
+                "
+                size={34}
               />
-
-              <div className="
-                mt-6
-                grid
-                grid-cols-1
-                md:grid-cols-2
-                gap-4
-              ">
-
-                <div className="
-                  rounded-2xl
-                  bg-black/30
-                  p-4
-                ">
-
-                  <p className="
-                    text-sm
-                    text-gray-400
-                  ">
-                    Agent ID
-                  </p>
-
-                  <h3 className="
-                    mt-2
-                    text-sm
-                    break-all
-                  ">
-                    {log.agent_id}
-                  </h3>
-
-                </div>
-
-                <div className="
-                  rounded-2xl
-                  bg-black/30
-                  p-4
-                ">
-
-                  <p className="
-                    text-sm
-                    text-gray-400
-                  ">
-                    Log ID
-                  </p>
-
-                  <h3 className="
-                    mt-2
-                    text-sm
-                    break-all
-                  ">
-                    {log.id}
-                  </h3>
-
-                </div>
-
-              </div>
 
             </div>
 
-          )
-        )}
+            {/* TITLE */}
 
+            <div>
+
+              <h1
+                className="
+                  text-5xl
+                  font-black
+                "
+              >
+                Runtime Usage Logs
+              </h1>
+
+              <p
+                className="
+                  mt-3
+                  text-slate-400
+                  text-lg
+                "
+              >
+                Execution timeline,
+                token telemetry and
+                runtime observability.
+              </p>
+
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* METRICS */}
+
+      <div
+        className="
+          grid
+          grid-cols-1
+          md:grid-cols-2
+          xl:grid-cols-5
+          gap-6
+        "
+      >
+
+        {cards.map(
+          (
+            card,
+            index
+          ) => {
+
+            const Icon =
+              card.icon;
+
+            return (
+
+              <div
+                key={index}
+                className={`
+                  rounded-[30px]
+                  border
+                  p-7
+                  min-h-[180px]
+                  flex
+                  flex-col
+                  justify-between
+                  transition-all
+                  duration-300
+                  hover:scale-[1.02]
+                  ${card.color}
+                `}
+              >
+
+                {/* TITLE */}
+
+                <p
+                  className="
+                    text-[15px]
+                    font-semibold
+                    text-white/90
+                    leading-snug
+                  "
+                >
+                  {card.title}
+                </p>
+
+                {/* VALUE + ICON */}
+
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-between
+                    gap-4
+                    mt-7
+                  "
+                >
+
+                  {/* VALUE */}
+
+                  <h2
+                    className="
+                      text-4xl
+                      font-black
+                      tracking-tight
+                      leading-none
+                      whitespace-nowrap
+                    "
+                  >
+                    {card.value}
+                  </h2>
+
+                  {/* ICON */}
+
+                  <div
+                    className="
+                      shrink-0
+                      flex
+                      items-center
+                      justify-center
+                    "
+                  >
+
+                    <Icon
+                      size={28}
+                    />
+
+                  </div>
+                </div>
+              </div>
+            );
+          }
+        )}
+      </div>
+
+      {/* STATUS BAR */}
+
+      <div
+        className="
+          rounded-[32px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-6
+          flex
+          items-center
+          justify-between
+          flex-wrap
+          gap-5
+        "
+      >
+
+        <div
+          className="
+            flex
+            items-center
+            gap-4
+          "
+        >
+
+          <div
+            className="
+              h-14
+              w-14
+              rounded-2xl
+              border
+              border-cyan-500/20
+              bg-cyan-500/10
+              flex
+              items-center
+              justify-center
+            "
+          >
+
+            <Clock3
+              className="
+                text-cyan-300
+              "
+              size={26}
+            />
+
+          </div>
+
+          <div>
+
+            <h2
+              className="
+                text-2xl
+                font-black
+              "
+            >
+              Runtime Telemetry Stream
+            </h2>
+
+            <p
+              className="
+                text-slate-400
+                mt-1
+              "
+            >
+              Monitoring live execution
+              telemetry and runtime events.
+            </p>
+
+          </div>
+        </div>
+
+        {/* LIVE */}
+
+        <div
+          className="
+            flex
+            items-center
+            gap-3
+            rounded-full
+            border
+            border-green-500/20
+            bg-green-500/10
+            px-5
+            py-3
+          "
+        >
+
+          <div
+            className="
+              h-2
+              w-2
+              rounded-full
+              bg-green-400
+              animate-pulse
+            "
+          />
+
+          <span
+            className="
+              text-sm
+              font-bold
+              text-green-300
+            "
+          >
+            STREAMING
+          </span>
+
+        </div>
+      </div>
+
+      {/* LIVE FEED */}
+
+      <LiveFeed logs={logs} />
+
     </div>
-  )
+  );
 }

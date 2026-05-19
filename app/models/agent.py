@@ -1,7 +1,8 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, JSON,ForeignKey,Integer,Float
+from sqlalchemy import Column, String, Boolean, JSON,ForeignKey,Integer,Float,DateTime
 from app.db.session import Base
 from sqlalchemy.dialects.postgresql import UUID
+from datetime  import datetime
 
 
 class Agent(Base):
@@ -28,3 +29,9 @@ class Agent(Base):
     max_repeated_tasks = Column(Integer, default=5)
 
     is_killed = Column(Boolean, default=False)
+
+    workspace_id = Column(UUID(as_uuid=True), nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

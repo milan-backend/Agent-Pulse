@@ -36,13 +36,24 @@ def get_current_agent(
     # ⚡ Find ONE agent only
     agent = db.query(Agent).filter(
         Agent.key_id == key_id,
-        Agent.is_active == True
     ).first()
 
     if not agent:
         raise HTTPException(
             status_code=401,
             detail="Invalid API Key"
+        )
+    
+    if agent.is_killed:
+        raise HTTPException(
+            status_code=403,
+            detail= "Agent has been killed"
+        )
+    
+    if not agent.is_active:
+        raise HTTPException(
+            status_code=403,
+            detail= "Agent inactive"
         )
 
     # 🔐 Verify secret

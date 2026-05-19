@@ -1,48 +1,82 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL
+const TOKEN_KEY =
+  "token"
 
+export const auth = {
 
-export async function signupUser(data: {
-  name: string
-  email: string
-  password: string
-}) {
-  const res = await fetch(`${API_URL}/auth/signup`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(data),
-  })
+  // =========================
+  // SAVE TOKEN
+  // =========================
 
-  return res.json()
-}
+  setToken(
+    token: string
+  ) {
 
-export async function loginUser(
-  email: string,
-  password: string
-) {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      password,
-    }),
-  })
+    if (
+      typeof window !==
+      "undefined"
+    ) {
 
-  return res.json()
-}
+      localStorage.setItem(
+        TOKEN_KEY,
+        token
+      )
+    }
+  },
 
-export function saveToken(token: string) {
-  localStorage.setItem("token", token)
-}
+  // =========================
+  // GET TOKEN
+  // =========================
 
-export function getToken() {
-  return localStorage.getItem("token")
-}
+  getToken():
+    string | null {
 
-export function logout() {
-  localStorage.removeItem("token")
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+
+      return localStorage.getItem(
+        TOKEN_KEY
+      )
+    }
+
+    return null
+  },
+
+  // =========================
+  // REMOVE TOKEN
+  // =========================
+
+  removeToken() {
+
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+
+      localStorage.removeItem(
+        TOKEN_KEY
+      )
+    }
+  },
+
+  // =========================
+  // CHECK AUTH
+  // =========================
+
+  isAuthenticated():
+    boolean {
+
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+
+      return !!localStorage.getItem(
+        TOKEN_KEY
+      )
+    }
+
+    return false
+  },
 }

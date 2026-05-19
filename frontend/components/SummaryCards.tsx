@@ -1,148 +1,238 @@
-"use client"
+"use client";
+
+import {
+  Rocket,
+  ShieldCheck,
+  Activity,
+  Zap,
+  Bot,
+  ShieldAlert,
+} from "lucide-react";
+
+interface Props {
+  summary?: any;
+}
 
 export default function SummaryCards({
-  summary,
-  usage,
-}: {
-  summary: any
-  usage: any
-}) {
+  summary = {},
+}: Props) {
 
   const cards = [
-
     {
-      title: "Total Calls",
-      value: usage.total_calls || 0,
-      color: "from-cyan-500 to-blue-500",
+      title: "Total Steps",
+      value:
+        summary?.total_steps || 0,
+      icon: Rocket,
+      color: `
+        border-cyan-500/20
+        bg-cyan-500/10
+        text-cyan-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(34,211,238,0.12)]",
     },
 
     {
-      title: "Executions",
-      value: usage.executions || 0,
-      color: "from-purple-500 to-pink-500",
+      title: "Completed",
+      value:
+        summary?.completed || 0,
+      icon: ShieldCheck,
+      color: `
+        border-green-500/20
+        bg-green-500/10
+        text-green-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(34,197,94,0.12)]",
     },
 
     {
-      title: "Retries",
-      value: usage.retries || 0,
-      color: "from-yellow-500 to-orange-500",
+      title: "Failed",
+      value:
+        summary?.failed || 0,
+      icon: ShieldAlert,
+      color: `
+        border-red-500/20
+        bg-red-500/10
+        text-red-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(239,68,68,0.12)]",
     },
 
     {
-      title: "Cache Hits",
-      value: usage.cache_hits || 0,
-      color: "from-green-500 to-emerald-500",
+      title: "Pending",
+      value:
+        summary?.pending || 0,
+      icon: Activity,
+      color: `
+        border-amber-500/20
+        bg-amber-500/10
+        text-amber-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(251,191,36,0.12)]",
     },
 
-  ]
+    {
+      title: "Success Rate",
+      value: `${
+        summary?.success_rate || 0
+      }%`,
+      icon: Zap,
+      color: `
+        border-emerald-500/20
+        bg-emerald-500/10
+        text-emerald-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(16,185,129,0.12)]",
+    },
+
+    {
+      title: "Live Runtime",
+      value:
+        summary?.live_status ||
+        "ONLINE",
+      icon: Bot,
+      color: `
+        border-purple-500/20
+        bg-purple-500/10
+        text-purple-300
+      `,
+      glow:
+        "shadow-[0_0_40px_rgba(168,85,247,0.12)]",
+    },
+  ];
 
   return (
 
-    <div className="
-      grid
-      grid-cols-1
-      md:grid-cols-2
-      xl:grid-cols-4
-      gap-6
-    ">
+    <div
+      className="
+        grid
+        grid-cols-1
+        md:grid-cols-2
+        xl:grid-cols-3
+        gap-6
+      "
+    >
+      {cards.map(
+        (card, index) => {
+          const Icon =
+            card.icon;
 
-      {cards.map((card, index) => (
+          return (
+            <div
+              key={index}
+              className={`
+                rounded-[30px]
+                border
+                p-7
+                overflow-hidden
+                relative
+                transition-all
+                duration-300
+                hover:scale-[1.01]
+                ${card.color}
+                ${card.glow}
+              `}
+            >
+              {/* BACKGROUND GLOW */}
 
-        <div
-          key={index}
-          className={`
-            rounded-3xl
-            p-6
-            border
-            border-white/10
-            bg-gradient-to-br
-            ${card.color}
-            shadow-2xl
-            hover:scale-105
-            transition
-            duration-300
-          `}
-        >
+              <div
+                className="
+                  absolute
+                  top-0
+                  right-0
+                  h-40
+                  w-40
+                  rounded-full
+                  bg-white/5
+                  blur-3xl
+                "
+              />
 
-          <p className="
-            text-sm
-            text-white/80
-          ">
-            {card.title}
-          </p>
+              {/* CONTENT */}
 
-          <h2 className="
-            text-5xl
-            font-black
-            mt-4
-            text-white
-          ">
-            {card.value}
-          </h2>
+              <div className="relative z-10">
+                {/* TOP */}
 
-        </div>
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-between
+                  "
+                >
+                  <div>
+                    <p
+                      className="
+                        text-sm
+                        opacity-80
+                        tracking-wide
+                      "
+                    >
+                      {card.title}
+                    </p>
 
-      ))}
+                    <h2
+                      className="
+                        mt-4
+                        text-5xl
+                        font-black
+                        tracking-tight
+                      "
+                    >
+                      {card.value}
+                    </h2>
+                  </div>
 
-      {/* Success Rate */}
-      <div className="
-        rounded-3xl
-        p-6
-        border
-        border-green-400/20
-        bg-green-500/10
-        backdrop-blur-xl
-      ">
+                  <div
+                    className="
+                      h-16
+                      w-16
+                      rounded-2xl
+                      bg-black/20
+                      flex
+                      items-center
+                      justify-center
+                      border
+                      border-white/10
+                    "
+                  >
+                    <Icon size={30} />
+                  </div>
+                </div>
 
-        <p className="
-          text-sm
-          text-green-300
-        ">
-          Success Rate
-        </p>
+                {/* BOTTOM */}
 
-        <h2 className="
-          text-5xl
-          font-black
-          mt-4
-          text-green-400
-        ">
-          {summary.success_rate || 0}%
-        </h2>
+                <div
+                  className="
+                    mt-8
+                    flex
+                    items-center
+                    gap-3
+                    text-sm
+                    font-bold
+                  "
+                >
+                  <div
+                    className="
+                      h-2
+                      w-2
+                      rounded-full
+                      bg-current
+                      animate-pulse
+                    "
+                  />
 
-      </div>
-
-      {/* Estimated Savings */}
-      <div className="
-        rounded-3xl
-        p-6
-        border
-        border-cyan-400/20
-        bg-cyan-500/10
-        backdrop-blur-xl
-      ">
-
-        <p className="
-          text-sm
-          text-cyan-300
-        ">
-          Estimated Savings
-        </p>
-
-        <h2 className="
-          text-5xl
-          font-black
-          mt-4
-          text-cyan-400
-        ">
-          $
-          {(
-            (usage.cache_hits || 0) * 0.02
-          ).toFixed(2)}
-        </h2>
-
-      </div>
-
+                  LIVE METRIC
+                </div>
+              </div>
+            </div>
+          );
+        }
+      )}
     </div>
-  )
+  );
 }

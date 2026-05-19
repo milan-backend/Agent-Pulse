@@ -1,132 +1,500 @@
+// frontend/app/signup/page.tsx
+
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
-import { signupUser } from "@/lib/auth";
+import Link from "next/link";
 
+import {
+  Activity,
+  Mail,
+  Lock,
+  User,
+  ArrowRight,
+  ShieldCheck,
+} from "lucide-react";
+
+import {
+  signup,
+} from "@/components/api";
 
 export default function SignupPage() {
 
-  const router = useRouter();
+  const [name, setName] =
+    useState("");
 
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] =
+    useState("");
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [password, setPassword] =
+    useState("");
 
+  const [loading, setLoading] =
+    useState(false);
 
-  const handleSignup = async () => {
+  const [error, setError] =
+    useState("");
 
-    setLoading(true);
-    setError("");
+  async function handleSignup(
+    e: React.FormEvent
+  ) {
+
+    e.preventDefault();
 
     try {
 
-      const data = await signupUser({
+      setLoading(true);
+
+      setError("");
+
+      await signup(
         name,
         email,
         password
-    });
+      );
 
-      if (data.error) {
-        setError(data.error);
-        setLoading(false);
-        return;
-      }
+      window.location.href =
+        "/login";
 
-      router.push("/login");
+    } catch (err: any) {
 
-    } catch (err) {
-      setError("Signup failed");
+      console.error(err);
+
+      setError(
+        err?.message ||
+          "Signup failed."
+      );
+
+    } finally {
+
+      setLoading(false);
     }
-
-    setLoading(false);
-  };
-
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
 
-      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+    <div
+      className="
+        min-h-screen
+        bg-[#020817]
+        overflow-hidden
+        relative
+        flex
+        items-center
+        justify-center
+        px-6
+      "
+    >
+      {/* BACKGROUND */}
 
-        <h1 className="text-4xl font-extrabold text-slate-900 mb-2">
-          Create Account
-        </h1>
+      <div
+        className="
+          absolute
+          top-0
+          left-0
+          h-[500px]
+          w-[500px]
+          rounded-full
+          bg-cyan-500/10
+          blur-3xl
+        "
+      />
 
-        <p className="text-slate-500 mb-8">
-          Signup to AgentPulse
-        </p>
+      <div
+        className="
+          absolute
+          bottom-0
+          right-0
+          h-[500px]
+          w-[500px]
+          rounded-full
+          bg-purple-500/10
+          blur-3xl
+        "
+      />
 
+      {/* CARD */}
 
-        <div className="space-y-4">
+      <div
+        className="
+          relative
+          z-10
+          w-full
+          max-w-xl
+          rounded-[40px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-10
+          overflow-hidden
+        "
+      >
+        {/* INNER GLOW */}
 
-          <input
-            type="text"
-            placeholder="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="w-full border border-slate-300 rounded-xl px-4 py-3"
-          />
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-72
+            w-72
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full border border-slate-300 rounded-xl px-4 py-3"
-          />
+        {/* CONTENT */}
 
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-slate-300 rounded-xl px-4 py-3"
-          />
+        <div className="relative z-10">
+          {/* LOGO */}
+
+          <div
+            className="
+              flex
+              items-center
+              gap-5
+            "
+          >
+            <div
+              className="
+                h-20
+                w-20
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+              <Activity
+                className="
+                  text-cyan-300
+                "
+                size={38}
+              />
+            </div>
+
+            <div>
+              <h1
+                className="
+                  text-5xl
+                  font-black
+                  leading-none
+                "
+              >
+                <span className="text-cyan-400">
+                  Agent
+                </span>
+
+                <span className="text-white">
+                  Pulse
+                </span>
+              </h1>
+
+              <p
+                className="
+                  mt-2
+                  text-slate-400
+                "
+              >
+                AI Runtime Observability
+              </p>
+            </div>
+          </div>
+
+          {/* TITLE */}
+
+          <div className="mt-10">
+            <h2
+              className="
+                text-4xl
+                font-black
+              "
+            >
+              Create Workspace
+            </h2>
+
+            <p
+              className="
+                mt-3
+                text-slate-400
+                text-lg
+              "
+            >
+              Launch your autonomous AI
+              runtime observability platform.
+            </p>
+          </div>
+
+          {/* ERROR */}
 
           {error && (
-            <p className="text-red-500 text-sm">{error}</p>
+
+            <div
+              className="
+                mt-6
+                rounded-2xl
+                border
+                border-red-500/20
+                bg-red-500/10
+                px-5
+                py-4
+                text-red-300
+                font-semibold
+              "
+            >
+              {error}
+            </div>
           )}
 
-          <button
-            onClick={handleSignup}
-            disabled={loading}
-            className="w-full bg-slate-900 text-white py-3 rounded-xl font-semibold hover:bg-slate-800"
+          {/* FORM */}
+
+          <form
+            onSubmit={
+              handleSignup
+            }
+            className="
+              mt-8
+              space-y-6
+            "
           >
-            {loading ? "Creating Account..." : "Signup"}
-          </button>
-          
-          
-          <div className="mt-6 text-center">
+            {/* NAME */}
 
-          <p className="text-sm text-gray-400">
-           Already have an account?
-          </p>
+            <div>
+              <label
+                className="
+                  text-sm
+                  text-slate-400
+                  mb-3
+                  block
+                "
+              >
+                Workspace Owner
+              </label>
 
-          <button
-           onClick={() => router.push("/login")}
-           className="
-           mt-3
-           px-5
-           py-2
-           rounded-xl
-           bg-cyan-500/20
-           border
-           border-cyan-400/30
-           text-cyan-300
-          font-semibold
-          hover:bg-cyan-500/30
-          transition
-    
-    "
-  >
-    Login
-  </button>
+              <div className="relative">
+                <User
+                  className="
+                    absolute
+                    left-5
+                    top-1/2
+                    -translate-y-1/2
+                    text-slate-500
+                  "
+                  size={20}
+                />
 
-</div>
+                <input
+                  type="text"
+                  required
+                  placeholder="Agent Operator"
+                  value={name}
+                  onChange={(e) =>
+                    setName(
+                      e.target.value
+                    )
+                  }
+                  className="
+                    w-full
+                    rounded-3xl
+                    border
+                    border-cyan-500/20
+                    bg-[#0f172a]
+                    px-14
+                    py-5
+                    text-white
+                    text-lg
+                    outline-none
+                    transition-all
+                    focus:border-cyan-400
+                    focus:ring-4
+                    focus:ring-cyan-500/10
+                    placeholder:text-slate-500
+                  "
+                />
+              </div>
+            </div>
+
+            {/* EMAIL */}
+
+            <div>
+              <label
+                className="
+                  text-sm
+                  text-slate-400
+                  mb-3
+                  block
+                "
+              >
+                Email Address
+              </label>
+
+              <div className="relative">
+                <Mail
+                  className="
+                    absolute
+                    left-5
+                    top-1/2
+                    -translate-y-1/2
+                    text-slate-500
+                  "
+                  size={20}
+                />
+
+                <input
+                  type="email"
+                  required
+                  placeholder="admin@agentpulse.ai"
+                  value={email}
+                  onChange={(e) =>
+                    setEmail(
+                      e.target.value
+                    )
+                  }
+                  className="
+                    w-full
+                    rounded-3xl
+                    border
+                    border-cyan-500/20
+                    bg-[#0f172a]
+                    px-14
+                    py-5
+                    text-white
+                    text-lg
+                    outline-none
+                    transition-all
+                    focus:border-cyan-400
+                    focus:ring-4
+                    focus:ring-cyan-500/10
+                    placeholder:text-slate-500
+                  "
+                />
+              </div>
+            </div>
+
+            {/* PASSWORD */}
+
+            <div>
+              <label
+                className="
+                  text-sm
+                  text-slate-400
+                  mb-3
+                  block
+                "
+              >
+                Password
+              </label>
+
+              <div className="relative">
+                <Lock
+                  className="
+                    absolute
+                    left-5
+                    top-1/2
+                    -translate-y-1/2
+                    text-slate-500
+                  "
+                  size={20}
+                />
+
+                <input
+                  type="password"
+                  required
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) =>
+                    setPassword(
+                      e.target.value
+                    )
+                  }
+                  className="
+                    w-full
+                    rounded-3xl
+                    border
+                    border-cyan-500/20
+                    bg-[#0f172a]
+                    px-14
+                    py-5
+                    text-white
+                    text-lg
+                    outline-none
+                    transition-all
+                    focus:border-cyan-400
+                    focus:ring-4
+                    focus:ring-cyan-500/10
+                    placeholder:text-slate-500
+                  "
+                />
+              </div>
+            </div>
+
+            {/* BUTTON */}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="
+                w-full
+                rounded-3xl
+                bg-cyan-500
+                hover:bg-cyan-400
+                transition-all
+                py-5
+                text-black
+                font-black
+                text-lg
+                flex
+                items-center
+                justify-center
+                gap-3
+              "
+            >
+              {loading ? (
+                "Creating Workspace..."
+              ) : (
+                <>
+                  <ShieldCheck
+                    size={22}
+                  />
+
+                  Launch Workspace
+
+                  <ArrowRight
+                    size={22}
+                  />
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* FOOTER */}
+
+          <div
+            className="
+              mt-8
+              text-center
+              text-slate-400
+            "
+          >
+            Already have an account?
+            {" "}
+
+            <Link
+              href="/login"
+              className="
+                text-cyan-300
+                hover:text-cyan-200
+                font-bold
+              "
+            >
+              Access Mission Control
+            </Link>
+          </div>
         </div>
       </div>
     </div>

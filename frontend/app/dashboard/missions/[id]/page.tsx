@@ -1,26 +1,38 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
 
-import { fetchStepById } from "@/components/api"
-import { getToken } from "@/lib/auth"
+import {
+  useParams,
+  useRouter,
+} from "next/navigation"
 
-import TimelineEvent from "@/components/ui/TimelineEvent"
+import {
+  fetchMissionById,
+} from "@/components/api"
 
-import SectionHeader from "@/components/ui/SectionHeader"
+import {
+  auth,
+} from "@/lib/auth"
 
-import LiveIndicator from "@/components/ui/LiveIndicator"
+export default function MissionPage() {
 
-import StatusBadge from "@/components/ui/StatusBadge"
+  // =========================
+  // ROUTER
+  // =========================
 
-export default function MissionDetailPage() {
+  const router =
+    useRouter()
 
-  const router = useRouter()
+  const params =
+    useParams()
 
-  const params = useParams()
+  const stepId =
+    params.id as string
 
-  const stepId = params.id as string
+  // =========================
+  // STATE
+  // =========================
 
   const [mission, setMission] =
     useState<any>(null)
@@ -28,23 +40,30 @@ export default function MissionDetailPage() {
   const [loading, setLoading] =
     useState(true)
 
+  // =========================
+  // LOAD
+  // =========================
+
   useEffect(() => {
 
-    const loadStep = async () => {
+    async function loadMission() {
 
       try {
 
-        const token = getToken()
+        if (
+          !auth.getToken()
+        ) {
 
-        if (!token) {
-          window.location.href = "/login"
+          router.push(
+            "/login"
+          )
+
           return
         }
 
         const data =
-          await fetchStepById(
-            stepId,
-            token
+          await fetchMissionById(
+            stepId
           )
 
         setMission(data)
@@ -56,357 +75,324 @@ export default function MissionDetailPage() {
       } finally {
 
         setLoading(false)
-
       }
     }
 
     if (stepId) {
-      loadStep()
+
+      loadMission()
     }
 
-  }, [stepId])
+  }, [
+    stepId,
+    router,
+  ])
+
+  // =========================
+  // LOADING
+  // =========================
 
   if (loading) {
 
     return (
 
-      <div className="
-        min-h-screen
-        bg-black
-        text-cyan-400
-        p-10
-      ">
-        Loading mission...
+      <div
+        className="
+          min-h-screen
+          bg-black
+          text-white
+          flex
+          items-center
+          justify-center
+        "
+      >
+        Loading Mission...
       </div>
-
     )
   }
+
+  // =========================
+  // NO DATA
+  // =========================
 
   if (!mission) {
 
     return (
 
-      <div className="
-        min-h-screen
-        bg-black
-        text-red-400
-        p-10
-      ">
-        Failed to load mission.
+      <div
+        className="
+          min-h-screen
+          bg-black
+          text-red-400
+          flex
+          items-center
+          justify-center
+        "
+      >
+        Mission Not Found
       </div>
-
     )
   }
 
+  // =========================
+  // PAGE
+  // =========================
+
   return (
 
-    <div className="
-      min-h-screen
-      bg-[#050816]
-      text-white
-      p-8
-    ">
+    <div
+      className="
+        min-h-screen
+        bg-[#050816]
+        text-white
+        p-10
+      "
+    >
 
       {/* HEADER */}
-      <div className="
-        flex
-        items-center
-        justify-between
-        mb-10
-      ">
 
-        <div>
+      <div className="mb-10">
 
-          <SectionHeader
-            title="Mission Trace"
-            subtitle="Deep execution observability."
-          />
+        <h1
+          className="
+            text-5xl
+            font-black
+          "
+        >
+          {mission.task_name}
+        </h1>
 
-        </div>
-
-        <div className="
-          flex
-          items-center
-          gap-4
-        ">
-
-          <LiveIndicator />
-
-          <button
-            onClick={() => router.push("/dashboard")}
-            className="
-              px-6
-              py-3
-              rounded-xl
-              bg-gray-900
-              border
-              border-cyan-500
-              hover:bg-cyan-500
-              hover:text-black
-              transition-all
-              font-bold
-            "
-          >
-            Back To Dashboard
-          </button>
-
-        </div>
+        <p
+          className="
+            mt-4
+            text-slate-400
+          "
+        >
+          Runtime mission telemetry
+          and execution analytics.
+        </p>
 
       </div>
 
-      {/* TOP STATS */}
-      <div className="
-        grid
-        grid-cols-4
-        gap-6
-        mb-8
-      ">
+      {/* GRID */}
 
-        <div className="
-          bg-[#091121]
-          border
-          border-cyan-500/20
-          rounded-3xl
-          p-6
-        ">
+      <div
+        className="
+          grid
+          grid-cols-1
+          md:grid-cols-2
+          gap-6
+        "
+      >
 
-          <p className="
-            text-gray-400
-            mb-2
-          ">
+        {/* STATUS */}
+
+        <div
+          className="
+            rounded-3xl
+            border
+            border-cyan-500/20
+            bg-cyan-500/10
+            p-6
+          "
+        >
+
+          <p className="text-slate-400">
             Status
           </p>
 
-          <h2 className="
-            text-3xl
-            font-bold
-            text-cyan-400
-          ">
-            <StatusBadge
-              status={mission.status}
-            />
+          <h2
+            className="
+              mt-3
+              text-4xl
+              font-black
+              text-cyan-300
+            "
+          >
+            {mission.status}
           </h2>
 
         </div>
 
-        <div className="
-          bg-[#091121]
-          border
-          border-green-500/20
-          rounded-3xl
-          p-6
-        ">
+        {/* RETRIES */}
 
-          <p className="
-            text-gray-400
-            mb-2
-          ">
-            Retries
+        <div
+          className="
+            rounded-3xl
+            border
+            border-green-500/20
+            bg-green-500/10
+            p-6
+          "
+        >
+
+          <p className="text-slate-400">
+            Retry Count
           </p>
 
-          <h2 className="
-            text-3xl
-            font-bold
-            text-green-400
-          ">
-            {mission.retry_count}
+          <h2
+            className="
+              mt-3
+              text-4xl
+              font-black
+              text-green-300
+            "
+          >
+            {mission.retry_count || 0}
           </h2>
 
         </div>
 
-        <div className="
-          bg-[#091121]
-          border
-          border-yellow-500/20
-          rounded-3xl
-          p-6
-        ">
+        {/* CACHE */}
 
-          <p className="
-            text-gray-400
-            mb-2
-          ">
-            Total Cost
+        <div
+          className="
+            rounded-3xl
+            border
+            border-yellow-500/20
+            bg-yellow-500/10
+            p-6
+          "
+        >
+
+          <p className="text-slate-400">
+            Cache Hit
           </p>
 
-          <h2 className="
-            text-3xl
-            font-bold
-            text-yellow-400
-          ">
-            ${mission.analytics.total_cost}
+          <h2
+            className="
+              mt-3
+              text-4xl
+              font-black
+              text-yellow-300
+            "
+          >
+            {mission.cache_hit
+              ? "YES"
+              : "NO"}
           </h2>
 
         </div>
 
-        <div className="
-          bg-[#091121]
-          border
-          border-pink-500/20
-          rounded-3xl
-          p-6
-        ">
+        {/* RUNTIME */}
 
-          <p className="
-            text-gray-400
-            mb-2
-          ">
-            Usage Events
+        <div
+          className="
+            rounded-3xl
+            border
+            border-purple-500/20
+            bg-purple-500/10
+            p-6
+          "
+        >
+
+          <p className="text-slate-400">
+            Runtime Controlled
           </p>
 
-          <h2 className="
-            text-3xl
-            font-bold
-            text-pink-400
-          ">
-            {mission.analytics.usage_events}
+          <h2
+            className="
+              mt-3
+              text-4xl
+              font-black
+              text-purple-300
+            "
+          >
+            {mission.runtime_controlled
+              ? "YES"
+              : "NO"}
           </h2>
 
         </div>
 
       </div>
 
-      {/* TOKEN SECTION */}
-      <div className="
-        bg-[#091121]
-        border
-        border-cyan-500/20
-        rounded-3xl
-        p-8
-        mb-8
-      ">
+      {/* DETAILS */}
 
-        <div className="
-          flex
-          items-center
-          justify-between
-          mb-6
-        ">
+      <div
+        className="
+          mt-10
+          rounded-3xl
+          border
+          border-white/10
+          bg-white/[0.03]
+          p-8
+        "
+      >
+
+        <h2
+          className="
+            text-3xl
+            font-black
+            mb-8
+          "
+        >
+          Mission Details
+        </h2>
+
+        <div className="space-y-5">
 
           <div>
-
-            <h2 className="
-              text-4xl
-              font-bold
-              text-cyan-400
-            ">
-              Token Intelligence
-            </h2>
-
-            <p className="
-              text-gray-400
-              mt-2
-            ">
-              Runtime token observability.
+            <p className="text-slate-400">
+              Mission ID
             </p>
 
+            <p className="mt-2 break-all">
+              {mission.id}
+            </p>
           </div>
 
-          <LiveIndicator />
-
-        </div>
-
-        <div className="
-          grid
-          grid-cols-2
-          gap-6
-        ">
-
-          <div className="
-            bg-black/30
-            rounded-2xl
-            p-6
-          ">
-
-            <p className="
-              text-gray-400
-              mb-2
-            ">
-              Prompt Tokens
+          <div>
+            <p className="text-slate-400">
+              Agent ID
             </p>
 
-            <h2 className="
-              text-5xl
-              font-bold
-              text-cyan-400
-            ">
-              {mission.analytics.prompt_tokens}
-            </h2>
-
+            <p className="mt-2 break-all">
+              {mission.agent_id}
+            </p>
           </div>
 
-          <div className="
-            bg-black/30
-            rounded-2xl
-            p-6
-          ">
-
-            <p className="
-              text-gray-400
-              mb-2
-            ">
-              Completion Tokens
+          <div>
+            <p className="text-slate-400">
+              Created At
             </p>
 
-            <h2 className="
-              text-5xl
-              font-bold
-              text-yellow-400
-            ">
-              {mission.analytics.completion_tokens}
-            </h2>
+            <p className="mt-2">
+              {mission.created_at}
+            </p>
+          </div>
 
+          <div>
+            <p className="text-slate-400">
+              Updated At
+            </p>
+
+            <p className="mt-2">
+              {mission.updated_at}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-slate-400">
+              Error Message
+            </p>
+
+            <pre
+              className="
+                mt-2
+                overflow-auto
+                rounded-2xl
+                bg-black/40
+                p-5
+                text-red-300
+              "
+            >
+              {mission.error_message ||
+                "No errors"}
+            </pre>
           </div>
 
         </div>
-
-      </div>
-
-      {/* ACTIVITY TIMELINE */}
-      <div className="
-        bg-[#091121]
-        border
-        border-cyan-500/20
-        rounded-3xl
-        p-8
-      ">
-
-        <div className="
-          flex
-          items-center
-          justify-between
-          mb-8
-        ">
-
-          <SectionHeader
-            title="Execution Timeline"
-            subtitle="Real-time execution telemetry."
-          />
-
-          <LiveIndicator />
-
-        </div>
-
-        <div className="space-y-6">
-
-          {mission.usage_logs.map(
-            (log: any, index: number) => (
-
-              <TimelineEvent
-                key={index}
-                event={
-                  log.event_type ||
-                  "completed"
-                }
-                timestamp={log.timestamp}
-                cost={log.cost}
-              />
-
-            )
-          )}
-
-        </div>
-
       </div>
 
     </div>

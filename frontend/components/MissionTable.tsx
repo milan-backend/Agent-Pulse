@@ -1,40 +1,194 @@
-"use client"
+"use client";
 
-import { useRouter } from "next/navigation"
+import Link from "next/link";
 
-interface Props {
-  steps: any[]
+import {
+  Rocket,
+  Clock3,
+  CheckCircle2,
+  AlertTriangle,
+  RotateCcw,
+  Eye,
+  Database,
+} from "lucide-react";
+
+import {
+  retryStep,
+  killMission,
+  resumeMission,
+} from "@/components/api";
+
+interface Mission {
+
+  id?: string;
+
+  task_name?: string;
+
+  status?: string;
+
+  created_at?: string;
+
+  retry_count?: number;
+
+  agent_id?: string;
+
+  cache_hit?: boolean;
+
+  runtime_controlled?: boolean;
 }
 
 export default function MissionTable({
-  steps,
-}: Props) {
+  steps = [],
+}: {
+  steps: Mission[];
+}) {
 
-  const router = useRouter()
+  // =========================
+  // RETRY
+  // =========================
+
+  async function handleRetry(
+    stepId: string
+  ) {
+
+    try {
+
+      await retryStep(
+        stepId
+      );
+
+      window.location.reload();
+
+    } catch (err) {
+
+      console.error(err);
+    }
+  }
+
+  // =========================
+  // KILL
+  // =========================
+
+  async function handleKill(
+    stepId: string
+  ) {
+
+    try {
+
+      await killMission(
+        stepId
+      );
+
+      window.location.reload();
+
+    } catch (err) {
+
+      console.error(err);
+    }
+  }
+
+  // =========================
+  // RESUME
+  // =========================
+
+  async function handleResume(
+    stepId: string
+  ) {
+
+    try {
+
+      await resumeMission(
+        stepId
+      );
+
+      window.location.reload();
+
+    } catch (err) {
+
+      console.error(err);
+    }
+  }
+
+  // =========================
+  // STATUS COLORS
+  // =========================
+
+  function getStatusColor(
+    status: string
+  ) {
+
+    switch (
+      status?.toLowerCase()
+    ) {
+
+      case "completed":
+      case "success":
+
+        return `
+          border-green-500/20
+          bg-green-500/10
+          text-green-300
+        `;
+
+      case "failed":
+      case "error":
+
+        return `
+          border-red-500/20
+          bg-red-500/10
+          text-red-300
+        `;
+
+      case "running":
+      case "processing":
+
+        return `
+          border-cyan-500/20
+          bg-cyan-500/10
+          text-cyan-300
+        `;
+
+      case "paused":
+
+        return `
+          border-yellow-500/20
+          bg-yellow-500/10
+          text-yellow-300
+        `;
+
+      default:
+
+        return `
+          border-slate-500/20
+          bg-slate-500/10
+          text-slate-300
+        `;
+    }
+  }
 
   return (
+
     <div
       className="
-        mt-10
-        rounded-3xl
+        rounded-[32px]
         border
-        border-white/10
-        bg-white/5
-        backdrop-blur-xl
+        border-cyan-500/20
+        bg-[linear-gradient(180deg,#081120_0%,#07111d_100%)]
+        p-8
         overflow-hidden
       "
     >
 
-      {/* Header */}
+      {/* HEADER */}
+
       <div
         className="
           flex
           items-center
           justify-between
-          px-8
-          py-6
-          border-b
-          border-white/10
+          flex-wrap
+          gap-5
+          mb-8
         "
       >
 
@@ -46,259 +200,460 @@ export default function MissionTable({
               font-black
             "
           >
-            Live Missions
+            Active Missions
           </h2>
 
           <p
             className="
               mt-2
-              text-gray-400
+              text-slate-400
             "
           >
-            Real-time AI mission monitoring.
+            Real-time autonomous mission
+            execution telemetry.
           </p>
 
         </div>
 
         <div
           className="
-            px-4
-            py-2
+            flex
+            items-center
+            gap-3
             rounded-full
-            bg-green-500/10
             border
-            border-green-400/20
-            text-green-300
-            text-sm
-            font-bold
-            animate-pulse
+            border-cyan-500/20
+            bg-cyan-500/10
+            px-5
+            py-2
           "
         >
-          ● LIVE
+
+          <Rocket
+            size={18}
+            className="text-cyan-300"
+          />
+
+          <span
+            className="
+              text-sm
+              font-bold
+              text-cyan-300
+            "
+          >
+            {steps.length} MISSIONS
+          </span>
+
         </div>
-
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* EMPTY */}
 
-        <table className="w-full">
+      {steps.length === 0 && (
 
-          <thead>
+        <div
+          className="
+            rounded-3xl
+            border
+            border-white/10
+            bg-white/[0.03]
+            p-10
+            text-center
+          "
+        >
 
-            <tr
-              className="
-                border-b
-                border-white/10
-                text-left
-              "
-            >
+          <Rocket
+            className="
+              mx-auto
+              text-slate-500
+            "
+            size={48}
+          />
 
-              <th
-                className="
-                  px-8
-                  py-5
-                  text-gray-400
-                  font-semibold
-                "
-              >
-                Task
-              </th>
+          <h3
+            className="
+              mt-5
+              text-2xl
+              font-black
+            "
+          >
+            No Missions Found
+          </h3>
 
-              <th
-                className="
-                  px-8
-                  py-5
-                  text-gray-400
-                  font-semibold
-                "
-              >
-                Status
-              </th>
+          <p
+            className="
+              mt-3
+              text-slate-400
+            "
+          >
+            Waiting for runtime execution
+            tasks.
+          </p>
 
-              <th
-                className="
-                  px-8
-                  py-5
-                  text-gray-400
-                  font-semibold
-                "
-              >
-                Agent
-              </th>
+        </div>
+      )}
 
-              <th
-                className="
-                  px-8
-                  py-5
-                  text-gray-400
-                  font-semibold
-                "
-              >
-                Retries
-              </th>
+      {/* TABLE */}
 
-              <th
-                className="
-                  px-8
-                  py-5
-                  text-gray-400
-                  font-semibold
-                "
-              >
-                Cache
-              </th>
+      {steps.length > 0 && (
 
-            </tr>
+        <div className="space-y-5">
 
-          </thead>
+          {steps.map(
+            (
+              mission,
+              index
+            ) => {
 
-          <tbody>
+              // FIXED HERE
 
-            {steps.map((step, index) => (
+              const stepId =
+                mission.id || "";
 
-              <tr
-                key={index}
-                onClick={() =>
-                  router.push(
-                    `/dashboard/agent/${step.agent_id}`
-                  )
-                }
-                className="
-                  border-b
-                  border-white/5
-                  cursor-pointer
-                  hover:bg-cyan-500/10
-                  transition
-                  duration-300
-                "
-              >
+              return (
 
-                {/* Task */}
-                <td
+                <div
+                  key={
+                    stepId || index
+                  }
                   className="
-                    px-8
-                    py-6
-                    font-bold
+                    rounded-3xl
+                    border
+                    border-cyan-500/10
+                    bg-black/20
+                    p-6
+                    transition-all
+                    duration-300
+                    hover:border-cyan-400/30
                   "
                 >
-                  {step.task || "AI Mission"}
-                </td>
 
-                {/* Status */}
-                <td className="px-8 py-6">
-
-                  <span
-                    className={`
-                      px-4
-                      py-2
-                      rounded-full
-                      text-sm
-                      font-bold
-                      ${
-                        step.status === "active"
-                          ? `
-                            bg-green-500/20
-                            text-green-300
-                            border
-                            border-green-400/20
-                          `
-                          : `
-                            bg-cyan-500/20
-                            text-cyan-300
-                            border
-                            border-cyan-400/20
-                          `
-                      }
-                    `}
+                  <div
+                    className="
+                      flex
+                      items-start
+                      justify-between
+                      gap-6
+                      flex-wrap
+                    "
                   >
-                    {step.status || "running"}
-                  </span>
 
-                </td>
+                    {/* LEFT */}
 
-                {/* Agent */}
-                <td
-                  className="
-                    px-8
-                    py-6
-                    text-gray-300
-                    font-mono
-                    text-sm
-                  "
-                >
-                  {step.agent_id}
-                </td>
+                    <div className="flex-1">
 
-                {/* Retries */}
-                <td
-                  className="
-                    px-8
-                    py-6
-                    font-bold
-                  "
-                >
-                  {step.retry_count || 0}
-                </td>
+                      <div
+                        className="
+                          flex
+                          items-center
+                          gap-4
+                          flex-wrap
+                        "
+                      >
 
-                {/* Cache */}
-                <td
-                  className="
-                    px-8
-                    py-6
-                  "
-                >
+                        <div
+                          className={`
+                            rounded-full
+                            border
+                            px-4
+                            py-2
+                            text-sm
+                            font-bold
+                            ${getStatusColor(
+                              mission.status ||
+                              ""
+                            )}
+                          `}
+                        >
+                          {mission.status ||
+                            "Unknown"}
+                        </div>
 
-                  {step.cache_hit ? (
+                        <div
+                          className="
+                            flex
+                            items-center
+                            gap-2
+                            text-slate-400
+                            text-sm
+                          "
+                        >
 
-                    <span
+                          <Clock3
+                            size={16}
+                          />
+
+                          {mission.created_at
+                            ? new Date(
+                                mission.created_at
+                              ).toLocaleString()
+                            : "Live"}
+
+                        </div>
+                      </div>
+
+                      {/* TITLE */}
+
+                      <h3
+                        className="
+                          mt-5
+                          text-2xl
+                          font-black
+                          break-words
+                        "
+                      >
+                        {mission.task_name ||
+                          "AI Mission"}
+                      </h3>
+
+                      {/* AGENT */}
+
+                      {mission.agent_id && (
+
+                        <p
+                          className="
+                            mt-4
+                            text-sm
+                            text-slate-500
+                            break-all
+                          "
+                        >
+                          Agent:
+                          {" "}
+                          {mission.agent_id}
+                        </p>
+                      )}
+
+                      {/* STATS */}
+
+                      <div
+                        className="
+                          mt-5
+                          flex
+                          items-center
+                          gap-6
+                          flex-wrap
+                        "
+                      >
+
+                        {/* RETRIES */}
+
+                        <div
+                          className="
+                            rounded-2xl
+                            bg-cyan-500/10
+                            border
+                            border-cyan-500/20
+                            px-4
+                            py-3
+                          "
+                        >
+
+                          <p className="text-xs text-slate-400">
+                            Retries
+                          </p>
+
+                          <p
+                            className="
+                              text-xl
+                              font-black
+                              text-cyan-300
+                            "
+                          >
+                            {mission.retry_count || 0}
+                          </p>
+
+                        </div>
+
+                        {/* CACHE */}
+
+                        <div
+                          className="
+                            rounded-2xl
+                            bg-green-500/10
+                            border
+                            border-green-500/20
+                            px-4
+                            py-3
+                            flex
+                            items-center
+                            gap-3
+                          "
+                        >
+
+                          <Database
+                            size={18}
+                            className="
+                              text-green-300
+                            "
+                          />
+
+                          <div>
+
+                            <p className="text-xs text-slate-400">
+                              Cache
+                            </p>
+
+                            <p
+                              className="
+                                text-xl
+                                font-black
+                                text-green-300
+                              "
+                            >
+                              {mission.cache_hit
+                                ? "HIT"
+                                : "MISS"}
+                            </p>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ACTIONS */}
+
+                    <div
                       className="
-                        px-4
-                        py-2
-                        rounded-full
-                        bg-purple-500/20
-                        border
-                        border-purple-400/20
-                        text-purple-300
-                        text-sm
-                        font-bold
+                        flex
+                        flex-col
+                        gap-3
+                        min-w-[180px]
                       "
                     >
-                      Cache Hit
-                    </span>
 
-                  ) : (
+                      {/* VIEW */}
 
-                    <span
-                      className="
-                        px-4
-                        py-2
-                        rounded-full
-                        bg-white/5
-                        border
-                        border-white/10
-                        text-gray-400
-                        text-sm
-                        font-bold
-                      "
-                    >
-                      No Cache
-                    </span>
+                      <Link
+                        href={`/dashboard/missions/${stepId}`}
+                        className="
+                          flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-2xl
+                          bg-cyan-500
+                          hover:bg-cyan-400
+                          transition-all
+                          py-3
+                          font-bold
+                          text-black
+                        "
+                      >
 
-                  )}
+                        <Eye size={18} />
 
-                </td>
+                        View
 
-              </tr>
+                      </Link>
 
-            ))}
+                      {/* RETRY */}
 
-          </tbody>
+                      <button
+                        onClick={() =>
+                          handleRetry(
+                            stepId
+                          )
+                        }
+                        className="
+                          flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-2xl
+                          border
+                          border-purple-500/20
+                          bg-purple-500/10
+                          hover:bg-purple-500/20
+                          transition-all
+                          py-3
+                          font-bold
+                          text-purple-300
+                        "
+                      >
 
-        </table>
+                        <RotateCcw
+                          size={18}
+                        />
 
-      </div>
+                        Retry
 
+                      </button>
+
+                      {/* RESUME */}
+
+                      <button
+                        onClick={() =>
+                          handleResume(
+                            stepId
+                          )
+                        }
+                        className="
+                          flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-2xl
+                          border
+                          border-green-500/20
+                          bg-green-500/10
+                          hover:bg-green-500/20
+                          transition-all
+                          py-3
+                          font-bold
+                          text-green-300
+                        "
+                      >
+
+                        <CheckCircle2
+                          size={18}
+                        />
+
+                        Resume
+
+                      </button>
+
+                      {/* KILL */}
+
+                      <button
+                        onClick={() =>
+                          handleKill(
+                            stepId
+                          )
+                        }
+                        className="
+                          flex
+                          items-center
+                          justify-center
+                          gap-2
+                          rounded-2xl
+                          border
+                          border-red-500/20
+                          bg-red-500/10
+                          hover:bg-red-500/20
+                          transition-all
+                          py-3
+                          font-bold
+                          text-red-300
+                        "
+                      >
+
+                        <AlertTriangle
+                          size={18}
+                        />
+
+                        Kill
+
+                      </button>
+
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          )}
+        </div>
+      )}
     </div>
-  )
+  );
 }

@@ -39,19 +39,20 @@ def process_step(self, step_id: str):
 
         # Mark step as running
         step.status = "running"
+        step.started_at = datetime.utcnow()
         db.commit()
 
         # Re-fetch latest agent state
         db.refresh(agent)
 
-        # Emergency stop check BEFORE execution
+        # Global emergency stop
         if agent.is_killed:
             step.status = "failed"
             step.error_message = "Agent manually stopped"
 
             step.output_data = {
                 "success": False,
-                "reason": "killed"
+                "reason": "global_killed"
             }
 
             step.completed_at = datetime.utcnow()
@@ -60,7 +61,34 @@ def process_step(self, step_id: str):
 
             return {
                 "status": "stopped",
-                "message": "Agent execution halted"
+                "message": "Global agent execution halted"
+            }
+
+        # Mission-level kill
+        db.refresh(step)
+
+        if step.status == "killed":
+            step.error_message = "Mission manually killed"
+
+            step.output_data = {
+                "success": False,
+                "reason": "mission_killed"
+            }
+
+            step.killed_at = datetime.utcnow()
+
+            db.commit()
+
+            return {
+                "status": "killed",
+                "message": "Mission execution halted"
+            }
+
+        # Mission pause
+        if step.status == "paused":
+            return {
+                "status": "paused",
+                "message": "Mission paused"
             }
 
         # Dynamic max step check
@@ -90,17 +118,18 @@ def process_step(self, step_id: str):
         # Simulated task work
         time.sleep(2)
 
-        # Re-fetch latest state AFTER execution starts
+        # Refresh latest states
         db.refresh(agent)
+        db.refresh(step)
 
-        # Emergency stop DURING execution
+        # Global kill during execution
         if agent.is_killed:
             step.status = "failed"
             step.error_message = "Agent manually stopped during execution"
 
             step.output_data = {
                 "success": False,
-                "reason": "killed_during_execution"
+                "reason": "global_killed_during_execution"
             }
 
             step.completed_at = datetime.utcnow()
@@ -109,9 +138,32 @@ def process_step(self, step_id: str):
 
             return {
                 "status": "stopped",
-                "message": "Agent killed during execution",
-                "agent_id": agent.id,
-                "step_id": step.id
+                "message": "Global runtime halted"
+            }
+
+        # Mission kill during execution
+        if step.status == "killed":
+            step.error_message = "Mission killed during execution"
+
+            step.output_data = {
+                "success": False,
+                "reason": "mission_killed_during_execution"
+            }
+
+            step.killed_at = datetime.utcnow()
+
+            db.commit()
+
+            return {
+                "status": "killed",
+                "message": "Mission halted"
+            }
+
+        # Mission pause during execution
+        if step.status == "paused":
+            return {
+                "status": "paused",
+                "message": "Mission paused during execution"
             }
 
         # Successful completion

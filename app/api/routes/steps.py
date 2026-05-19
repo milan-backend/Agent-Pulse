@@ -136,7 +136,8 @@ async def execute_step(
         task_name=request.task_name,
         input_data=request.input_data,
         status="pending",
-        idempotency_key=request.idempotency_key
+        idempotency_key=request.idempotency_key,
+        workspace_id=current_agent.workspace_id
     )
 
     db.add(step)

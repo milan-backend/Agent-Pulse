@@ -1,6 +1,7 @@
 import uuid
 from sqlalchemy import Column, String, Integer, DateTime, Float, JSON
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.session import Base
 
@@ -25,3 +26,5 @@ class Usage(Base):
     completion_tokens = Column(Integer, default=0)
 
     usage_events = Column(JSON)
+
+    workspace_id = Column(UUID(as_uuid=True), nullable=True)

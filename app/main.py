@@ -11,8 +11,12 @@ from app.api.routes import auth
 from app.api.routes import dashboard
 from app.api.routes import ws
 from app.api.routes import kill
-print("WS ROUTER LOADED")
+from app.api.routes import mission_control
+from app.api.routes import workspace
 from app.api.routes.analytics import router as analytics_router
+from app.api.routes import missions
+from app.api.routes import usage
+from app.api.routes import tasks
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -45,4 +49,8 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=['Dashboard'])
 app.include_router(ws.router)
 app.include_router(analytics_router)
 app.include_router(kill.router)
-print(app.routes)
+app.include_router(mission_control.router, prefix="/mission-control", tags=["Mission Control"])
+app.include_router(workspace.router, prefix= "/workspace", tags=["Workspace"]) 
+app.include_router(missions.router)
+app.include_router(usage.router)
+app.include_router(tasks.router)

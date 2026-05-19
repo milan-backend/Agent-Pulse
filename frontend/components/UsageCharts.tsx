@@ -1,157 +1,610 @@
-"use client"
+"use client";
 
 import {
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   BarChart,
   Bar,
-  XAxis,
-  YAxis,
-} from "recharts"
+} from "recharts";
+
+import {
+  Activity,
+  TrendingUp,
+  DollarSign,
+  Cpu,
+} from "lucide-react";
+
+interface Props {
+  usage?: any;
+}
 
 export default function UsageCharts({
-  usage,
-}: {
-  usage: any
-}) {
+  usage = {},
+}: Props) {
 
-  const pieData = [
-    {
-      name: "Cache Hits",
-      value: usage.cache_hits || 0,
-    },
-    {
-      name: "Executions",
-      value: usage.executions || 0,
-    },
-  ]
+  // =========================
+  // RUNTIME DATA
+  // =========================
 
-  const barData = [
+  const runtimeData = [
+
     {
-      name: "Calls",
-      value: usage.total_calls || 0,
+      name: "Steps",
+      cost:
+        Number(
+          usage?.total_cost || 0
+        ),
+
+      missions:
+        Number(
+          usage?.total_steps || 0
+        ),
     },
+
     {
-      name: "Retries",
-      value: usage.retries || 0,
+      name: "Success",
+      cost:
+        Number(
+          usage?.average_cost || 0
+        ),
+
+      missions:
+        Number(
+          usage?.successful_steps || 0
+        ),
     },
+
+    {
+      name: "Failed",
+      cost: 0,
+
+      missions:
+        Number(
+          usage?.failed_steps || 0
+        ),
+    },
+
     {
       name: "Cache",
-      value: usage.cache_hits || 0,
+      cost: 0,
+
+      missions:
+        Number(
+          usage?.cache_hits || 0
+        ),
     },
-  ]
+  ];
 
   return (
 
-    <div className="
-      mt-10
-      grid
-      grid-cols-1
-      lg:grid-cols-2
-      gap-8
-    ">
+    <div className="space-y-8">
 
-      {/* Pie Chart */}
-      <div className="
-        glow-card
-        rounded-3xl
-        border
-        border-white/10
-        bg-white/5
-        backdrop-blur-xl
-        p-6
-      ">
+      {/* TOP CHART */}
 
-        <h2 className="
-          text-2xl
-          font-black
-          mb-6
-        ">
-          Cache Efficiency
-        </h2>
+      <div
+        className="
+          rounded-[32px]
+          border
+          border-cyan-500/20
+          bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+          p-8
+          overflow-hidden
+          relative
+        "
+      >
 
-        <div className="h-80">
+        {/* GLOW */}
 
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
+        <div
+          className="
+            absolute
+            top-0
+            right-0
+            h-72
+            w-72
+            rounded-full
+            bg-cyan-500/10
+            blur-3xl
+          "
+        />
+
+        {/* HEADER */}
+
+        <div
+          className="
+            relative
+            z-10
+            flex
+            items-center
+            justify-between
+            mb-8
+            flex-wrap
+            gap-5
+          "
+        >
+
+          <div>
+
+            <h2
+              className="
+                text-4xl
+                font-black
+              "
+            >
+              Runtime Analytics
+            </h2>
+
+            <p
+              className="
+                text-slate-400
+                mt-2
+              "
+            >
+              Real-time mission execution
+              and runtime spending trends.
+            </p>
+
+          </div>
+
+          <div
+            className="
+              flex
+              items-center
+              gap-3
+              rounded-full
+              border
+              border-cyan-500/20
+              bg-cyan-500/10
+              px-5
+              py-2
+            "
           >
 
-            <PieChart>
+            <TrendingUp
+              size={18}
+              className="text-cyan-300"
+            />
 
-              <Pie
-                data={pieData}
-                dataKey="value"
-                outerRadius={110}
-                label
-              >
+            <span
+              className="
+                text-sm
+                font-bold
+                text-cyan-300
+              "
+            >
+              LIVE ANALYTICS
+            </span>
 
-                <Cell fill="#00ffff" />
-                <Cell fill="#9333ea" />
-
-              </Pie>
-
-              <Tooltip />
-
-            </PieChart>
-
-          </ResponsiveContainer>
-
+          </div>
         </div>
 
-      </div>
+        {/* AREA CHART */}
 
-      {/* Bar Chart */}
-      <div className="
-        glow-card
-        rounded-3xl
-        border
-        border-white/10
-        bg-white/5
-        backdrop-blur-xl
-        p-6
-      ">
-
-        <h2 className="
-          text-2xl
-          font-black
-          mb-6
-        ">
-          System Metrics
-        </h2>
-
-        <div className="h-80">
+        <div
+          className="
+            relative
+            z-10
+            h-[340px]
+          "
+        >
 
           <ResponsiveContainer
             width="100%"
-            height="100%"
+            height={350}
           >
 
-            <BarChart data={barData}>
+            <AreaChart
+              data={runtimeData}
+            >
 
-              <XAxis dataKey="name" />
+              <defs>
 
-              <YAxis />
+                <linearGradient
+                  id="costGradient"
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
 
-              <Tooltip />
+                  <stop
+                    offset="5%"
+                    stopColor="#22d3ee"
+                    stopOpacity={0.4}
+                  />
 
-              <Bar
-                dataKey="value"
-                fill="#06b6d4"
-                radius={[10,10,0,0]}
+                  <stop
+                    offset="95%"
+                    stopColor="#22d3ee"
+                    stopOpacity={0}
+                  />
+                </linearGradient>
+              </defs>
+
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="#1e293b"
               />
 
-            </BarChart>
+              <XAxis
+                dataKey="name"
+                stroke="#64748b"
+              />
 
+              <YAxis
+                stroke="#64748b"
+              />
+
+              <Tooltip />
+
+              <Area
+                type="monotone"
+                dataKey="cost"
+                stroke="#22d3ee"
+                fillOpacity={1}
+                fill="url(#costGradient)"
+                strokeWidth={4}
+              />
+
+            </AreaChart>
           </ResponsiveContainer>
-
         </div>
-
       </div>
 
+      {/* BOTTOM GRID */}
+
+      <div
+        className="
+          grid
+          grid-cols-1
+          xl:grid-cols-2
+          gap-8
+        "
+      >
+
+        {/* MISSIONS */}
+
+        <div
+          className="
+            rounded-[32px]
+            border
+            border-purple-500/20
+            bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+            p-8
+            overflow-hidden
+            relative
+          "
+        >
+
+          {/* HEADER */}
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              mb-8
+            "
+          >
+
+            <div>
+
+              <h2
+                className="
+                  text-3xl
+                  font-black
+                "
+              >
+                Mission Load
+              </h2>
+
+              <p
+                className="
+                  text-slate-400
+                  mt-2
+                "
+              >
+                Runtime execution throughput.
+              </p>
+
+            </div>
+
+            <div
+              className="
+                h-14
+                w-14
+                rounded-2xl
+                bg-purple-500/10
+                border
+                border-purple-500/20
+                flex
+                items-center
+                justify-center
+              "
+            >
+
+              <Activity
+                className="
+                  text-purple-300
+                "
+                size={26}
+              />
+            </div>
+          </div>
+
+          {/* BAR CHART */}
+
+          <div className="h-[300px]">
+
+            <ResponsiveContainer
+              width="100%"
+              height={350}
+            >
+
+              <BarChart
+                data={runtimeData}
+              >
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="#1e293b"
+                />
+
+                <XAxis
+                  dataKey="name"
+                  stroke="#64748b"
+                />
+
+                <YAxis
+                  stroke="#64748b"
+                />
+
+                <Tooltip />
+
+                <Bar
+                  dataKey="missions"
+                  fill="#a855f7"
+                  radius={[
+                    10,
+                    10,
+                    0,
+                    0,
+                  ]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* COST OVERVIEW */}
+
+        <div
+          className="
+            rounded-[32px]
+            border
+            border-green-500/20
+            bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+            p-8
+            overflow-hidden
+            relative
+          "
+        >
+
+          {/* HEADER */}
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              mb-8
+            "
+          >
+
+            <div>
+
+              <h2
+                className="
+                  text-3xl
+                  font-black
+                "
+              >
+                Runtime Spend
+              </h2>
+
+              <p
+                className="
+                  text-slate-400
+                  mt-2
+                "
+              >
+                Token and compute cost overview.
+              </p>
+
+            </div>
+
+            <div
+              className="
+                h-14
+                w-14
+                rounded-2xl
+                bg-green-500/10
+                border
+                border-green-500/20
+                flex
+                items-center
+                justify-center
+              "
+            >
+
+              <DollarSign
+                className="
+                  text-green-300
+                "
+                size={26}
+              />
+            </div>
+          </div>
+
+          {/* STATS */}
+
+          <div className="space-y-5">
+
+            {/* TOTAL */}
+
+            <div
+              className="
+                rounded-3xl
+                border
+                border-green-500/20
+                bg-green-500/10
+                p-6
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                "
+              >
+
+                <div>
+
+                  <p className="text-sm text-slate-400">
+                    Total Runtime Cost
+                  </p>
+
+                  <h3
+                    className="
+                      mt-3
+                      text-5xl
+                      font-black
+                      text-green-300
+                    "
+                  >
+                    $
+                    {Number(
+                      usage?.total_cost || 0
+                    ).toFixed(2)}
+                  </h3>
+
+                </div>
+
+                <DollarSign
+                  className="
+                    text-green-300
+                  "
+                  size={34}
+                />
+              </div>
+            </div>
+
+            {/* TOKENS */}
+
+            <div
+              className="
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                p-6
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                "
+              >
+
+                <div>
+
+                  <p className="text-sm text-slate-400">
+                    Tokens Processed
+                  </p>
+
+                  <h3
+                    className="
+                      mt-3
+                      text-5xl
+                      font-black
+                      text-cyan-300
+                    "
+                  >
+                    {usage?.total_tokens || 0}
+                  </h3>
+
+                </div>
+
+                <Cpu
+                  className="
+                    text-cyan-300
+                  "
+                  size={34}
+                />
+              </div>
+            </div>
+
+            {/* SUCCESS */}
+
+            <div
+              className="
+                rounded-3xl
+                border
+                border-purple-500/20
+                bg-purple-500/10
+                p-6
+              "
+            >
+
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-between
+                "
+              >
+
+                <div>
+
+                  <p className="text-sm text-slate-400">
+                    Mission Success
+                  </p>
+
+                  <h3
+                    className="
+                      mt-3
+                      text-5xl
+                      font-black
+                      text-purple-300
+                    "
+                  >
+                    {usage?.success_rate || 0}%
+                  </h3>
+
+                </div>
+
+                <Activity
+                  className="
+                    text-purple-300
+                  "
+                  size={34}
+                />
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
     </div>
-  )
+  );
 }
