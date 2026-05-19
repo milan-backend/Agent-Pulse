@@ -95,6 +95,8 @@ export default function AgentsPage() {
       const data =
         await response.json();
 
+      console.log("Role =", data.role);
+
       setAgents(
         data.agents || []
       );
