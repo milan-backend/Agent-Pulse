@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  Suspense,
+  useEffect,
+  useState,
+} from "react";
 
-import { useSearchParams } from "next/navigation";
+import {
+  useSearchParams,
+} from "next/navigation";
 
 import Link from "next/link";
 
@@ -19,7 +25,9 @@ import {
 
 import { toast } from "sonner";
 
-export default function ResetPasswordPage() {
+
+
+function ResetPasswordContent() {
 
   const searchParams =
     useSearchParams();
@@ -514,5 +522,19 @@ export default function ResetPasswordPage() {
       </div>
 
     </div>
+  );
+}
+
+
+
+export default function ResetPasswordPage() {
+
+  return (
+
+    <Suspense fallback={null}>
+
+      <ResetPasswordContent />
+
+    </Suspense>
   );
 }
