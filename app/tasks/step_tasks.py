@@ -204,13 +204,13 @@ def process_step(self, step_id: str):
 
             output = generate_llm_response(
                 prompt=str(step.input_data),
-                model="phi3"
+                model_name="gemini"
             )
 
             completion_usage = calculate_usage(
                 prompt="",
                 completion=output,
-                model_name="gpt-4o-mini"
+                model_name="gemini"
             )
 
         except Exception as llm_error:

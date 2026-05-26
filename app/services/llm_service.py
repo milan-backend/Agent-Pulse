@@ -1,23 +1,21 @@
-import requests
+import os
+import google.generativeai as genai
 
+genai.configure(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-
+model = genai.GenerativeModel(
+    "gemini-1.5-flash"
+)
 
 def generate_llm_response(
     prompt: str,
-    model: str = "phi3"
+    model_name: str = "gemini"
 ):
 
-    response = requests.post(
-        OLLAMA_URL,
-        json={
-            "model": model,
-            "prompt": prompt,
-            "stream": False
-        }
+    response = model.generate_content(
+        prompt
     )
 
-    data = response.json()
-
-    return data["response"]
+    return response.text
