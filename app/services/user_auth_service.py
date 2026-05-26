@@ -69,10 +69,26 @@ def signup_user(
 
     if existing:
 
-        raise HTTPException(
-            status_code=400,
-            detail="Email already exists"
+        if existing.is_verified:
+
+            raise HTTPException(
+                status_code=400,
+                detail="Email already exists"
+            )
+
+        # RESEND VERIFICATION EMAIL
+        send_verification_email(
+
+            to_email=existing.email,
+
+            token=existing.email_verification_token
         )
+
+        return {
+
+            "message":
+                "Verification email resent"
+        }
 
     verification_token = (
         secrets.token_urlsafe(32)

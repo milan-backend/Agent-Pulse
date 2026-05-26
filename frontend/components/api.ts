@@ -182,6 +182,19 @@ export async function login(
 
 
 /* =========================================================
+   VERIFY EMAIL
+========================================================= */
+
+export async function verifyEmail(
+  token: string
+) {
+  return request(
+    `/auth/verify-email?token=${token}`
+  );
+}
+
+
+/* =========================================================
    FORGOT PASSWORD
 ========================================================= */
 

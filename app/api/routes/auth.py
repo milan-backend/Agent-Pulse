@@ -18,7 +18,8 @@ from app.services.user_auth_service import (
     signup_user,
     login_user,
     request_password_reset,
-    reset_password
+    reset_password,
+    verify_user_email
 )
 
 
@@ -54,6 +55,22 @@ def login(
     return login_user(
         db=db,
         request=request
+    )
+
+
+# ============================================
+# VERIFY EMAIL
+# ============================================
+
+@router.get("/verify-email")
+def verify_email(
+    token: str,
+    db: Session = Depends(get_db)
+):
+
+    return verify_user_email(
+        db=db,
+        token=token
     )
 
 
