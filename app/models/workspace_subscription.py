@@ -15,8 +15,6 @@ import uuid
 
 from app.db.session import Base
 
-from app.models.plan import Plan
-
 
 class WorkspaceSubscription(Base):
     __tablename__ = "workspace_subscriptions"
@@ -84,6 +82,6 @@ class WorkspaceSubscription(Base):
     )
 
     plan = relationship(
-        Plan,
+        "Plan",
         back_populates="subscriptions"
     )
