@@ -9,7 +9,7 @@ db = SessionLocal()
 
 free_plan = Plan(
 
-    name="Free",
+    name="free",
 
     price=0,
 
