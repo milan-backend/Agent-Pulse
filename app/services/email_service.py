@@ -42,7 +42,7 @@ def send_email(
         response = resend.Emails.send({
 
             "from":
-                "AgentPulse <onboarding@resend.dev>",
+                "AgentPulse <noreply@agentpulseai.dev>",
 
             "to":
                 to_email,
