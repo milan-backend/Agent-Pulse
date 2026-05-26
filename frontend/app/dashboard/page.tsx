@@ -36,12 +36,16 @@ export default function DashboardPage() {
         await getDashboardSummary();
 
       setSummary(
-        summaryData || {}
+        typeof summaryData === "object"
+          ? summaryData
+          : {}
       );
 
     } catch (err) {
 
       console.error(err);
+
+      setSummary({});
 
     } finally {
 
@@ -69,7 +73,10 @@ export default function DashboardPage() {
 
           setConnected(true);
 
-          if (data.summary) {
+          if (
+            data?.summary &&
+            typeof data.summary === "object"
+          ) {
             setSummary(data.summary);
           }
 
@@ -79,7 +86,6 @@ export default function DashboardPage() {
         () => {
           setConnected(true);
         },
-
 
         () => {
           setConnected(false);
@@ -242,36 +248,50 @@ export default function DashboardPage() {
             {/* STATUS */}
 
             <div
-              className="
+              className={`
                 flex
                 items-center
                 gap-4
                 rounded-full
-                border
-                border-green-500/20
-                bg-green-500/10
                 px-6
                 py-4
-              "
+                ${
+                  connected
+                    ? "border border-green-500/20 bg-green-500/10"
+                    : "border border-red-500/20 bg-red-500/10"
+                }
+              `}
             >
               <div
-                className="
+                className={`
                   h-3
                   w-3
                   rounded-full
-                  bg-green-400
                   animate-pulse
-                "
+                  ${
+                    connected
+                      ? "bg-green-400"
+                      : "bg-red-400"
+                  }
+                `}
               />
 
               <span
-                className="
+                className={`
                   text-lg
                   font-black
-                  text-green-300
-                "
+                  ${
+                    connected
+                      ? "text-green-300"
+                      : "text-red-300"
+                  }
+                `}
               >
-                LIVE SYSTEM
+                {
+                  connected
+                    ? "LIVE SYSTEM"
+                    : "DISCONNECTED"
+                }
               </span>
             </div>
           </div>

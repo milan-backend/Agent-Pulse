@@ -17,11 +17,16 @@ export default function SummaryCards({
   summary = {},
 }: Props) {
 
+  const overview =
+    summary?.overview || summary;
+
   const cards = [
     {
       title: "Total Steps",
       value:
-        summary?.total_steps || 0,
+        Number(
+          overview?.total_steps || 0
+        ),
       icon: Rocket,
       color: `
         border-cyan-500/20
@@ -35,7 +40,11 @@ export default function SummaryCards({
     {
       title: "Completed",
       value:
-        summary?.completed || 0,
+        Number(
+          overview?.completed ||
+          overview?.successful_steps ||
+          0
+        ),
       icon: ShieldCheck,
       color: `
         border-green-500/20
@@ -49,7 +58,11 @@ export default function SummaryCards({
     {
       title: "Failed",
       value:
-        summary?.failed || 0,
+        Number(
+          overview?.failed ||
+          overview?.failed_steps ||
+          0
+        ),
       icon: ShieldAlert,
       color: `
         border-red-500/20
@@ -63,7 +76,11 @@ export default function SummaryCards({
     {
       title: "Pending",
       value:
-        summary?.pending || 0,
+        Number(
+          overview?.pending ||
+          overview?.pending_steps ||
+          0
+        ),
       icon: Activity,
       color: `
         border-amber-500/20
@@ -77,7 +94,9 @@ export default function SummaryCards({
     {
       title: "Success Rate",
       value: `${
-        summary?.success_rate || 0
+        Number(
+          overview?.success_rate || 0
+        )
       }%`,
       icon: Zap,
       color: `
@@ -92,7 +111,7 @@ export default function SummaryCards({
     {
       title: "Live Runtime",
       value:
-        summary?.live_status ||
+        overview?.live_status ||
         "ONLINE",
       icon: Bot,
       color: `

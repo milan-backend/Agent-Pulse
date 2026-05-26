@@ -37,7 +37,7 @@ const navItems = [
 
   {
     label: "Missions",
-    href: "/dashboard/steps",
+    href: "/dashboard/missions",
     icon: Rocket,
   },
 

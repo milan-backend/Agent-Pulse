@@ -66,7 +66,7 @@ icon: BarChart3,
 
 label: "Missions",
 
-href: "/dashboard/steps",
+href: "/dashboard/missions",
 
 icon: Rocket,
 

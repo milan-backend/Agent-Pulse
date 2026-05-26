@@ -19,6 +19,8 @@ import {
   signup,
 } from "@/components/api";
 
+import { toast } from "sonner";
+
 export default function SignupPage() {
 
   const [name, setName] =
@@ -33,8 +35,8 @@ export default function SignupPage() {
   const [loading, setLoading] =
     useState(false);
 
-  const [error, setError] =
-    useState("");
+  const [emailSent, setEmailSent] =
+    useState(false);
 
   async function handleSignup(
     e: React.FormEvent
@@ -46,24 +48,31 @@ export default function SignupPage() {
 
       setLoading(true);
 
-      setError("");
+      const response =
+        await signup(
+          name,
+          email,
+          password
+        );
 
-      await signup(
-        name,
-        email,
-        password
+      setEmailSent(true);
+
+      toast.success(
+
+        response?.message ||
+
+        "Verification email sent"
       );
-
-      window.location.href =
-        "/login";
 
     } catch (err: any) {
 
       console.error(err);
 
-      setError(
+      toast.error(
+
         err?.message ||
-          "Signup failed."
+
+        "Signup failed."
       );
 
     } finally {
@@ -128,6 +137,7 @@ export default function SignupPage() {
           bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
           p-10
           overflow-hidden
+          animate-[fadeIn_.5s_ease]
         "
       >
         {/* INNER GLOW */}
@@ -228,249 +238,409 @@ export default function SignupPage() {
               Launch your autonomous AI
               runtime observability platform.
             </p>
-          </div>
-
-          {/* ERROR */}
-
-          {error && (
 
             <div
               className="
                 mt-6
-                rounded-2xl
+                inline-flex
+                items-center
+                gap-3
+                rounded-full
                 border
-                border-red-500/20
-                bg-red-500/10
+                border-cyan-500/20
+                bg-cyan-500/10
                 px-5
-                py-4
-                text-red-300
-                font-semibold
+                py-3
               "
             >
-              {error}
+
+              <div
+                className="
+                  h-2
+                  w-2
+                  rounded-full
+                  bg-green-400
+                  animate-pulse
+                "
+              />
+
+              <span
+                className="
+                  text-sm
+                  font-bold
+                  text-cyan-300
+                "
+              >
+                RUNTIME READY
+              </span>
+
             </div>
-          )}
+          </div>
 
           {/* FORM */}
 
-          <form
-            onSubmit={
-              handleSignup
-            }
-            className="
-              mt-8
-              space-y-6
-            "
-          >
-            {/* NAME */}
+          {
+            emailSent ? (
 
-            <div>
-              <label
+              <div
                 className="
-                  text-sm
-                  text-slate-400
-                  mb-3
-                  block
+                  mt-10
+                  rounded-3xl
+                  border
+                  border-green-500/20
+                  bg-green-500/10
+                  p-8
+                  text-center
                 "
               >
-                Workspace Owner
-              </label>
 
-              <div className="relative">
-                <User
+                <div
                   className="
-                    absolute
-                    left-5
-                    top-1/2
-                    -translate-y-1/2
-                    text-slate-500
+                    mx-auto
+                    h-20
+                    w-20
+                    rounded-full
+                    bg-green-500/20
+                    flex
+                    items-center
+                    justify-center
                   "
-                  size={20}
-                />
+                >
 
-                <input
-                  type="text"
-                  required
-                  placeholder="Agent Operator"
-                  value={name}
-                  onChange={(e) =>
-                    setName(
-                      e.target.value
-                    )
-                  }
-                  className="
-                    w-full
-                    rounded-3xl
-                    border
-                    border-cyan-500/20
-                    bg-[#0f172a]
-                    px-14
-                    py-5
-                    text-white
-                    text-lg
-                    outline-none
-                    transition-all
-                    focus:border-cyan-400
-                    focus:ring-4
-                    focus:ring-cyan-500/10
-                    placeholder:text-slate-500
-                  "
-                />
-              </div>
-            </div>
-
-            {/* EMAIL */}
-
-            <div>
-              <label
-                className="
-                  text-sm
-                  text-slate-400
-                  mb-3
-                  block
-                "
-              >
-                Email Address
-              </label>
-
-              <div className="relative">
-                <Mail
-                  className="
-                    absolute
-                    left-5
-                    top-1/2
-                    -translate-y-1/2
-                    text-slate-500
-                  "
-                  size={20}
-                />
-
-                <input
-                  type="email"
-                  required
-                  placeholder="admin@agentpulse.ai"
-                  value={email}
-                  onChange={(e) =>
-                    setEmail(
-                      e.target.value
-                    )
-                  }
-                  className="
-                    w-full
-                    rounded-3xl
-                    border
-                    border-cyan-500/20
-                    bg-[#0f172a]
-                    px-14
-                    py-5
-                    text-white
-                    text-lg
-                    outline-none
-                    transition-all
-                    focus:border-cyan-400
-                    focus:ring-4
-                    focus:ring-cyan-500/10
-                    placeholder:text-slate-500
-                  "
-                />
-              </div>
-            </div>
-
-            {/* PASSWORD */}
-
-            <div>
-              <label
-                className="
-                  text-sm
-                  text-slate-400
-                  mb-3
-                  block
-                "
-              >
-                Password
-              </label>
-
-              <div className="relative">
-                <Lock
-                  className="
-                    absolute
-                    left-5
-                    top-1/2
-                    -translate-y-1/2
-                    text-slate-500
-                  "
-                  size={20}
-                />
-
-                <input
-                  type="password"
-                  required
-                  placeholder="••••••••••••"
-                  value={password}
-                  onChange={(e) =>
-                    setPassword(
-                      e.target.value
-                    )
-                  }
-                  className="
-                    w-full
-                    rounded-3xl
-                    border
-                    border-cyan-500/20
-                    bg-[#0f172a]
-                    px-14
-                    py-5
-                    text-white
-                    text-lg
-                    outline-none
-                    transition-all
-                    focus:border-cyan-400
-                    focus:ring-4
-                    focus:ring-cyan-500/10
-                    placeholder:text-slate-500
-                  "
-                />
-              </div>
-            </div>
-
-            {/* BUTTON */}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="
-                w-full
-                rounded-3xl
-                bg-cyan-500
-                hover:bg-cyan-400
-                transition-all
-                py-5
-                text-black
-                font-black
-                text-lg
-                flex
-                items-center
-                justify-center
-                gap-3
-              "
-            >
-              {loading ? (
-                "Creating Workspace..."
-              ) : (
-                <>
                   <ShieldCheck
-                    size={22}
+                    className="
+                      text-green-300
+                    "
+                    size={40}
                   />
 
-                  Launch Workspace
+                </div>
+
+                <h3
+                  className="
+                    mt-6
+                    text-3xl
+                    font-black
+                    text-white
+                  "
+                >
+                  Verification Email Sent
+                </h3>
+
+                <p
+                  className="
+                    mt-4
+                    text-slate-300
+                    text-lg
+                    leading-relaxed
+                  "
+                >
+                  We sent a verification link to:
+                </p>
+
+                <p
+                  className="
+                    mt-3
+                    text-cyan-300
+                    font-bold
+                    text-lg
+                    break-all
+                  "
+                >
+                  {email}
+                </p>
+
+                <p
+                  className="
+                    mt-6
+                    text-slate-400
+                  "
+                >
+                  Please verify your email before
+                  accessing Mission Control.
+                </p>
+
+                <Link
+                  href="/login"
+                  className="
+                    inline-flex
+                    items-center
+                    gap-3
+                    mt-8
+                    rounded-2xl
+                    bg-cyan-500
+                    hover:bg-cyan-400
+                    transition-all
+                    px-8
+                    py-4
+                    text-black
+                    font-black
+                  "
+                >
+
+                  Continue to Login
 
                   <ArrowRight
-                    size={22}
+                    size={20}
                   />
-                </>
-              )}
-            </button>
-          </form>
+
+                </Link>
+
+              </div>
+
+            ) : (
+
+              <form
+                onSubmit={
+                  handleSignup
+                }
+                className="
+                  mt-8
+                  space-y-6
+                "
+              >
+                {/* NAME */}
+
+                <div>
+                  <label
+                    className="
+                      text-sm
+                      text-slate-400
+                      mb-3
+                      block
+                    "
+                  >
+                    Workspace Owner
+                  </label>
+
+                  <div className="relative">
+                    <User
+                      className="
+                        absolute
+                        left-5
+                        top-1/2
+                        -translate-y-1/2
+                        text-slate-500
+                      "
+                      size={20}
+                    />
+
+                    <input
+                      type="text"
+                      required
+                      autoComplete="name"
+                      placeholder="Agent Operator"
+                      value={name}
+                      onChange={(e) =>
+                        setName(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        w-full
+                        rounded-3xl
+                        border
+                        border-cyan-500/20
+                        bg-[#0f172a]
+                        px-14
+                        py-5
+                        text-white
+                        text-lg
+                        outline-none
+                        transition-all
+                        focus:border-cyan-400
+                        focus:ring-4
+                        focus:ring-cyan-500/10
+                        placeholder:text-slate-500
+                      "
+                    />
+                  </div>
+                </div>
+
+                {/* EMAIL */}
+
+                <div>
+                  <label
+                    className="
+                      text-sm
+                      text-slate-400
+                      mb-3
+                      block
+                    "
+                  >
+                    Email Address
+                  </label>
+
+                  <div className="relative">
+                    <Mail
+                      className="
+                        absolute
+                        left-5
+                        top-1/2
+                        -translate-y-1/2
+                        text-slate-500
+                      "
+                      size={20}
+                    />
+
+                    <input
+                      type="email"
+                      required
+                      autoComplete="email"
+                      placeholder="admin@agentpulse.ai"
+                      value={email}
+                      onChange={(e) =>
+                        setEmail(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        w-full
+                        rounded-3xl
+                        border
+                        border-cyan-500/20
+                        bg-[#0f172a]
+                        px-14
+                        py-5
+                        text-white
+                        text-lg
+                        outline-none
+                        transition-all
+                        focus:border-cyan-400
+                        focus:ring-4
+                        focus:ring-cyan-500/10
+                        placeholder:text-slate-500
+                      "
+                    />
+                  </div>
+                </div>
+
+                {/* PASSWORD */}
+
+                <div>
+                  <label
+                    className="
+                      text-sm
+                      text-slate-400
+                      mb-3
+                      block
+                    "
+                  >
+                    Password
+                  </label>
+
+                  <div className="relative">
+                    <Lock
+                      className="
+                        absolute
+                        left-5
+                        top-1/2
+                        -translate-y-1/2
+                        text-slate-500
+                      "
+                      size={20}
+                    />
+
+                    <input
+                      type="password"
+                      required
+                      minLength={8}
+                      autoComplete="new-password"
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChange={(e) =>
+                        setPassword(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        w-full
+                        rounded-3xl
+                        border
+                        border-cyan-500/20
+                        bg-[#0f172a]
+                        px-14
+                        py-5
+                        text-white
+                        text-lg
+                        outline-none
+                        transition-all
+                        focus:border-cyan-400
+                        focus:ring-4
+                        focus:ring-cyan-500/10
+                        placeholder:text-slate-500
+                      "
+                    />
+                  </div>
+                </div>
+
+                {/* BUTTON */}
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="
+                    w-full
+                    rounded-3xl
+                    bg-cyan-500
+                    hover:bg-cyan-400
+                    transition-all
+                    py-5
+                    text-black
+                    font-black
+                    text-lg
+                    flex
+                    items-center
+                    justify-center
+                    gap-3
+                    disabled:opacity-50
+                    disabled:cursor-not-allowed
+                  "
+                >
+                  {loading ? (
+
+                    <div
+                      className="
+                        flex
+                        items-center
+                        gap-3
+                      "
+                    >
+
+                      <div
+                        className="
+                          h-5
+                          w-5
+                          rounded-full
+                          border-2
+                          border-black/20
+                          border-t-black
+                          animate-spin
+                        "
+                      />
+
+                      Creating Workspace...
+
+                    </div>
+
+                  ) : (
+                    <>
+                      <ShieldCheck
+                        size={22}
+                      />
+
+                      Launch Workspace
+
+                      <ArrowRight
+                        size={22}
+                      />
+                    </>
+                  )}
+                </button>
+              </form>
+
+            )
+          }
 
           {/* FOOTER */}
 

@@ -15,6 +15,8 @@ import {
   auth,
 } from "@/lib/auth"
 
+import { toast } from "sonner"
+
 export default function MissionPage() {
 
   // =========================
@@ -27,7 +29,7 @@ export default function MissionPage() {
   const params =
     useParams()
 
-  const stepId =
+  const missionId =
     params.id as string
 
   // =========================
@@ -63,7 +65,7 @@ export default function MissionPage() {
 
         const data =
           await fetchMissionById(
-            stepId
+            missionId
           )
 
         setMission(data)
@@ -72,21 +74,44 @@ export default function MissionPage() {
 
         console.error(err)
 
+        toast.error(
+          err instanceof Error
+            ? err.message
+            : "Failed to load mission"
+        )
+
       } finally {
 
         setLoading(false)
       }
     }
 
-    if (stepId) {
+    if (missionId) {
 
       loadMission()
     }
 
   }, [
-    stepId,
+    missionId,
     router,
   ])
+
+  const formatDate = (
+    value?: string
+  ) => {
+
+    if (!value)
+      return "N/A"
+
+    const date =
+      new Date(value)
+
+    return isNaN(
+      date.getTime()
+    )
+      ? "N/A"
+      : date.toLocaleString()
+  }
 
   // =========================
   // LOADING
@@ -159,7 +184,10 @@ export default function MissionPage() {
             font-black
           "
         >
-          {mission.task_name}
+          {
+            mission.task_name ||
+            "Mission Runtime"
+          }
         </h1>
 
         <p
@@ -168,8 +196,8 @@ export default function MissionPage() {
             text-slate-400
           "
         >
-          Runtime mission telemetry
-          and execution analytics.
+          Mission runtime state
+          and execution lifecycle.
         </p>
 
       </div>
@@ -209,7 +237,10 @@ export default function MissionPage() {
               text-cyan-300
             "
           >
-            {mission.status}
+            {
+              mission.status ||
+              "unknown"
+            }
           </h2>
 
         </div>
@@ -338,7 +369,7 @@ export default function MissionPage() {
             </p>
 
             <p className="mt-2 break-all">
-              {mission.id}
+              {mission.mission_id}
             </p>
           </div>
 
@@ -358,7 +389,9 @@ export default function MissionPage() {
             </p>
 
             <p className="mt-2">
-              {mission.created_at}
+              {formatDate(
+                mission.created_at
+              )}
             </p>
           </div>
 
@@ -368,7 +401,9 @@ export default function MissionPage() {
             </p>
 
             <p className="mt-2">
-              {mission.updated_at}
+              {formatDate(
+                mission.updated_at
+              )}
             </p>
           </div>
 
@@ -393,6 +428,7 @@ export default function MissionPage() {
           </div>
 
         </div>
+
       </div>
 
     </div>

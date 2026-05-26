@@ -12,3 +12,5 @@ redis
 email-validator
 openai>=1.0.0
 websockets==12.0
+resend
+stripe

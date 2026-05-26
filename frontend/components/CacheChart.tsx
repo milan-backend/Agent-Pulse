@@ -27,17 +27,29 @@ export default function CacheChart({
   // CACHE DATA
   // =========================
 
-  const cacheHit =
-    Number(
-      usage?.cache_hit_rate || 0
-    );
+  const cacheHit = Math.min(
+    100,
+    Math.max(
+      0,
+      Number(
+        usage?.cache_hit_rate || 0
+      )
+    )
+  )
 
-  const cacheMiss =
+  const cacheMiss = Math.max(
+    0,
+    100 - cacheHit
+  )
+
+  const totalMisses =
     Number(
-      usage?.cache_misses !== undefined
-        ? usage?.cache_misses
-        : 100 - cacheHit
-    );
+      usage?.cache_misses || 0
+    )
+
+  const hasData =
+    cacheHit > 0 ||
+    totalMisses > 0
 
   // =========================
   // CHART DATA
@@ -189,7 +201,12 @@ export default function CacheChart({
 
               </Pie>
 
-              <Tooltip />
+              <Tooltip
+                formatter={(value) => [
+                  `${value}%`,
+                  "Rate",
+                ]}
+              />
 
             </PieChart>
           </ResponsiveContainer>
@@ -294,7 +311,7 @@ export default function CacheChart({
                     text-red-300
                   "
                 >
-                  {cacheMiss}
+                  {totalMisses}
                 </h3>
 
               </div>

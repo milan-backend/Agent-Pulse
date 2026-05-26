@@ -1,8 +1,5 @@
 "use client";
 
-import { API_URL } from 
-"@/components/api";
-
 import Link from "next/link";
 
 import {
@@ -16,6 +13,13 @@ import {
   Copy,
   X,
 } from "lucide-react";
+
+import { toast } from "sonner";
+
+import {
+  createAgent,
+  getDashboardAgents,
+} from "@/components/api";
 
 interface Agent {
 
@@ -60,54 +64,24 @@ export default function AgentsPage() {
 
     try {
 
-      const token =
-        localStorage.getItem(
-          "token"
-        );
-
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
-
-      const response =
-        await fetch(
-          `${API_URL}/dashboard/agents`,
-          {
-            headers: {
-
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
-
-      if (!response.ok) {
-
-        throw new Error(
-          "Failed to fetch agents"
-        );
-      }
-
       const data =
-        await response.json();
-
-      console.log("Role =", data.role);
+        await getDashboardAgents();
 
       setAgents(
-        data.agents || []
+        data?.agents || data || []
       );
 
       setRole(
-        data.role || "viewer"
+        data?.role || "viewer"
       );
 
     } catch (error) {
 
       console.error(error);
+
+      toast.error(
+        "Failed to fetch agents"
+      );
 
     } finally {
 
@@ -115,64 +89,29 @@ export default function AgentsPage() {
     }
   }
 
-  async function createAgent() {
+  async function createNewAgent() {
 
     try {
 
       setCreating(true);
 
-      const token =
-        localStorage.getItem(
-          "token"
-        );
-
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
-
-      const response =
-        await fetch(
-          `${API_URL}/agents/`,
-          {
-
-            method: "POST",
-
-            headers: {
-
-              "Content-Type":
-                "application/json",
-
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-
-            body: JSON.stringify({
-
-              name: agentName
-            }),
-          }
-        );
-
-      if (!response.ok) {
-
-        throw new Error(
-          "Failed to create agent"
-        );
-      }
-
       const data =
-        await response.json();
+        await createAgent({
+
+          name: agentName
+        });
 
       setNewApiKey(
-        data.api_key
+        data?.api_key || ""
       );
 
       setNewAgentName(
-        data.agent_name
+        data?.agent_name ||
+        agentName
+      );
+
+      toast.success(
+        "Agent created successfully"
       );
 
       setAgentName("");
@@ -182,6 +121,10 @@ export default function AgentsPage() {
     } catch (error) {
 
       console.error(error);
+
+      toast.error(
+        "Failed to create agent"
+      );
 
     } finally {
 
@@ -195,7 +138,7 @@ export default function AgentsPage() {
       newApiKey
     );
 
-    alert(
+    toast.success(
       "API Key copied"
     );
   }
@@ -263,8 +206,9 @@ export default function AgentsPage() {
 
           {/* CREATE AGENT */}
 
-          {(role === "admin" ||
-            role === "operator") && (
+          {["admin", "operator"].includes(
+            role?.toLowerCase?.() || ""
+          ) && (
 
             <button
               onClick={() =>
@@ -556,9 +500,16 @@ export default function AgentsPage() {
               </h2>
 
               <button
-                onClick={() =>
-                  setShowModal(false)
-                }
+                disabled={creating}
+                onClick={() => {
+
+                  setShowModal(false);
+
+                  setNewApiKey("");
+
+                  setNewAgentName("");
+
+                }}
                 className="
                   rounded-xl
                   border
@@ -603,7 +554,7 @@ export default function AgentsPage() {
                 />
 
                 <button
-                  onClick={createAgent}
+                  onClick={createNewAgent}
                   disabled={
                     creating ||
                     !agentName
@@ -657,6 +608,16 @@ export default function AgentsPage() {
                     Agent Created
 
                   </h3>
+
+                  <p
+                    className="
+                      mt-3
+                      text-cyan-300
+                      font-bold
+                    "
+                  >
+                    {newAgentName}
+                  </p>
 
                   <p
                     className="

@@ -1,38 +1,58 @@
 from fastapi import HTTPException
 
 
-def require_admin(membership):
+ROLE_HIERARCHY = {
+    "viewer": 1,
+    "operator": 2,
+    "admin": 3
+}
 
-    if membership.role != "admin":
+
+def require_role(
+    membership,
+    minimum_role: str
+):
+
+    user_level = ROLE_HIERARCHY.get(
+        membership.role,
+        0
+    )
+
+    required_level = ROLE_HIERARCHY.get(
+        minimum_role,
+        0
+    )
+
+    if user_level < required_level:
 
         raise HTTPException(
             status_code=403,
-            detail="Admin access required"
+            detail=f"{minimum_role.capitalize()} access required"
         )
 
 
-def require_operator(membership):
+def require_viewer(
+    membership
+):
+    require_role(
+        membership,
+        "viewer"
+    )
 
-    if membership.role not in [
-        "operator",
+
+def require_operator(
+    membership
+):
+    require_role(
+        membership,
+        "operator"
+    )
+
+
+def require_admin(
+    membership
+):
+    require_role(
+        membership,
         "admin"
-    ]:
-
-        raise HTTPException(
-            status_code=403,
-            detail="Operator access required"
-        )
-
-
-def require_viewer(membership):
-
-    if membership.role not in [
-        "viewer",
-        "operator",
-        "admin"
-    ]:
-
-        raise HTTPException(
-            status_code=403,
-            detail="Viewer access required"
-        )
+    )

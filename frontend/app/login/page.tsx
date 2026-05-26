@@ -16,7 +16,10 @@ import {
 
 import {
   login,
+  forgotPassword,
 } from "@/components/api";
+
+import { toast } from "sonner";
 
 export default function LoginPage() {
 
@@ -29,8 +32,17 @@ export default function LoginPage() {
   const [loading, setLoading] =
     useState(false);
 
-  const [error, setError] =
+  const [success, setSuccess] =
+    useState(false);
+
+  const [forgotLoading, setForgotLoading] =
+    useState(false);
+
+  const [forgotEmail, setForgotEmail] =
     useState("");
+
+  const [showForgotPassword, setShowForgotPassword] =
+    useState(false);
 
   async function handleLogin(
     e: React.FormEvent
@@ -41,8 +53,6 @@ export default function LoginPage() {
     try {
 
       setLoading(true);
-
-      setError("");
 
       const response =
         await login(
@@ -59,6 +69,11 @@ export default function LoginPage() {
           response.access_token
         );
 
+        sessionStorage.setItem(
+          "authenticated",
+          "true"
+        );
+
         localStorage.setItem(
           "workspaces",
           JSON.stringify(
@@ -66,30 +81,39 @@ export default function LoginPage() {
           )
         );
 
-        if (
-          response.workspaces && response.workspaces.length > 1
-        ){
-          localStorage.setItem(
-            "workspaces",
-            JSON.stringify(
-              response.workspaces
-            )
-          );
-          window.location.href = "/select-workspace";
+        setSuccess(true);
 
-        } else {
-          localStorage.setItem(
-            "workspace_id",
-            response.workspace_id
-          );
+        toast.success(
+          response?.message ||
+          "Authentication successful"
+        );
 
-        window.location.href =
-          "/dashboard";
-        }
+        setTimeout(() => {
+
+          if (
+            response.workspaces &&
+            response.workspaces.length > 1
+          ) {
+
+            window.location.href =
+              "/select-workspace";
+
+          } else {
+
+            localStorage.setItem(
+              "workspace_id",
+              response.workspace_id
+            );
+
+            window.location.href =
+              "/dashboard";
+          }
+
+        }, 1000);
 
       } else {
 
-        setError(
+        toast.error(
           "Invalid login response."
         );
       }
@@ -98,14 +122,56 @@ export default function LoginPage() {
 
       console.error(err);
 
-      setError(
+      toast.error(
+
         err?.message ||
-          "Login failed."
+
+        "Login failed."
       );
 
     } finally {
 
       setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+
+    if (!forgotEmail) {
+
+      toast.error(
+        "Please enter your email"
+      );
+
+      return;
+    }
+
+    try {
+
+      setForgotLoading(true);
+
+      const response =
+        await forgotPassword(
+          forgotEmail
+        );
+
+      toast.success(
+        response?.message ||
+        "Reset link sent"
+      );
+
+      setShowForgotPassword(false);
+
+    } catch (err: any) {
+
+      toast.error(
+        err?.message ||
+        "Failed to send reset email"
+      );
+
+    } finally {
+
+      setForgotLoading(false);
     }
   }
 
@@ -162,9 +228,13 @@ export default function LoginPage() {
           rounded-[40px]
           border
           border-cyan-500/20
+          hover:border-cyan-400/30
+          transition-all
+          duration-500
           bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
           p-10
           overflow-hidden
+          animate-[fadeIn_.5s_ease]
         "
       >
         {/* INNER GLOW */}
@@ -265,28 +335,119 @@ export default function LoginPage() {
               Authenticate to access runtime
               observability systems.
             </p>
-          </div>
-
-          {/* ERROR */}
-
-          {error && (
 
             <div
               className="
                 mt-6
-                rounded-2xl
+                inline-flex
+                items-center
+                gap-3
+                rounded-full
                 border
-                border-red-500/20
-                bg-red-500/10
+                border-cyan-500/20
+                bg-cyan-500/10
                 px-5
-                py-4
-                text-red-300
-                font-semibold
+                py-3
               "
             >
-              {error}
+
+              <div
+                className="
+                  h-2
+                  w-2
+                  rounded-full
+                  bg-green-400
+                  animate-pulse
+                "
+              />
+
+              <span
+                className="
+                  text-sm
+                  font-bold
+                  text-cyan-300
+                "
+              >
+                SECURE ACCESS
+              </span>
+
             </div>
-          )}
+
+            <div
+              className="
+                mt-6
+                grid
+                grid-cols-2
+                gap-4
+              "
+            >
+
+              <div
+                className="
+                  rounded-2xl
+                  border
+                  border-green-500/20
+                  bg-green-500/10
+                  p-4
+                "
+              >
+
+                <p
+                  className="
+                    text-xs
+                    text-green-200/70
+                  "
+                >
+                  API STATUS
+                </p>
+
+                <h3
+                  className="
+                    mt-2
+                    text-lg
+                    font-black
+                    text-green-300
+                  "
+                >
+                  ONLINE
+                </h3>
+
+              </div>
+
+              <div
+                className="
+                  rounded-2xl
+                  border
+                  border-cyan-500/20
+                  bg-cyan-500/10
+                  p-4
+                "
+              >
+
+                <p
+                  className="
+                    text-xs
+                    text-cyan-200/70
+                  "
+                >
+                  SECURITY
+                </p>
+
+                <h3
+                  className="
+                    mt-2
+                    text-lg
+                    font-black
+                    text-cyan-300
+                  "
+                >
+                  ACTIVE
+                </h3>
+
+              </div>
+
+            </div>
+          </div>
 
           {/* FORM */}
 
@@ -328,6 +489,8 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
+                  disabled={loading}
+                  autoComplete="email"
                   placeholder="admin@agentpulse.ai"
                   value={email}
                   onChange={(e) =>
@@ -385,6 +548,8 @@ export default function LoginPage() {
                 <input
                   type="password"
                   required
+                  disabled={loading}
+                  autoComplete="current-password"
                   placeholder="••••••••••••"
                   value={password}
                   onChange={(e) =>
@@ -392,6 +557,17 @@ export default function LoginPage() {
                       e.target.value
                     )
                   }
+                  onKeyDown={(e) => {
+
+                    if (
+                      e.key === "Enter"
+                    ) {
+
+                      handleLogin(
+                        e as any
+                      );
+                    }
+                  }}
                   className="
                     w-full
                     rounded-3xl
@@ -413,6 +589,34 @@ export default function LoginPage() {
               </div>
             </div>
 
+            {/* FORGOT PASSWORD */}
+
+            <div
+              className="
+                flex
+                justify-end
+                -mt-2
+              "
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  setShowForgotPassword(
+                    true
+                  )
+                }
+                className="
+                  text-sm
+                  text-cyan-300
+                  hover:text-cyan-200
+                  font-semibold
+                  transition-all
+                "
+              >
+                Forgot Password?
+              </button>
+            </div>
+
             {/* BUTTON */}
 
             <button
@@ -432,25 +636,211 @@ export default function LoginPage() {
                 items-center
                 justify-center
                 gap-3
+                disabled:opacity-50
+                disabled:cursor-not-allowed
               "
             >
-              {loading ? (
-                "Authenticating..."
-              ) : (
-                <>
-                  <ShieldCheck
-                    size={22}
-                  />
+              {
+                loading ? (
 
-                  Access Mission Control
+                  <div
+                    className="
+                      flex
+                      items-center
+                      gap-3
+                    "
+                  >
 
-                  <ArrowRight
-                    size={22}
-                  />
-                </>
-              )}
+                    <div
+                      className="
+                        h-5
+                        w-5
+                        rounded-full
+                        border-2
+                        border-black/20
+                        border-t-black
+                        animate-spin
+                      "
+                    />
+
+                    Authenticating...
+
+                  </div>
+
+                ) : success ? (
+
+                  <div
+                    className="
+                      flex
+                      items-center
+                      gap-3
+                    "
+                  >
+
+                    <ShieldCheck
+                      size={22}
+                    />
+
+                    Access Granted
+
+                  </div>
+
+                ) : (
+
+                  <>
+                    <ShieldCheck
+                      size={22}
+                    />
+
+                    Access Mission Control
+
+                    <ArrowRight
+                      size={22}
+                    />
+                  </>
+                )
+              }
             </button>
           </form>
+
+          {/* FORGOT PASSWORD MODAL */}
+
+          {
+            showForgotPassword && (
+
+              <div
+                className="
+                  fixed
+                  inset-0
+                  bg-black/70
+                  backdrop-blur-sm
+                  flex
+                  items-center
+                  justify-center
+                  z-50
+                  px-6
+                "
+              >
+
+                <div
+                  className="
+                    w-full
+                    max-w-md
+                    rounded-3xl
+                    border
+                    border-cyan-500/20
+                    bg-[#091525]
+                    p-8
+                  "
+                >
+
+                  <h3
+                    className="
+                      text-2xl
+                      font-black
+                      text-white
+                    "
+                  >
+                    Reset Password
+                  </h3>
+
+                  <p
+                    className="
+                      mt-2
+                      text-slate-400
+                    "
+                  >
+                    Enter your email address
+                    to receive a reset link.
+                  </p>
+
+                  <div className="mt-6">
+
+                    <input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={forgotEmail}
+                      onChange={(e) =>
+                        setForgotEmail(
+                          e.target.value
+                        )
+                      }
+                      className="
+                        w-full
+                        rounded-2xl
+                        border
+                        border-cyan-500/20
+                        bg-[#0f172a]
+                        px-5
+                        py-4
+                        text-white
+                        outline-none
+                        focus:border-cyan-400
+                      "
+                    />
+
+                  </div>
+
+                  <div
+                    className="
+                      mt-6
+                      flex
+                      gap-3
+                    "
+                  >
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setShowForgotPassword(
+                          false
+                        )
+                      }
+                      className="
+                        flex-1
+                        rounded-2xl
+                        border
+                        border-slate-700
+                        py-4
+                        text-white
+                        font-bold
+                      "
+                    >
+                      Cancel
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={forgotLoading}
+                      onClick={
+                        handleForgotPassword
+                      }
+                      className="
+                        flex-1
+                        rounded-2xl
+                        bg-cyan-500
+                        hover:bg-cyan-400
+                        py-4
+                        text-black
+                        font-black
+                        transition-all
+                        disabled:opacity-50
+                      "
+                    >
+                      {
+                        forgotLoading
+                          ? "Sending..."
+                          : "Send Link"
+                      }
+                    </button>
+
+                  </div>
+
+                </div>
+
+              </div>
+            )
+          }
 
           {/* FOOTER */}
 

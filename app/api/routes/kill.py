@@ -1,23 +1,20 @@
 from fastapi import (
     APIRouter,
     Depends,
-    Header,
-    HTTPException,
-    status
+    Header
 )
 
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
-from app.models.agent import Agent
 from app.models.user import User
 
 from app.api.deps_user import (
     get_current_user
 )
 
-from app.api.routes.workspace_access import (
+from app.core.workspace_access import (
     get_workspace_membership
 )
 
@@ -25,12 +22,17 @@ from app.api.rbac import (
     require_admin
 )
 
+from app.services.kill_service import (
+    kill_workspace_agents,
+    resume_workspace_agents
+)
+
 router = APIRouter()
 
 
-# =========================
+# ============================================
 # KILL ALL AGENTS
-# =========================
+# ============================================
 
 @router.post("/agents/kill")
 async def kill_agents(
@@ -44,8 +46,6 @@ async def kill_agents(
     db: Session = Depends(get_db)
 ):
 
-    # VALIDATE MEMBERSHIP
-
     membership = (
         get_workspace_membership(
             db=db,
@@ -54,45 +54,20 @@ async def kill_agents(
         )
     )
 
-    # REQUIRE ADMIN
-
-    require_admin(membership)
-
-    # KILL AGENTS
-
-    updated_count = (
-        db.query(Agent)
-        .filter(
-            Agent.workspace_id
-            == workspace_id
-        )
-        .update(
-            {"is_killed": True},
-            synchronize_session=False
-        )
+    require_admin(
+        membership
     )
 
-    db.commit()
-
-    return {
-
-        "message":
-            "Emergency stop activated",
-
-        "killed_agents":
-            updated_count,
-
-        "workspace_id":
-            workspace_id,
-
-        "user":
-            current_user.email
-    }
+    return kill_workspace_agents(
+        db=db,
+        workspace_id=workspace_id,
+        current_user=current_user
+    )
 
 
-# =========================
+# ============================================
 # RESUME ALL AGENTS
-# =========================
+# ============================================
 
 @router.post("/agents/resume")
 async def resume_agents(
@@ -106,8 +81,6 @@ async def resume_agents(
     db: Session = Depends(get_db)
 ):
 
-    # VALIDATE MEMBERSHIP
-
     membership = (
         get_workspace_membership(
             db=db,
@@ -116,37 +89,12 @@ async def resume_agents(
         )
     )
 
-    # REQUIRE ADMIN
-
-    require_admin(membership)
-
-    # RESUME AGENTS
-
-    updated_count = (
-        db.query(Agent)
-        .filter(
-            Agent.workspace_id
-            == workspace_id
-        )
-        .update(
-            {"is_killed": False},
-            synchronize_session=False
-        )
+    require_admin(
+        membership
     )
 
-    db.commit()
-
-    return {
-
-        "message":
-            "Agents resumed",
-
-        "resumed_agents":
-            updated_count,
-
-        "workspace_id":
-            workspace_id,
-
-        "user":
-            current_user.email
-    }
+    return resume_workspace_agents(
+        db=db,
+        workspace_id=workspace_id,
+        current_user=current_user
+    )

@@ -1,21 +1,42 @@
 "use client";
 
-export default function LiveIndicator() {
+interface Props {
+  live?: boolean
+  text?: string
+}
+
+export default function LiveIndicator({
+  live = true,
+  text = "Runtime Active",
+}: Props) {
 
   return (
 
-    <div className="
-      flex
-      items-center
-      gap-4
-      rounded-full
-      border
-      border-emerald-500/20
-      bg-emerald-500/10
-      px-6
-      py-3
-      shadow-[0_0_30px_rgba(16,185,129,0.15)]
-    ">
+    <div
+      className={`
+        flex
+        items-center
+        gap-4
+        rounded-full
+        px-6
+        py-3
+        shadow-[0_0_30px_rgba(16,185,129,0.15)]
+
+        ${
+          live
+            ? `
+              border
+              border-emerald-500/20
+              bg-emerald-500/10
+            `
+            : `
+              border
+              border-red-500/20
+              bg-red-500/10
+            `
+        }
+      `}
+    >
 
       {/* DOT */}
 
@@ -26,25 +47,39 @@ export default function LiveIndicator() {
         w-4
       ">
 
-        <span className="
-          absolute
-          inline-flex
-          h-full
-          w-full
-          animate-ping
-          rounded-full
-          bg-emerald-400
-          opacity-75
-        " />
+        <span
+          className={`
+            absolute
+            inline-flex
+            h-full
+            w-full
+            animate-ping
+            rounded-full
+            opacity-75
 
-        <span className="
-          relative
-          inline-flex
-          h-4
-          w-4
-          rounded-full
-          bg-emerald-400
-        " />
+            ${
+              live
+                ? "bg-emerald-400"
+                : "bg-red-400"
+            }
+          `}
+        />
+
+        <span
+          className={`
+            relative
+            inline-flex
+            h-4
+            w-4
+            rounded-full
+
+            ${
+              live
+                ? "bg-emerald-400"
+                : "bg-red-400"
+            }
+          `}
+        />
 
       </div>
 
@@ -56,14 +91,25 @@ export default function LiveIndicator() {
         gap-3
       ">
 
-        <span className="
-          text-sm
-          font-black
-          tracking-[0.2em]
-          text-emerald-400
-        ">
+        <span
+          className={`
+            text-sm
+            font-black
+            tracking-[0.2em]
 
-          LIVE
+            ${
+              live
+                ? "text-emerald-400"
+                : "text-red-400"
+            }
+          `}
+        >
+
+          {
+            live
+              ? "LIVE"
+              : "OFFLINE"
+          }
 
         </span>
 
@@ -74,7 +120,7 @@ export default function LiveIndicator() {
           text-zinc-400
         ">
 
-          Runtime Active
+          {text}
 
         </span>
 

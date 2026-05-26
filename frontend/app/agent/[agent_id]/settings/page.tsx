@@ -1,20 +1,33 @@
 "use client";
 
-import {API_URL} from 
-"@/components/api";
-
 import Link from "next/link";
+
 import { useParams } from "next/navigation";
+
 import { useEffect, useState } from "react";
+
 import {
   Copy,
   Check,
 } from "lucide-react";
 
+import { toast } from "sonner";
+
+import {
+  getAgent,
+  regenerateAgentKey,
+  updateAgentSettings,
+  pauseAgentMission,
+  resumeAgentMission,
+  killAgentMission,
+} from "@/components/api";
+
 export default function AgentSettingsPage() {
+
   const params = useParams();
 
-  const agentId = params.agent_id;
+  const agentId =
+    params.agent_id as string;
 
   const [loading, setLoading] =
     useState(true);
@@ -25,11 +38,11 @@ export default function AgentSettingsPage() {
   const [apiKey, setApiKey] =
     useState("");
 
+  const [agentName, setAgentName] =
+    useState("");
+
   const [maxSteps, setMaxSteps] =
     useState<number>(20);
-
-  const [maxRuntime, setMaxRuntime] =
-    useState<number>(2);
 
   const [maxCost, setMaxCost] =
     useState<number>(5);
@@ -45,120 +58,122 @@ export default function AgentSettingsPage() {
   const [isActive, setIsActive] =
     useState(true);
 
+  const [saving, setSaving] =
+    useState(false);
+
+  const [regenerating, setRegenerating] =
+    useState(false);
+
+  const [actionLoading, setActionLoading] =
+    useState<string | null>(null);
+
   useEffect(() => {
-    fetchAgent();
-  }, []);
+
+    if (agentId) {
+
+      fetchAgent();
+    }
+
+  }, [agentId]);
 
   async function fetchAgent() {
-    try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
+    try {
+
+      setLoading(true);
 
       const response =
-        await fetch(
-          `${API_URL}/dashboard/agent/${agentId}`,
-          {
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
+        await getAgent(agentId);
 
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
+      const agent =
+        response?.agent || response;
 
-      const data =
-        await response.json();
+      const policy =
+        response?.policy || {};
+
+      setAgentName(
+        agent?.name || "Agent"
+      );
 
       setMaxSteps(
-        Number(data.max_steps) || 20
+        Number(
+          policy?.max_steps
+        ) || 20
       );
 
       setMaxCost(
-        Number(data.max_cost) || 5
+        Number(
+          policy?.max_cost
+        ) || 5
       );
 
       setMaxRetries(
-        Number(data.max_retries) || 3
+        Number(
+          policy?.max_retries
+        ) || 3
       );
 
       setMaxRepeatedTasks(
         Number(
-          data.max_repeated_tasks
+          policy?.max_repeated_tasks
         ) || 3
       );
 
       setIsActive(
-        data.is_active
+        Boolean(
+          agent?.is_active
+        )
       );
+
     } catch (error) {
-      console.log(error);
+
+      console.error(error);
+
+      toast.error(
+        "Failed to load agent settings"
+      );
+
     } finally {
+
       setLoading(false);
     }
   }
 
   async function regenerateKey() {
+
     try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
-
-      const response =
-        await fetch(
-          `${API_URL}/agents/regenerate-key/${agentId}`,
-          {
-            method: "POST",
-
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
+      setRegenerating(true);
 
       const data =
-        await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.detail ||
-            "Failed to regenerate key"
+        await regenerateAgentKey(
+          agentId
         );
 
-        return;
-      }
-
       setApiKey(
-        data.api_key
+        data?.api_key || ""
       );
 
-      alert(
-        "API Key Regenerated"
+      toast.success(
+        "API Key regenerated successfully"
       );
+
     } catch (error) {
+
       console.error(error);
 
-      alert(
-        "Failed to regenerate key"
+      toast.error(
+        "Failed to regenerate API key"
       );
+
+    } finally {
+
+      setRegenerating(false);
     }
   }
 
   async function copyApiKey() {
+
     if (!apiKey) return;
 
     await navigator.clipboard.writeText(
@@ -167,228 +182,168 @@ export default function AgentSettingsPage() {
 
     setCopied(true);
 
+    toast.success(
+      "API Key copied"
+    );
+
     setTimeout(() => {
+
       setCopied(false);
+
     }, 2000);
   }
 
   async function saveSettings() {
-    try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
+    if (
+      maxSteps < 1 ||
+      maxRetries < 0 ||
+      maxRepeatedTasks < 0 ||
+      maxCost < 0
+    ) {
 
-      const response =
-        await fetch(
-          `${API_URL}/agents/${agentId}`,
-          {
-            method: "PUT",
-
-            headers: {
-              "Content-Type":
-                "application/json",
-
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-
-            body: JSON.stringify({
-              max_cost: maxCost,
-              max_steps: maxSteps,
-              max_retries: maxRetries,
-              max_repeated_tasks:
-                maxRepeatedTasks,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.detail ||
-            "Failed to update settings"
-        );
-
-        return;
-      }
-
-      alert(
-        "Settings Updated Successfully"
+      toast.error(
+        "Invalid runtime limits"
       );
+
+      return;
+    }
+
+    try {
+
+      setSaving(true);
+
+      await updateAgentSettings(
+        agentId,
+        {
+          max_cost: maxCost,
+          max_steps: maxSteps,
+          max_retries: maxRetries,
+          max_repeated_tasks:
+            maxRepeatedTasks,
+        }
+      );
+
+      toast.success(
+        "Settings updated successfully"
+      );
+
     } catch (error) {
+
       console.error(error);
 
-      alert(
+      toast.error(
         "Failed to save settings"
       );
+
+    } finally {
+
+      setSaving(false);
     }
   }
 
   async function pauseAgent() {
+
     try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
+      setActionLoading("pause");
 
-      const response =
-        await fetch(
-          `${API_URL}/mission-control/pause/${agentId}`,
-          {
-            method: "POST",
-
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.detail ||
-            "Failed to pause agent"
-        );
-
-        return;
-      }
+      await pauseAgentMission(
+        agentId
+      );
 
       setIsActive(false);
 
-      alert(
-        "Agent Paused"
+      toast.success(
+        "Agent paused"
       );
+
     } catch (error) {
+
       console.error(error);
 
-      alert(
+      toast.error(
         "Failed to pause agent"
       );
+
+    } finally {
+
+      setActionLoading(null);
     }
   }
 
   async function resumeAgent() {
+
     try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
+      setActionLoading("resume");
 
-      const response =
-        await fetch(
-          `${API_URL}/mission-control/resume/${agentId}`,
-          {
-            method: "POST",
-
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.detail ||
-            "Failed to resume agent"
-        );
-
-        return;
-      }
+      await resumeAgentMission(
+        agentId
+      );
 
       setIsActive(true);
 
-      alert(
-        "Agent Resumed"
+      toast.success(
+        "Agent resumed"
       );
+
     } catch (error) {
+
       console.error(error);
 
-      alert(
+      toast.error(
         "Failed to resume agent"
       );
+
+    } finally {
+
+      setActionLoading(null);
     }
   }
 
   async function killAgent() {
-    try {
-      const token =
-        localStorage.getItem("token");
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
-
-      const response =
-        await fetch(
-        `${API_URL}/mission-control/kill/${agentId}`,
-          {
-            method: "POST",
-
-            headers: {
-              Authorization:
-                `Bearer ${token}`,
-
-              "workspace-id":
-                workspaceId || "",
-            },
-          }
-        );
-
-      const data =
-        await response.json();
-
-      if (!response.ok) {
-        alert(
-          data.detail ||
-            "Failed to kill agent"
-        );
-
-        return;
-      }
-
-      alert(
-        "Agent Killed"
+    const confirmed =
+      window.confirm(
+        "Are you sure you want to kill this agent?"
       );
+
+    if (!confirmed) {
+
+      return;
+    }
+
+    try {
+
+      setActionLoading("kill");
+
+      await killAgentMission(
+        agentId
+      );
+
+      toast.success(
+        "Agent killed successfully"
+      );
+
     } catch (error) {
+
       console.error(error);
 
-      alert(
+      toast.error(
         "Failed to kill agent"
       );
+
+    } finally {
+
+      setActionLoading(null);
     }
   }
 
   if (loading) {
+
     return (
+
       <div
         className="
           min-h-screen
@@ -399,12 +354,51 @@ export default function AgentSettingsPage() {
           justify-center
         "
       >
-        Loading...
+
+        <div
+          className="
+            flex
+            items-center
+            gap-4
+            rounded-3xl
+            border
+            border-cyan-500/20
+            bg-cyan-500/10
+            px-8
+            py-6
+          "
+        >
+
+          <div
+            className="
+              h-6
+              w-6
+              rounded-full
+              border-2
+              border-cyan-300/20
+              border-t-cyan-300
+              animate-spin
+            "
+          />
+
+          <span
+            className="
+              text-xl
+              font-bold
+              text-cyan-300
+            "
+          >
+            Loading Runtime Settings...
+          </span>
+
+        </div>
+
       </div>
     );
   }
 
   return (
+
     <div
       className="
         min-h-screen
@@ -413,17 +407,22 @@ export default function AgentSettingsPage() {
         p-8
       "
     >
+
       {/* HEADER */}
 
       <div
         className="
           mb-10
           flex
-          items-center
+          items-start
           justify-between
+          gap-6
+          flex-wrap
         "
       >
+
         <div>
+
           <h1
             className="
               text-6xl
@@ -431,7 +430,7 @@ export default function AgentSettingsPage() {
               text-cyan-400
             "
           >
-            Settings
+            {agentName} Settings
           </h1>
 
           <p
@@ -443,24 +442,110 @@ export default function AgentSettingsPage() {
             Manage runtime controls
             and emergency systems.
           </p>
+
+          <div
+            className={`
+              inline-flex
+              items-center
+              gap-3
+              rounded-full
+              border
+              px-5
+              py-3
+              mt-5
+
+              ${
+                isActive
+                  ? `
+                    border-green-500/20
+                    bg-green-500/10
+                    text-green-300
+                  `
+                  : `
+                    border-red-500/20
+                    bg-red-500/10
+                    text-red-300
+                  `
+              }
+            `}
+          >
+
+            <div
+              className={`
+                h-2
+                w-2
+                rounded-full
+
+                ${
+                  isActive
+                    ? "bg-green-400"
+                    : "bg-red-400"
+                }
+              `}
+            />
+
+            <span className="font-bold">
+
+              {
+                isActive
+                  ? "AGENT ACTIVE"
+                  : "AGENT PAUSED"
+              }
+
+            </span>
+
+          </div>
+
         </div>
 
-        <Link
-          href={`/agent/${agentId}`}
+        <div
           className="
-            rounded-2xl
-            border
-            border-cyan-400
-            px-8
-            py-4
-            font-bold
-            hover:bg-cyan-400
-            hover:text-black
-            transition
+            flex
+            items-center
+            gap-4
+            flex-wrap
           "
         >
-          Back To Agent
-        </Link>
+
+          <button
+            onClick={fetchAgent}
+            className="
+              rounded-2xl
+              border
+              border-cyan-500/20
+              bg-cyan-500/10
+              px-6
+              py-4
+              font-bold
+              text-cyan-300
+              hover:bg-cyan-500/20
+              transition-all
+            "
+          >
+
+            Refresh
+
+          </button>
+
+          <Link
+            href={`/agent/${agentId}`}
+            className="
+              rounded-2xl
+              border
+              border-cyan-400
+              px-8
+              py-4
+              font-bold
+              hover:bg-cyan-400
+              hover:text-black
+              transition
+            "
+          >
+            Back To Agent
+          </Link>
+
+        </div>
+
       </div>
 
       {/* TOP GRID */}
@@ -472,6 +557,7 @@ export default function AgentSettingsPage() {
           lg:grid-cols-2
         "
       >
+
         {/* API SECURITY */}
 
         <div
@@ -483,6 +569,7 @@ export default function AgentSettingsPage() {
             p-8
           "
         >
+
           <h2
             className="
               text-5xl
@@ -504,6 +591,33 @@ export default function AgentSettingsPage() {
 
           <div
             className="
+              mt-6
+              rounded-2xl
+              border
+              border-yellow-500/20
+              bg-yellow-500/10
+              p-4
+            "
+          >
+
+            <p
+              className="
+                text-sm
+                text-yellow-200
+                leading-relaxed
+              "
+            >
+
+              API keys are only visible once
+              after regeneration. Store them
+              securely.
+
+            </p>
+
+          </div>
+
+          <div
+            className="
               mt-8
               rounded-2xl
               bg-black
@@ -517,12 +631,14 @@ export default function AgentSettingsPage() {
               gap-4
             "
           >
+
             <span>
               {apiKey ||
                 "Create New API Key"}
             </span>
 
             {apiKey && (
+
               <button
                 onClick={copyApiKey}
                 className="
@@ -538,10 +654,12 @@ export default function AgentSettingsPage() {
                   : <Copy size={18} />}
               </button>
             )}
+
           </div>
 
           <button
             onClick={regenerateKey}
+            disabled={regenerating}
             className="
               mt-8
               w-full
@@ -550,10 +668,17 @@ export default function AgentSettingsPage() {
               py-5
               font-black
               text-black
+              disabled:opacity-50
+              disabled:cursor-not-allowed
             "
           >
-            Regenerate API Key
+            {
+              regenerating
+                ? "Regenerating..."
+                : "Regenerate API Key"
+            }
           </button>
+
         </div>
 
         {/* BUDGET CONTROLS */}
@@ -567,6 +692,7 @@ export default function AgentSettingsPage() {
             p-8
           "
         >
+
           <h2
             className="
               text-5xl
@@ -593,13 +719,16 @@ export default function AgentSettingsPage() {
               space-y-6
             "
           >
+
             <div>
+
               <p className="mb-2">
                 Max Mission Steps
               </p>
 
               <input
                 type="number"
+                min={1}
                 value={maxSteps}
                 onChange={(e) =>
                   setMaxSteps(
@@ -610,46 +739,26 @@ export default function AgentSettingsPage() {
                 }
                 className="
                   w-full
+                  appearance-none
                   rounded-2xl
                   bg-black
                   p-5
                   outline-none
                 "
               />
+
             </div>
 
             <div>
-              <p className="mb-2">
-                Max Runtime (mins)
-              </p>
 
-              <input
-                type="number"
-                value={maxRuntime}
-                onChange={(e) =>
-                  setMaxRuntime(
-                    Number(
-                      e.target.value
-                    ) || 0
-                  )
-                }
-                className="
-                  w-full
-                  rounded-2xl
-                  bg-black
-                  p-5
-                  outline-none
-                "
-              />
-            </div>
-
-            <div>
               <p className="mb-2">
                 Max Cost ($)
               </p>
 
               <input
                 type="number"
+                min={1}
+                step="0.01"
                 value={maxCost}
                 onChange={(e) =>
                   setMaxCost(
@@ -660,21 +769,25 @@ export default function AgentSettingsPage() {
                 }
                 className="
                   w-full
+                  appearance-none
                   rounded-2xl
                   bg-black
                   p-5
                   outline-none
                 "
               />
+
             </div>
 
             <div>
+
               <p className="mb-2">
                 Max Retries
               </p>
 
               <input
                 type="number"
+                min={1}
                 value={maxRetries}
                 onChange={(e) =>
                   setMaxRetries(
@@ -685,21 +798,25 @@ export default function AgentSettingsPage() {
                 }
                 className="
                   w-full
+                  appearance-none
                   rounded-2xl
                   bg-black
                   p-5
                   outline-none
                 "
               />
+
             </div>
 
             <div>
+
               <p className="mb-2">
                 Max Repeated Tasks
               </p>
 
               <input
                 type="number"
+                min={1}
                 value={
                   maxRepeatedTasks
                 }
@@ -712,16 +829,19 @@ export default function AgentSettingsPage() {
                 }
                 className="
                   w-full
+                  appearance-none
                   rounded-2xl
                   bg-black
                   p-5
                   outline-none
                 "
               />
+
             </div>
 
             <button
               onClick={saveSettings}
+              disabled={saving}
               className="
                 w-full
                 rounded-2xl
@@ -729,12 +849,21 @@ export default function AgentSettingsPage() {
                 py-5
                 font-black
                 text-black
+                disabled:opacity-50
+                disabled:cursor-not-allowed
               "
             >
-              Save Settings
+              {
+                saving
+                  ? "Saving Runtime Settings..."
+                  : "Save Settings"
+              }
             </button>
+
           </div>
+
         </div>
+
       </div>
 
       {/* DANGER ZONE */}
@@ -749,6 +878,7 @@ export default function AgentSettingsPage() {
           p-8
         "
       >
+
         <h2
           className="
             text-5xl
@@ -770,23 +900,59 @@ export default function AgentSettingsPage() {
 
         <div
           className="
+            mt-8
+            rounded-2xl
+            border
+            border-red-500/20
+            bg-red-500/10
+            p-5
+          "
+        >
+
+          <p
+            className="
+              text-red-200
+              leading-relaxed
+            "
+          >
+
+            Killing an agent will immediately
+            terminate all active missions
+            and runtime execution processes.
+
+          </p>
+
+        </div>
+
+        <div
+          className="
             mt-10
             grid
             gap-8
             lg:grid-cols-2
           "
         >
+
           <button
             onClick={killAgent}
+            disabled={
+              actionLoading === "kill"
+            }
             className="
               rounded-2xl
               bg-red-500
               py-8
               text-3xl
               font-black
+              disabled:opacity-50
+              disabled:cursor-not-allowed
             "
           >
-            STOP AGENT
+            {
+              actionLoading === "kill"
+                ? "STOPPING..."
+                : "KILL AGENT RUNTIME"
+            }
           </button>
 
           <button
@@ -795,20 +961,35 @@ export default function AgentSettingsPage() {
                 ? pauseAgent
                 : resumeAgent
             }
+            disabled={
+              actionLoading === "pause" ||
+              actionLoading === "resume"
+            }
             className="
               rounded-2xl
               bg-green-500
               py-8
               text-3xl
               font-black
+              disabled:opacity-50
+              disabled:cursor-not-allowed
             "
           >
-            {isActive
-              ? "PAUSE AGENT"
-              : "RESUME AGENT"}
+            {
+              actionLoading === "pause"
+                ? "PAUSING..."
+                : actionLoading === "resume"
+                ? "RESUMING..."
+                : isActive
+                ? "PAUSE AGENT"
+                : "RESUME AGENT"
+            }
           </button>
+
         </div>
+
       </div>
+
     </div>
   );
 }

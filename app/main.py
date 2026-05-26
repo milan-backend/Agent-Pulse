@@ -18,6 +18,9 @@ from app.api.routes import missions
 from app.api.routes import usage
 from app.api.routes import tasks
 
+from app.api.routes.stripe_billing import router as stripe_billing_router
+from app.api.routes.stripe_webhook import router as stripe_webhook_router
+
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -54,3 +57,5 @@ app.include_router(workspace.router, prefix= "/workspace", tags=["Workspace"])
 app.include_router(missions.router)
 app.include_router(usage.router)
 app.include_router(tasks.router)
+app.include_router(stripe_billing_router, prefix="/billing", tags=["Billing"])
+app.include_router(stripe_webhook_router, prefix="/billing", tags=["Stripe Webhook"])

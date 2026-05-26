@@ -25,24 +25,32 @@ export default function LiveStatus({
 }: Props) {
 
   const totalSteps =
-    summary?.total_steps ||
-    summary?.total ||
-    0;
+    Number(
+      summary?.total_steps ||
+      summary?.total ||
+      0
+    );
 
-  const completed = 
-    summary?.completed ||
-    summary?.completed_steps ||
-    0;
+  const completed =
+    Number(
+      summary?.completed ||
+      summary?.completed_steps ||
+      0
+    );
 
-  const failed = 
-    summary?.failed ||
-    summary?.failed_steps ||
-    0;
+  const failed =
+    Number(
+      summary?.failed ||
+      summary?.failed_steps ||
+      0
+    );
 
-  const pending = 
-    summary?.pending ||
-    summary?.pending_steps ||
-    0;
+  const pending =
+    Number(
+      summary?.pending ||
+      summary?.pending_steps ||
+      0
+    );
 
   const successRate =
     totalSteps > 0
@@ -432,11 +440,16 @@ export default function LiveStatus({
                 text-cyan-300
               "
             >
-              {lastSeen
-                ? new Date(
-                    lastSeen
-                  ).toLocaleTimeString()
-                : "Waiting"}
+              {
+                lastSeen &&
+                !isNaN(
+                  new Date(lastSeen).getTime()
+                )
+                  ? new Date(
+                      lastSeen
+                    ).toLocaleTimeString()
+                  : "Waiting"
+              }
             </span>
           </div>
         </div>

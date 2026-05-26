@@ -47,24 +47,40 @@ export default function TimelineEvent({
           justify-between
         ">
 
-          <StatusBadge status={event} />
+          <StatusBadge
+            status={
+              event ||
+              "unknown"
+            }
+          />
 
           <p className="
             text-gray-500
             text-sm
           ">
-            {timestamp}
+            {
+              timestamp
+                ? new Date(
+                    timestamp
+                  ).toLocaleString()
+                : "N/A"
+            }
           </p>
 
         </div>
 
         {cost !== undefined && (
-          <p className="
-            mt-4
-            text-green-400
-            font-semibold
-          ">
-            Cost: ${cost}
+          <p
+            className="
+              mt-4
+              text-green-400
+              font-semibold
+            "
+          >
+            Cost: $
+            {
+              Number(cost).toFixed(4)
+            }
           </p>
         )}
 

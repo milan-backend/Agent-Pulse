@@ -7,13 +7,10 @@ type RequestOptions = {
 };
 
 function authHeaders() {
-
   if (
     typeof window === "undefined"
   ) {
-
     return {
-
       "Content-Type":
         "application/json",
     };
@@ -30,7 +27,6 @@ function authHeaders() {
     );
 
   return {
-
     "Content-Type":
       "application/json",
 
@@ -54,11 +50,9 @@ async function request(
   endpoint: string,
   options: RequestOptions = {}
 ) {
-
   const response = await fetch(
     `${API_URL}${endpoint}`,
     {
-
       method:
         options.method || "GET",
 
@@ -74,12 +68,10 @@ async function request(
   );
 
   if (!response.ok) {
-
     let errorMessage =
       "Request failed";
 
     try {
-
       const errorData =
         await response.json();
 
@@ -89,7 +81,6 @@ async function request(
         errorMessage;
 
     } catch {
-
       errorMessage =
         await response.text();
     }
@@ -103,13 +94,10 @@ async function request(
     await response.text();
 
   try {
-
     return text
       ? JSON.parse(text)
       : {};
-
   } catch {
-
     return text;
   }
 }
@@ -120,18 +108,13 @@ async function request(
 ========================================================= */
 
 export async function signup(
-
   name: string,
-
   email: string,
-
   password: string
 ) {
-
   return request(
     "/auth/signup",
     {
-
       method: "POST",
 
       body: {
@@ -144,16 +127,12 @@ export async function signup(
 }
 
 export async function login(
-
   email: string,
-
   password: string
 ) {
-
   const data = await request(
     "/auth/login",
     {
-
       method: "POST",
 
       body: {
@@ -164,15 +143,18 @@ export async function login(
   );
 
   if (data.access_token) {
-
     localStorage.setItem(
       "token",
       data.access_token
     );
+
+    sessionStorage.setItem(
+      "authenticated",
+      "true"
+    );
   }
 
   if (data.workspace_id) {
-
     localStorage.setItem(
       "workspace_id",
       data.workspace_id
@@ -180,20 +162,86 @@ export async function login(
   }
 
   if (data.user_id) {
-
     localStorage.setItem(
       "user_id",
       data.user_id
     );
   }
 
+  if (data.workspaces) {
+    localStorage.setItem(
+      "workspaces",
+      JSON.stringify(
+        data.workspaces || []
+      )
+    );
+  }
+
   return data;
 }
 
-export async function getCurrentUser() {
 
+/* =========================================================
+   FORGOT PASSWORD
+========================================================= */
+
+export async function forgotPassword(
+  email: string
+) {
+  return request(
+    "/auth/forgot-password",
+    {
+      method: "POST",
+
+      body: {
+        email,
+      },
+    }
+  );
+}
+
+
+/* =========================================================
+   RESET PASSWORD
+========================================================= */
+
+export async function resetPassword(
+  token: string,
+  new_password: string
+) {
+  return request(
+    "/auth/reset-password",
+    {
+      method: "POST",
+
+      body: {
+        token,
+        new_password,
+      },
+    }
+  );
+}
+
+export async function getCurrentUser() {
   return request(
     "/auth/me"
+  );
+}
+
+
+/* =========================================================
+   BILLING
+========================================================= */
+
+export async function createCheckout(
+  planName: string
+) {
+
+  return request(
+    `/billing/checkout/${planName}`,
+    {
+      method: "POST",
+    }
   );
 }
 
@@ -203,7 +251,6 @@ export async function getCurrentUser() {
 ========================================================= */
 
 export async function getDashboardSummary() {
-
   const response =
     await request(
       "/dashboard/summary"
@@ -216,7 +263,6 @@ export async function getDashboardSummary() {
 }
 
 export async function getDashboardSteps() {
-
   const response =
     await request(
       "/dashboard/steps"
@@ -231,7 +277,6 @@ export async function getDashboardSteps() {
 }
 
 export async function getDashboardUsageLogs() {
-
   const response =
     await request(
       "/usage/feed"
@@ -246,18 +291,12 @@ export async function getDashboardUsageLogs() {
 }
 
 export async function getDashboardAgents() {
-
   const response =
     await request(
       "/dashboard/agents"
     );
 
-  return (
-    response?.agents ||
-    response?.data ||
-    response ||
-    []
-  );
+  return response;
 }
 
 
@@ -266,7 +305,6 @@ export async function getDashboardAgents() {
 ========================================================= */
 
 export async function getCostAnalytics() {
-
   const response =
     await request(
       "/analytics/costs"
@@ -279,7 +317,6 @@ export async function getCostAnalytics() {
 }
 
 export async function getBlockedMissions() {
-
   const response =
     await request(
       "/analytics/blocked"
@@ -292,7 +329,6 @@ export async function getBlockedMissions() {
 }
 
 export async function getAgentAnalytics() {
-
   const response =
     await request(
       "/analytics/agents"
@@ -305,7 +341,6 @@ export async function getAgentAnalytics() {
 }
 
 export async function getAnalyticsOverview() {
-
   const response =
     await request(
       "/analytics/overview"
@@ -323,7 +358,6 @@ export async function getAnalyticsOverview() {
 ========================================================= */
 
 export async function getMissionOverview() {
-
   const response =
     await request(
       "/missions/overview"
@@ -336,27 +370,22 @@ export async function getMissionOverview() {
 }
 
 export async function getMissionList() {
-
   const response =
     await request(
       "/missions/list"
     );
 
-  return (
-    response?.missions ||
-    response?.data ||
-    response ||
-    []
-  );
+  return Array.isArray(response)
+    ? response
+    : [];
 }
 
 export async function fetchMissionById(
-  stepId: string
+  missionId: string
 ) {
-
   const response =
     await request(
-      `/missions/${stepId}`
+      `/missions/${missionId}`
     );
 
   return (
@@ -365,12 +394,22 @@ export async function fetchMissionById(
   );
 }
 
-export async function killMission(
-  stepId: string
+export async function retryMission(
+  missionId: string
 ) {
-
   return request(
-    `/missions/${stepId}/kill`,
+    `/missions/${missionId}/retry`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export async function killMission(
+  missionId: string
+) {
+  return request(
+    `/missions/${missionId}/kill`,
     {
       method: "POST",
     }
@@ -378,11 +417,10 @@ export async function killMission(
 }
 
 export async function resumeMission(
-  stepId: string
+  missionId: string
 ) {
-
   return request(
-    `/missions/${stepId}/resume`,
+    `/missions/${missionId}/resume`,
     {
       method: "POST",
     }
@@ -391,35 +429,58 @@ export async function resumeMission(
 
 
 /* =========================================================
-   AGENTS
+   AGENT RUNTIME
 ========================================================= */
 
 export async function createAgent(
   data: {
-
     name: string;
-
     system_prompt?: string;
-
     model?: string;
   }
 ) {
-
   return request(
     "/agents/",
     {
-
       method: "POST",
-
       body: data,
     }
   );
 }
 
-export async function regenerateApiKey(
+export async function getAgent(
   agentId: string
 ) {
+  const response =
+    await request(
+      `/dashboard/agent/${agentId}`
+    );
 
+  return (
+    response?.data ||
+    response
+  );
+}
+
+export async function getAgentTasks(
+  agentId: string
+) {
+  const response =
+    await request(
+      `/agent/${agentId}`
+    );
+
+  return (
+    response?.tasks ||
+    response?.data ||
+    response ||
+    []
+  );
+}
+
+export async function regenerateAgentKey(
+  agentId: string
+) {
   return request(
     `/agents/regenerate-key/${agentId}`,
     {
@@ -428,8 +489,58 @@ export async function regenerateApiKey(
   );
 }
 
-export async function stopAllAgents() {
+export async function updateAgentSettings(
+  agentId: string,
+  payload: {
+    max_steps?: number;
+    max_retries?: number;
+    max_cost?: number;
+    max_repeated_tasks?: number;
+  }
+) {
+  return request(
+    `/agents/${agentId}`,
+    {
+      method: "PUT",
+      body: payload,
+    }
+  );
+}
 
+export async function pauseAgentMission(
+  agentId: string
+) {
+  return request(
+    `/mission-control/pause/${agentId}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export async function resumeAgentMission(
+  agentId: string
+) {
+  return request(
+    `/mission-control/resume/${agentId}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export async function killAgentMission(
+  agentId: string
+) {
+  return request(
+    `/mission-control/kill/${agentId}`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+export async function stopAllAgents() {
   return request(
     "/agents/kill",
     {
@@ -439,38 +550,10 @@ export async function stopAllAgents() {
 }
 
 export async function resumeAllAgents() {
-
   return request(
     "/agents/resume",
     {
       method: "POST",
-    }
-  );
-}
-
-export async function updateAgent(
-
-  agentId: string,
-
-  payload: {
-
-    max_steps?: number;
-
-    max_retries?: number;
-
-    max_cost?: number;
-
-    max_repeated_tasks?: number;
-  }
-) {
-
-  return request(
-    `/agents/${agentId}`,
-    {
-
-      method: "PUT",
-
-      body: payload,
     }
   );
 }
@@ -483,13 +566,10 @@ export async function updateAgent(
 export async function executeStep(
   data: any
 ) {
-
   return request(
     "/steps/execute",
     {
-
       method: "POST",
-
       body: data,
     }
   );
@@ -498,7 +578,6 @@ export async function executeStep(
 export async function getStepStatus(
   stepId: string
 ) {
-
   const response =
     await request(
       `/steps/${stepId}`
@@ -513,7 +592,6 @@ export async function getStepStatus(
 export async function retryStep(
   stepId: string
 ) {
-
   return request(
     `/steps/retry/${stepId}`,
     {
@@ -525,7 +603,6 @@ export async function retryStep(
 export async function getStepLogs(
   stepId: string
 ) {
-
   const response =
     await request(
       `/steps/${stepId}/logs`
@@ -546,46 +623,37 @@ export async function getStepLogs(
 
 export async function createWorkspaceMember(
   data: {
-
     email: string;
-
     role: string;
   }
 ) {
-
   return request(
     "/workspace/add-member",
     {
-
       method: "POST",
-
       body: data,
     }
   );
 }
 
 export async function updateWorkspaceMemberRole(
-
   email: string,
-
   role: string
 ) {
-
   return request(
     `/workspace/members/role`,
     {
       method: "PATCH",
 
-      body : {
+      body: {
         email,
         role,
-      }
+      },
     }
   );
 }
 
 export async function getWorkspaceMembers() {
-
   const response =
     await request(
       "/workspace/members"
@@ -602,7 +670,6 @@ export async function getWorkspaceMembers() {
 export async function deleteWorkspaceMember(
   userId: string
 ) {
-
   return request(
     `/workspace/members/${userId}`,
     {
@@ -617,7 +684,6 @@ export async function deleteWorkspaceMember(
 ========================================================= */
 
 export async function getMcpTools() {
-
   const response =
     await request(
       "/mcp/tools"
@@ -634,13 +700,10 @@ export async function getMcpTools() {
 export async function executeMcp(
   data: any
 ) {
-
   return request(
     "/mcp/execute",
     {
-
       method: "POST",
-
       body: data,
     }
   );
@@ -652,7 +715,6 @@ export async function executeMcp(
 ========================================================= */
 
 export function createDashboardSocket(
-
   onMessage: (
     data: any
   ) => void,
@@ -661,7 +723,6 @@ export function createDashboardSocket(
 
   onClose?: () => void
 ) {
-
   const WS_URL =
     API_URL.replace(
       "http://",
@@ -671,13 +732,17 @@ export function createDashboardSocket(
       "wss://"
     );
 
+  const workspaceId =
+    localStorage.getItem(
+      "workspace_id"
+    );
+
   const socket =
     new WebSocket(
-      `${WS_URL}/ws/live`
+      `${WS_URL}/ws/live?workspace_id=${workspaceId}`
     );
 
   socket.onopen = () => {
-
     console.log(
       "WebSocket connected"
     );
@@ -690,9 +755,7 @@ export function createDashboardSocket(
   socket.onmessage = (
     event
   ) => {
-
     try {
-
       const parsed =
         JSON.parse(
           event.data
@@ -701,7 +764,6 @@ export function createDashboardSocket(
       onMessage(parsed);
 
     } catch (err) {
-
       console.error(
         "WebSocket parse error",
         err
@@ -712,7 +774,6 @@ export function createDashboardSocket(
   socket.onerror = (
     err
   ) => {
-
     console.error(
       "WebSocket error",
       err
@@ -720,7 +781,6 @@ export function createDashboardSocket(
   };
 
   socket.onclose = () => {
-
     console.log(
       "WebSocket disconnected"
     );
@@ -739,12 +799,10 @@ export function createDashboardSocket(
 ========================================================= */
 
 export function logout() {
-
   if (
     typeof window !==
     "undefined"
   ) {
-
     localStorage.removeItem(
       "token"
     );
@@ -755,6 +813,14 @@ export function logout() {
 
     localStorage.removeItem(
       "user_id"
+    );
+
+    localStorage.removeItem(
+      "workspaces"
+    );
+
+    sessionStorage.removeItem(
+      "authenticated"
     );
 
     window.location.href =

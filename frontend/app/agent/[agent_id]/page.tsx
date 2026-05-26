@@ -1,8 +1,5 @@
 "use client";
 
-import {API_URL} from 
-"@/components/api";
-
 import Link from "next/link";
 
 import {
@@ -27,6 +24,13 @@ import {
   useParams,
 } from "next/navigation";
 
+import { toast } from "sonner";
+
+import {
+  getAgent,
+  pauseAgentMission,
+} from "@/components/api";
+
 interface Agent {
   id: string;
   name: string;
@@ -42,8 +46,11 @@ interface Agent {
 }
 
 export default function AgentRuntimePage() {
+
   const params = useParams();
-  const agentId = params?.agent_id;
+
+  const agentId =
+    params?.agent_id as string;
 
   const [agent, setAgent] =
     useState<Agent | null>(null);
@@ -51,84 +58,151 @@ export default function AgentRuntimePage() {
   const [loading, setLoading] =
     useState(true);
 
-  useEffect(() => {
-    async function fetchAgent() {
-      try {
-        const token =
-          localStorage.getItem(
-            "token"
-          );
+  const [pausing, setPausing] =
+    useState(false);
 
-        const workspaceId =
-          localStorage.getItem(
-            "workspace_id"
-          );
+  async function fetchAgent() {
 
-        const response =
-          await fetch(
-            `${API_URL}/dashboard/agent/${agentId}`,
-            {
-              headers: {
-                Authorization:
-                  `Bearer ${token}`,
-                "workspace-id":
-                  workspaceId || "",
-              },
-            }
-          );
+    try {
 
-        const data =
-          await response.json();
+      setLoading(true);
 
-        setAgent(data);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
+      const response =
+        await getAgent(agentId);
+
+      const agentData =
+        response?.agent || response;
+
+      const policy =
+        response?.policy || {};
+
+      const normalizedAgent = {
+
+        id:
+          agentData?.id || "",
+
+        name:
+          agentData?.name ||
+          "Unknown Agent",
+
+        is_active:
+          agentData?.is_active ??
+          false,
+
+        is_killed:
+          agentData?.is_killed ??
+          false,
+
+        max_cost:
+          Number(
+            policy?.max_cost ??
+            0
+          ),
+
+        max_steps:
+          Number(
+            policy?.max_steps ??
+            0
+          ),
+
+        max_retries:
+          Number(
+            policy?.max_retries ??
+            0
+          ),
+
+        max_repeated_tasks:
+          Number(
+            policy?.max_repeated_tasks ??
+            0
+          ),
+
+        mission_count:
+          Number(
+            response?.mission_count ??
+            response?.stats?.mission_count ??
+            0
+          ),
+
+        total_cost:
+          Number(
+            response?.total_cost ??
+            response?.stats?.total_cost ??
+            0
+          ),
+
+        created_at:
+          agentData?.created_at ||
+          null,
+      };
+
+      setAgent(
+        normalizedAgent
+      );
+
+    } catch (error) {
+
+      console.error(error);
+
+      toast.error(
+        "Failed to load agent"
+      );
+
+    } finally {
+
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
 
     if (agentId) {
+
       fetchAgent();
     }
+
   }, [agentId]);
 
   async function pauseAgent() {
+
     try {
-      const token =
-        localStorage.getItem(
-          "token"
-        );
 
-      const workspaceId =
-        localStorage.getItem(
-          "workspace_id"
-        );
+      setPausing(true);
 
-      await fetch(
-        `${API_URL}/mission-control/pause/${agentId}`,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${token}`,
-            "workspace-id":
-              workspaceId || "",
-          },
-        }
+      await pauseAgentMission(
+        agentId
       );
 
-      alert("Agent paused.");
+      toast.success(
+        "Agent paused"
+      );
 
-      window.location.reload();
+      if (agent) {
+
+        setAgent({
+          ...agent,
+          is_active: false,
+        });
+      }
+
     } catch (error) {
+
       console.error(error);
+
+      toast.error(
+        "Failed to pause agent"
+      );
+
+    } finally {
+
+      setPausing(false);
     }
   }
 
   if (loading) {
+
     return (
+
       <div
         className="
           min-h-screen
@@ -139,13 +213,31 @@ export default function AgentRuntimePage() {
           justify-center
         "
       >
-        Loading agent...
+
+        <div
+          className="
+            rounded-3xl
+            border
+            border-cyan-500/10
+            bg-[#08111f]
+            px-10
+            py-8
+            text-zinc-400
+          "
+        >
+
+          Loading agent...
+
+        </div>
+
       </div>
     );
   }
 
   if (!agent) {
+
     return (
+
       <div
         className="
           min-h-screen
@@ -156,12 +248,15 @@ export default function AgentRuntimePage() {
           justify-center
         "
       >
+
         Agent not found.
+
       </div>
     );
   }
 
   return (
+
     <div
       className="
         min-h-screen
@@ -170,6 +265,7 @@ export default function AgentRuntimePage() {
         flex
       "
     >
+
       {/* SIDEBAR */}
 
       <aside
@@ -182,13 +278,16 @@ export default function AgentRuntimePage() {
           p-6
         "
       >
+
         <div>
+
           <h1
             className="
               text-5xl
               font-black
             "
           >
+
             <span className="text-cyan-400">
               Agent
             </span>
@@ -196,6 +295,7 @@ export default function AgentRuntimePage() {
             <span className="text-white">
               Pulse
             </span>
+
           </h1>
 
           <p
@@ -204,8 +304,11 @@ export default function AgentRuntimePage() {
               text-zinc-400
             "
           >
+
             Runtime Agent Control
+
           </p>
+
         </div>
 
         {/* SIDEBAR BUTTONS */}
@@ -216,6 +319,7 @@ export default function AgentRuntimePage() {
             space-y-4
           "
         >
+
           <Link
             href="/dashboard/agents"
             className="
@@ -231,13 +335,16 @@ export default function AgentRuntimePage() {
               hover:bg-cyan-500/10
             "
           >
+
             <ArrowLeft size={18} />
 
             Back To Agents
+
           </Link>
 
           <button
             onClick={pauseAgent}
+            disabled={pausing}
             className="
               w-full
               flex
@@ -253,11 +360,18 @@ export default function AgentRuntimePage() {
               text-green-300
               transition-all
               hover:bg-green-500/30
+              disabled:opacity-50
             "
           >
+
             <Pause size={18} />
 
-            Pause Agent
+            {
+              pausing
+                ? "Pausing..."
+                : "Pause Agent"
+            }
+
           </button>
 
           <Link
@@ -278,9 +392,11 @@ export default function AgentRuntimePage() {
               hover:bg-cyan-500/30
             "
           >
+
             <Settings size={18} />
 
             Agent Settings
+
           </Link>
 
           <Link
@@ -301,10 +417,13 @@ export default function AgentRuntimePage() {
               hover:bg-purple-500/30
             "
           >
+
             <Activity size={18} />
 
             Agent Tasks
+
           </Link>
+
         </div>
 
         {/* STATUS */}
@@ -319,12 +438,15 @@ export default function AgentRuntimePage() {
             p-6
           "
         >
+
           <p
             className="
               text-zinc-400
             "
           >
+
             Runtime Status
+
           </p>
 
           <div
@@ -335,6 +457,7 @@ export default function AgentRuntimePage() {
               justify-between
             "
           >
+
             <h2
               className={`
                 text-4xl
@@ -347,9 +470,11 @@ export default function AgentRuntimePage() {
                 }
               `}
             >
+
               {agent.is_active
                 ? "ACTIVE"
                 : "PAUSED"}
+
             </h2>
 
             <div
@@ -371,8 +496,11 @@ export default function AgentRuntimePage() {
                 }
               `}
             />
+
           </div>
+
         </div>
+
       </aside>
 
       {/* MAIN */}
@@ -384,6 +512,7 @@ export default function AgentRuntimePage() {
           overflow-y-auto
         "
       >
+
         {/* HEADER */}
 
         <div
@@ -395,6 +524,7 @@ export default function AgentRuntimePage() {
             flex-wrap
           "
         >
+
           <div
             className="
               flex
@@ -402,6 +532,7 @@ export default function AgentRuntimePage() {
               gap-6
             "
           >
+
             <div
               className="
                 h-24
@@ -416,15 +547,18 @@ export default function AgentRuntimePage() {
                 shadow-[0_0_35px_rgba(34,211,238,0.15)]
               "
             >
+
               <Cpu
                 size={48}
                 className="
                   text-cyan-300
                 "
               />
+
             </div>
 
             <div>
+
               <h1
                 className="
                   text-6xl
@@ -434,7 +568,9 @@ export default function AgentRuntimePage() {
                   break-words
                 "
               >
+
                 {agent.name}
+
               </h1>
 
               <p
@@ -444,9 +580,13 @@ export default function AgentRuntimePage() {
                   text-xl
                 "
               >
+
                 AI Runtime Agent
+
               </p>
+
             </div>
+
           </div>
 
           {/* STATUS */}
@@ -471,6 +611,7 @@ export default function AgentRuntimePage() {
               }
             `}
           >
+
             <p className="text-zinc-400">
               Runtime Status
             </p>
@@ -483,6 +624,7 @@ export default function AgentRuntimePage() {
                 gap-3
               "
             >
+
               <ShieldCheck
                 className={`
                   ${
@@ -505,12 +647,17 @@ export default function AgentRuntimePage() {
                   }
                 `}
               >
+
                 {agent.is_active
                   ? "ACTIVE"
                   : "PAUSED"}
+
               </span>
+
             </div>
+
           </div>
+
         </div>
 
         {/* METRICS */}
@@ -525,9 +672,14 @@ export default function AgentRuntimePage() {
             2xl:grid-cols-4
           "
         >
+
           <Card
             title="Missions"
-            value={agent.mission_count}
+            value={
+              Number(
+                agent.mission_count || 0
+              ).toLocaleString()
+            }
             icon={
               <Activity
                 size={22}
@@ -539,7 +691,7 @@ export default function AgentRuntimePage() {
           <Card
             title="Total Cost"
             value={`$${Number(
-              agent.total_cost
+              agent.total_cost || 0
             ).toLocaleString()}`}
             icon={
               <DollarSign
@@ -552,7 +704,7 @@ export default function AgentRuntimePage() {
           <Card
             title="Max Cost"
             value={`$${Number(
-              agent.max_cost
+              agent.max_cost || 0
             ).toLocaleString()}`}
             icon={
               <DollarSign
@@ -564,7 +716,9 @@ export default function AgentRuntimePage() {
 
           <Card
             title="Max Steps"
-            value={agent.max_steps.toLocaleString()}
+            value={Number(
+              agent.max_steps || 0
+            ).toLocaleString()}
             icon={
               <Cpu
                 size={22}
@@ -574,8 +728,10 @@ export default function AgentRuntimePage() {
           />
 
           <Card
-            title="Retries"
-            value={agent.max_retries.toLocaleString()}
+            title="Max Retries"
+            value={Number(
+              agent.max_retries || 0
+            ).toLocaleString()}
             icon={
               <RotateCcw
                 size={22}
@@ -585,8 +741,10 @@ export default function AgentRuntimePage() {
           />
 
           <Card
-            title="Repeated Tasks"
-            value={agent.max_repeated_tasks.toLocaleString()}
+            title="Max Repeated Tasks"
+            value={Number(
+              agent.max_repeated_tasks || 0
+            ).toLocaleString()}
             icon={
               <Repeat
                 size={22}
@@ -609,6 +767,7 @@ export default function AgentRuntimePage() {
               />
             }
           />
+
         </div>
 
         {/* INFO */}
@@ -621,6 +780,7 @@ export default function AgentRuntimePage() {
             md:grid-cols-2
           "
         >
+
           <div
             className="
               rounded-3xl
@@ -630,6 +790,7 @@ export default function AgentRuntimePage() {
               p-8
             "
           >
+
             <p className="text-zinc-400">
               Agent ID
             </p>
@@ -643,8 +804,11 @@ export default function AgentRuntimePage() {
                 text-cyan-300
               "
             >
+
               {agent.id}
+
             </h2>
+
           </div>
 
           <div
@@ -656,6 +820,7 @@ export default function AgentRuntimePage() {
               p-8
             "
           >
+
             <p className="text-zinc-400">
               Agent Created
             </p>
@@ -667,15 +832,21 @@ export default function AgentRuntimePage() {
                 font-black
               "
             >
+
               {agent.created_at
                 ? new Date(
                     agent.created_at
                   ).toLocaleString()
                 : "Not Available"}
+
             </h2>
+
           </div>
+
         </div>
+
       </main>
+
     </div>
   );
 }
@@ -689,7 +860,9 @@ function Card({
   value: string | number;
   icon: React.ReactNode;
 }) {
+
   return (
+
     <div
       className="
         rounded-3xl
@@ -704,6 +877,7 @@ function Card({
         min-w-0
       "
     >
+
       <div
         className="
           flex
@@ -712,7 +886,6 @@ function Card({
           gap-5
         "
       >
-        {/* LEFT */}
 
         <div
           className="
@@ -721,6 +894,7 @@ function Card({
             overflow-hidden
           "
         >
+
           <p
             className="
               text-sm
@@ -730,7 +904,9 @@ function Card({
               truncate
             "
           >
+
             {title}
+
           </p>
 
           <h2
@@ -749,11 +925,12 @@ function Card({
               max-w-full
             "
           >
-            {value}
-          </h2>
-        </div>
 
-        {/* ICON */}
+            {value}
+
+          </h2>
+
+        </div>
 
         <div
           className="
@@ -773,9 +950,13 @@ function Card({
             shadow-[0_0_20px_rgba(34,211,238,0.15)]
           "
         >
+
           {icon}
+
         </div>
+
       </div>
+
     </div>
   );
 }

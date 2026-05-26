@@ -18,6 +18,8 @@ import {
 
 import LiveFeed from "@/components/LiveFeed";
 
+import { toast } from "sonner";
+
 export default function UsageLogsPage() {
 
   // =========================
@@ -41,15 +43,36 @@ export default function UsageLogsPage() {
       const response =
         await getDashboardUsageLogs();
 
-      setLogs(
-        Array.isArray(response)
-          ? response
-          : response?.logs || []
-      );
+      const normalizedLogs =
+        (
+          Array.isArray(response)
+            ? response
+            : response?.logs || []
+        ).sort(
+          (
+            a: any,
+            b: any
+          ) =>
+            new Date(
+              b?.created_at || 0
+            ).getTime()
+            -
+            new Date(
+              a?.created_at || 0
+            ).getTime()
+        );
+
+      setLogs(normalizedLogs);
 
     } catch (err) {
 
       console.error(err);
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to load usage logs"
+      );
 
     } finally {
 
@@ -65,6 +88,16 @@ export default function UsageLogsPage() {
 
     loadLogs();
 
+    const interval =
+      setInterval(() => {
+
+        loadLogs();
+
+      }, 10000);
+
+    return () =>
+      clearInterval(interval);
+
   }, []);
 
   // =========================
@@ -79,7 +112,7 @@ export default function UsageLogsPage() {
       ) => (
         total +
         Number(
-          log?.cost || 0
+          log?.cost ?? 0
         )
       ),
       0
@@ -90,12 +123,31 @@ export default function UsageLogsPage() {
       (
         total,
         log
-      ) => (
-        total +
-        Number(
-          log?.total_tokens || 0
-        )
-      ),
+      ) => {
+
+        const prompt =
+          Number(
+            log?.prompt_tokens ?? 0
+          );
+
+        const completion =
+          Number(
+            log?.completion_tokens ?? 0
+          );
+
+        const directTotal =
+          Number(
+            log?.total_tokens ?? 0
+          );
+
+        return (
+          total +
+          (
+            directTotal ||
+            prompt + completion
+          )
+        );
+      },
       0
     );
 
@@ -107,7 +159,7 @@ export default function UsageLogsPage() {
       ) => (
         total +
         Number(
-          log?.prompt_tokens || 0
+          log?.prompt_tokens ?? 0
         )
       ),
       0
@@ -121,11 +173,14 @@ export default function UsageLogsPage() {
       ) => (
         total +
         Number(
-          log?.completion_tokens || 0
+          log?.completion_tokens ?? 0
         )
       ),
       0
     );
+
+  const hasLogs =
+    logs.length > 0;
 
   // =========================
   // FORMAT NUMBERS
@@ -205,7 +260,7 @@ export default function UsageLogsPage() {
     {
       title: "Runtime Cost",
       value:
-        `$${totalCost.toFixed(2)}`,
+        `$${totalCost.toFixed(4)}`,
       icon: Coins,
       color: `
         border-yellow-500/20
@@ -380,8 +435,7 @@ export default function UsageLogsPage() {
 
         {cards.map(
           (
-            card,
-            index
+            card
           ) => {
 
             const Icon =
@@ -390,7 +444,7 @@ export default function UsageLogsPage() {
             return (
 
               <div
-                key={index}
+                key={card.title}
                 className={`
                   rounded-[30px]
                   border

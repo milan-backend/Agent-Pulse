@@ -31,54 +31,92 @@ export default function UsageCharts({
   // RUNTIME DATA
   // =========================
 
+  const totalCost =
+    Number(
+      usage?.total_cost || 0
+    )
+
+  const averageCost =
+    Number(
+      usage?.average_cost || 0
+    )
+
+  const totalSteps =
+    Number(
+      usage?.total_steps || 0
+    )
+
+  const successfulSteps =
+    Number(
+      usage?.successful_steps || 0
+    )
+
+  const failedSteps =
+    Number(
+      usage?.failed_steps || 0
+    )
+
+  const cacheHits =
+    Number(
+      usage?.cache_hits || 0
+    )
+
+  const totalTokens =
+    Number(
+      usage?.total_tokens || 0
+    )
+
+  const successRate = Math.min(
+    100,
+    Math.max(
+      0,
+      Number(
+        usage?.success_rate || 0
+      )
+    )
+  )
+
   const runtimeData = [
 
     {
       name: "Steps",
-      cost:
-        Number(
-          usage?.total_cost || 0
-        ),
-
-      missions:
-        Number(
-          usage?.total_steps || 0
-        ),
+      cost: totalCost,
+      missions: totalSteps,
     },
 
     {
       name: "Success",
-      cost:
-        Number(
-          usage?.average_cost || 0
-        ),
-
-      missions:
-        Number(
-          usage?.successful_steps || 0
-        ),
+      cost: averageCost,
+      missions: successfulSteps,
     },
 
     {
       name: "Failed",
       cost: 0,
-
-      missions:
-        Number(
-          usage?.failed_steps || 0
-        ),
+      missions: failedSteps,
     },
 
     {
       name: "Cache",
       cost: 0,
-
-      missions:
-        Number(
-          usage?.cache_hits || 0
-        ),
+      missions: cacheHits,
     },
-  ];
+  ]
+
+  const hasAnalytics =
+    totalSteps > 0 ||
+    totalCost > 0
+
+  runtimeData.forEach(
+    (item) => {
+
+      item.cost =
+        Number(item.cost) || 0
+
+      item.missions =
+        Number(item.missions) || 0
+    }
+  )
 
   return (
 
@@ -240,7 +278,12 @@ export default function UsageCharts({
                 stroke="#64748b"
               />
 
-              <Tooltip />
+              <Tooltip
+                formatter={(value) => [
+                  `$${value}`,
+                  "Cost",
+                ]}
+              />
 
               <Area
                 type="monotone"
@@ -364,7 +407,12 @@ export default function UsageCharts({
                   stroke="#64748b"
                 />
 
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) => [
+                    value,
+                    "Missions",
+                  ]}
+                />
 
                 <Bar
                   dataKey="missions"
@@ -490,9 +538,7 @@ export default function UsageCharts({
                     "
                   >
                     $
-                    {Number(
-                      usage?.total_cost || 0
-                    ).toFixed(2)}
+                    {totalCost.toFixed(4)}
                   </h3>
 
                 </div>
@@ -540,7 +586,7 @@ export default function UsageCharts({
                       text-cyan-300
                     "
                   >
-                    {usage?.total_tokens || 0}
+                    {totalTokens.toLocaleString()}
                   </h3>
 
                 </div>
@@ -588,7 +634,7 @@ export default function UsageCharts({
                       text-purple-300
                     "
                   >
-                    {usage?.success_rate || 0}%
+                    {successRate}%
                   </h3>
 
                 </div>

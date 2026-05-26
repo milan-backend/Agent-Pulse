@@ -5,7 +5,7 @@ from sqlalchemy import pool
 
 from alembic import context
 from app.db.base import Base
-from app.models import agent,audit_log,durable_step,usage,user,workspace,workspace_member
+from app.models import agent,audit_log,durable_step,usage,user,workspace,workspace_member,agent_policy,billing_event,plan,payment_transaction,workspace_subscription,workspace_usage_limit
 
 import os
 from dotenv import load_dotenv

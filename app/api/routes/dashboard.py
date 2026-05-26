@@ -11,23 +11,67 @@ from app.db.session import get_db
 
 from app.models.user import User
 from app.models.agent import Agent
+from app.models.workspace import Workspace
+from app.models.agent_policy import AgentPolicy
 from app.models.durable_step import DurableStep
 from app.models.usage import Usage
+from app.tasks.step_tasks import process_step
 
 from app.api.deps_user import (
     get_current_user
 )
 
-from app.api.routes.workspace_access import (
+from app.core.workspace_access import (
     get_workspace_membership
+)
+
+from app.services.feature_access import (
+    require_feature
+)
+
+from app.services.analytics_service import (
+    get_workspace_agent_ids,
+    get_total_cost,
+    get_token_analytics
 )
 
 router = APIRouter()
 
 
-# =========================
+# ============================================
+# VALIDATE FEATURE ACCESS
+# ============================================
+
+def validate_feature_access(
+    db,
+    workspace_id,
+    feature_name
+):
+
+    workspace = (
+        db.query(Workspace)
+        .filter(
+            Workspace.id == workspace_id
+        )
+        .first()
+    )
+
+    if not workspace:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    require_feature(
+        workspace,
+        feature_name
+    )
+
+
+# ============================================
 # DASHBOARD SUMMARY
-# =========================
+# ============================================
 
 @router.get("/summary")
 def dashboard_summary(
@@ -49,47 +93,79 @@ def dashboard_summary(
         workspace_id=workspace_id
     )
 
-    total_steps = db.query(DurableStep).filter(
-        DurableStep.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
+    validate_feature_access(
+        db,
+        workspace_id,
+        "analytics"
+    )
+
+    # GET AGENT IDS
+
+    agent_ids = get_workspace_agent_ids(
+        db,
+        workspace_id
+    )
+
+    # TOTAL STEPS
+
+    total_steps = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.agent_id.in_(
+                agent_ids
             )
         )
-    ).count()
+        .count()
+    )
 
-    completed = db.query(DurableStep).filter(
-        DurableStep.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        DurableStep.status == "completed"
-    ).count()
+    # COMPLETED
 
-    failed = db.query(DurableStep).filter(
-        DurableStep.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        DurableStep.status == "failed"
-    ).count()
+    completed = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.agent_id.in_(
+                agent_ids
+            ),
 
-    pending = db.query(DurableStep).filter(
-        DurableStep.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        DurableStep.status.in_([
-            "pending",
-            "running"
-        ])
-    ).count()
+            DurableStep.status ==
+            "completed"
+        )
+        .count()
+    )
+
+    # FAILED
+
+    failed = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.agent_id.in_(
+                agent_ids
+            ),
+
+            DurableStep.status ==
+            "failed"
+        )
+        .count()
+    )
+
+    # PENDING
+
+    pending = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.agent_id.in_(
+                agent_ids
+            ),
+
+            DurableStep.status.in_([
+                "pending",
+                "running"
+            ])
+        )
+        .count()
+    )
+
+    # SUCCESS RATE
 
     success_rate = (
         (completed / total_steps) * 100
@@ -119,9 +195,9 @@ def dashboard_summary(
     }
 
 
-# =========================
+# ============================================
 # USAGE SUMMARY
-# =========================
+# ============================================
 
 @router.get("/usage")
 def usage_summary(
@@ -143,44 +219,89 @@ def usage_summary(
         workspace_id=workspace_id
     )
 
-    total_calls = db.query(Usage).filter(
-        Usage.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
+    validate_feature_access(
+        db,
+        workspace_id,
+        "usage_logs"
+    )
+
+    # GET AGENT IDS
+
+    agent_ids = get_workspace_agent_ids(
+        db,
+        workspace_id
+    )
+
+    # TOTAL CALLS
+
+    total_calls = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(
+                agent_ids
             )
         )
-    ).count()
+        .count()
+    )
 
-    executions = db.query(Usage).filter(
-        Usage.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        Usage.action == "execute"
-    ).count()
+    # EXECUTIONS
 
-    retries = db.query(Usage).filter(
-        Usage.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        Usage.action == "retry"
-    ).count()
+    executions = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(
+                agent_ids
+            ),
 
-    cache_hits = db.query(Usage).filter(
-        Usage.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
-            )
-        ),
-        Usage.action == "cache_hit"
-    ).count()
+            Usage.action ==
+            "execute"
+        )
+        .count()
+    )
+
+    # RETRIES
+
+    retries = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(
+                agent_ids
+            ),
+
+            Usage.action ==
+            "retry"
+        )
+        .count()
+    )
+
+    # CACHE HITS
+
+    cache_hits = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(
+                agent_ids
+            ),
+
+            Usage.action ==
+            "cache_hit"
+        )
+        .count()
+    )
+
+    # TOTAL COST
+
+    total_cost = get_total_cost(
+        db,
+        agent_ids
+    )
+
+    # TOKEN ANALYTICS
+
+    token_data = get_token_analytics(
+        db,
+        agent_ids
+    )
 
     return {
 
@@ -194,13 +315,34 @@ def usage_summary(
             retries,
 
         "cache_hits":
-            cache_hits
+            cache_hits,
+
+        "total_cost":
+            round(
+                total_cost,
+                4
+            ),
+
+        "prompt_tokens":
+            token_data[
+                "prompt_tokens"
+            ],
+
+        "completion_tokens":
+            token_data[
+                "completion_tokens"
+            ],
+
+        "total_tokens":
+            token_data[
+                "total_tokens"
+            ]
     }
 
 
-# =========================
+# ============================================
 # LIST STEPS
-# =========================
+# ============================================
 
 @router.get("/steps")
 def list_steps(
@@ -222,21 +364,41 @@ def list_steps(
         workspace_id=workspace_id
     )
 
-    steps = db.query(DurableStep).filter(
-        DurableStep.agent_id.in_(
-            db.query(Agent.id).filter(
-                Agent.workspace_id ==
-                workspace_id
+    validate_feature_access(
+        db,
+        workspace_id,
+        "missions"
+    )
+
+    # GET AGENT IDS
+
+    agent_ids = get_workspace_agent_ids(
+        db,
+        workspace_id
+    )
+
+    # GET STEPS
+
+    steps = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.agent_id.in_(
+                agent_ids
             )
         )
-    ).limit(20).all()
+        .order_by(
+            DurableStep.created_at.desc()
+        )
+        .limit(20)
+        .all()
+    )
 
     return steps
 
 
-# =========================
+# ============================================
 # USAGE LOGS
-# =========================
+# ============================================
 
 @router.get("/usage/logs")
 def usage_logs(
@@ -258,25 +420,41 @@ def usage_logs(
         workspace_id=workspace_id
     )
 
-    agent_ids = db.query(Agent.id).filter(
-        Agent.workspace_id ==
+    validate_feature_access(
+        db,
+        workspace_id,
+        "usage_logs"
+    )
+
+    # GET AGENT IDS
+
+    agent_ids = get_workspace_agent_ids(
+        db,
         workspace_id
-    ).all()
+    )
 
-    agent_ids = [a[0] for a in agent_ids]
+    # GET LOGS
 
-    logs = db.query(Usage).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).order_by(
-        Usage.timestamp.desc()
-    ).limit(50).all()
+    logs = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(
+                agent_ids
+            )
+        )
+        .order_by(
+            Usage.created_at.desc()
+        )
+        .limit(50)
+        .all()
+    )
 
     return logs
 
 
-# =========================
+# ============================================
 # SINGLE AGENT DETAILS
-# =========================
+# ============================================
 
 @router.get("/agent/{agent_id}")
 def get_agent_by_id(
@@ -313,14 +491,21 @@ def get_agent_by_id(
         .first()
     )
 
-    # NOT FOUND
-
     if not agent:
 
         raise HTTPException(
             status_code=404,
             detail="Agent not found"
         )
+
+    policy = (
+        db.query(AgentPolicy)
+        .filter(
+            AgentPolicy.agent_id ==
+            agent.id
+        )
+        .first()
+    )
 
     # TOTAL MISSIONS
 
@@ -333,9 +518,9 @@ def get_agent_by_id(
         .count()
     )
 
-    # USAGE RECORDS
+    # TOTAL COST
 
-    steps = (
+    usage_records = (
         db.query(Usage)
         .filter(
             Usage.agent_id ==
@@ -344,19 +529,14 @@ def get_agent_by_id(
         .all()
     )
 
-    # TOTAL COST
-
-    total_cost = 0
-
-    for step in steps:
-
-        if step.cost:
-
-            total_cost += (
-                step.cost
-            )
+    total_cost = sum(
+        record.cost or 0
+        for record in usage_records
+    )
 
     return {
+
+        "agent": {
 
         "id":
             str(agent.id),
@@ -364,38 +544,45 @@ def get_agent_by_id(
         "name":
             agent.name,
 
+        "status":
+            agent.status,
+
         "is_active":
             agent.is_active,
 
-        "is_killed":
-            agent.is_killed,
+        "created_at":
+            agent.created_at
+        },
 
-        "max_cost":
-            agent.max_cost,
+        "policy":{
+            "max_cost":
+                policy.max_cost
+                if policy else 5,
 
-        "max_steps":
-            agent.max_steps,
+            "max_steps":
+                policy.max_steps
+                if policy else 20,
 
-        "max_retries":
-            agent.max_retries,
+            "max_retries":
+                policy.max_retries
+                if policy else 3,
 
-        "max_repeated_tasks":
-            agent.max_repeated_tasks,
+            "max_repeated_tasks":
+                policy.max_repeated_tasks
+                if policy else 3
+        },
 
         "mission_count":
             mission_count,
 
         "total_cost":
-            total_cost,
-
-        "created_at":
-            agent.created_at
+            round(total_cost,4)
     }
 
 
-# =========================
+# ============================================
 # GET AGENTS
-# =========================
+# ============================================
 
 @router.get("/agents")
 def get_agents(
@@ -411,11 +598,15 @@ def get_agents(
 
     # VALIDATE MEMBERSHIP
 
-    membership = get_workspace_membership(
-        db=db,
-        user_id=current_user.id,
-        workspace_id=workspace_id
+    membership = (
+        get_workspace_membership(
+            db=db,
+            user_id=current_user.id,
+            workspace_id=workspace_id
+        )
     )
+
+    # GET AGENTS
 
     agents = (
         db.query(Agent)
@@ -428,19 +619,97 @@ def get_agents(
 
     return {
 
-         "total_agents": len(agents),
-         "role" : membership.role,
+        "total_agents":
+            len(agents),
+
+        "role":
+            membership.role,
 
         "agents": [
 
             {
+
                 "id":
                     str(agent.id),
 
                 "name":
-                    agent.name
+                    agent.name,
+
+                "status":
+                    agent.status
+
             }
 
             for agent in agents
         ]
+    }
+
+@router.post("/missions/{step_id}/retry")
+def retry_mission(
+    step_id: str,
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+
+    # MEMBERSHIP
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=workspace_id
+    )
+
+    # ROLE CHECK
+    if membership.role not in [
+        "admin",
+        "operator"
+    ]:
+
+        return {
+            "error":
+            "Insufficient permissions"
+        }
+
+    # FEATURE ACCESS
+    validate_feature_access(
+        db,
+        workspace_id,
+        "missions"
+    )
+
+    # STEP
+    step = (
+        db.query(DurableStep)
+        .filter(
+            DurableStep.id == step_id,
+            DurableStep.workspace_id == workspace_id
+        )
+        .first()
+    )
+
+    if not step:
+
+        return {
+            "error":
+            "Mission not found"
+        }
+
+    # STATUS CHECK
+    if step.status != "failed":
+
+        return {
+            "message":
+            "Mission is not failed"
+        }
+
+    # RESET
+    step.status = "pending"
+
+    db.commit()
+
+    process_step.delay(str(step.id))
+
+    return {
+        "message":
+        "Mission retry scheduled"
     }

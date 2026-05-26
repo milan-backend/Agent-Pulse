@@ -3,26 +3,52 @@
 interface Props {
   title: string;
   subtitle?: string;
+  centered?: boolean;
+  size?: "sm" | "md" | "lg";
 }
 
 export default function SectionHeader({
   title,
   subtitle,
+  centered = false,
+  size = "lg",
 }: Props) {
 
   return (
 
-    <div>
+    <div
+      className={
+        centered
+          ? "text-center"
+          : ""
+      }
+    >
 
       {/* TITLE */}
 
-      <h1 className="
-        text-5xl
-        md:text-6xl
-        font-black
-        tracking-tight
-        leading-none
-      ">
+      <h1
+        className={`
+          ${
+            size === "sm"
+              ? `
+                  text-3xl
+                  md:text-4xl
+                `
+              : size === "md"
+              ? `
+                  text-4xl
+                  md:text-5xl
+                `
+              : `
+                  text-5xl
+                  md:text-6xl
+                `
+          }
+          font-black
+          tracking-tight
+          leading-none
+        `}
+      >
 
         <span className="
           bg-gradient-to-r

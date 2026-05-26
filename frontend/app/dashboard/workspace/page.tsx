@@ -25,6 +25,8 @@ import {
 
 } from "@/components/api";
 
+import { toast } from "sonner";
+
 interface WorkspaceMember {
 
   user_id: string;
@@ -50,6 +52,15 @@ export default function WorkspacePage() {
   const [loading, setLoading] =
     useState(true);
 
+  const [adding, setAdding] =
+    useState(false);
+
+  const [updatingRole, setUpdatingRole] =
+    useState<string | null>(null);
+
+  const [removing, setRemoving] =
+    useState<string | null>(null);
+
   // =========================
   // LOAD MEMBERS
   // =========================
@@ -67,8 +78,8 @@ export default function WorkspacePage() {
 
       console.error(error);
 
-      alert(
-        "Failed to load members"
+      toast.error(
+        "Failed to load workspace members"
       );
 
     } finally {
@@ -94,33 +105,54 @@ export default function WorkspacePage() {
 
   async function addMember() {
 
+    if (!email.trim()) {
+
+      toast.error(
+        "Email is required"
+      );
+
+      return;
+    }
+
     try {
 
-      await createWorkspaceMember({
+      setAdding(true);
 
-        email,
+      const response =
+        await createWorkspaceMember({
 
-        role,
-      });
+          email,
 
-      alert(
-        "Member added successfully"
+          role,
+        });
+
+      toast.success(
+
+        response?.message ||
+
+        `Workspace member added successfully`
       );
 
       setEmail("");
 
       setRole("viewer");
 
-      loadMembers();
+      await loadMembers();
 
     } catch (error: any) {
 
       console.error(error);
 
-      alert(
-        error.message ||
+      toast.error(
+
+        error?.message ||
+
         "Failed to add member"
       );
+
+    } finally {
+
+      setAdding(false);
     }
   }
 
@@ -137,27 +169,41 @@ export default function WorkspacePage() {
 
     try {
 
-      await updateWorkspaceMemberRole(
-
-        memberEmail,
-
-        newRole
+      setUpdatingRole(
+        memberEmail
       );
 
-      alert(
-        "Role updated successfully"
+      const response =
+        await updateWorkspaceMemberRole(
+
+          memberEmail,
+
+          newRole
+        );
+
+      toast.success(
+
+        response?.message ||
+
+        "Workspace role updated"
       );
 
-      loadMembers();
+      await loadMembers();
 
     } catch (error: any) {
 
       console.error(error);
 
-      alert(
-        error.message ||
+      toast.error(
+
+        error?.message ||
+
         "Failed to update role"
       );
+
+    } finally {
+
+      setUpdatingRole(null);
     }
   }
 
@@ -169,26 +215,47 @@ export default function WorkspacePage() {
     userId: string
   ) {
 
+    const confirmed =
+      window.confirm(
+        "Remove this workspace member?"
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
 
-      await deleteWorkspaceMember(
-        userId
+      setRemoving(userId);
+
+      const response =
+        await deleteWorkspaceMember(
+          userId
+        );
+
+      toast.success(
+
+        response?.message ||
+
+        "Workspace member removed"
       );
 
-      alert(
-        "Member removed successfully"
-      );
-
-      loadMembers();
+      await loadMembers();
 
     } catch (error: any) {
 
       console.error(error);
 
-      alert(
-        error.message ||
+      toast.error(
+
+        error?.message ||
+
         "Failed to remove member"
       );
+
+    } finally {
+
+      setRemoving(null);
     }
   }
 
@@ -426,6 +493,7 @@ export default function WorkspacePage() {
 
           <button
             onClick={addMember}
+            disabled={adding}
             className="
               rounded-2xl
               bg-cyan-400
@@ -433,10 +501,16 @@ export default function WorkspacePage() {
               font-black
               transition-all
               hover:bg-cyan-300
+              disabled:opacity-50
+              disabled:cursor-not-allowed
             "
           >
 
-            Add Member
+            {
+              adding
+                ? "Adding Member..."
+                : "Add Member"
+            }
 
           </button>
 
@@ -455,6 +529,51 @@ export default function WorkspacePage() {
           gap-6
         "
       >
+
+        {members.length === 0 && (
+
+          <div
+            className="
+              col-span-full
+              rounded-3xl
+              border
+              border-white/10
+              bg-[#08111f]
+              p-14
+              text-center
+            "
+          >
+
+            <Users
+              size={60}
+              className="
+                mx-auto
+                text-zinc-600
+              "
+            />
+
+            <h2
+              className="
+                mt-6
+                text-3xl
+                font-black
+              "
+            >
+              No Workspace Members
+            </h2>
+
+            <p
+              className="
+                mt-3
+                text-zinc-500
+              "
+            >
+              Invite workspace members to
+              collaborate with your AI runtime.
+            </p>
+
+          </div>
+        )}
 
         {members.map((member, index) => (
 
@@ -558,6 +677,9 @@ export default function WorkspacePage() {
 
                 <select
                   value={member.role}
+                  disabled={
+                    updatingRole === member.email
+                  }
                   onChange={(e) =>
                     updateRole(
                       member.email,
@@ -595,6 +717,9 @@ export default function WorkspacePage() {
                       member.user_id
                     )
                   }
+                  disabled={
+                    removing === member.user_id
+                  }
                   className="
                     h-14
                     px-5
@@ -610,7 +735,31 @@ export default function WorkspacePage() {
                   "
                 >
 
-                  <Trash2 size={18} />
+                  {
+                    removing === member.user_id
+
+                      ? (
+
+                        <div
+                          className="
+                            h-5
+                            w-5
+                            rounded-full
+                            border-2
+                            border-red-300/30
+                            border-t-red-300
+                            animate-spin
+                          "
+                        />
+
+                      )
+
+                      : (
+
+                        <Trash2 size={18} />
+
+                      )
+                  }
 
                 </button>
 

@@ -1,37 +1,140 @@
-import uuid
-from sqlalchemy import Column, String, Boolean, JSON,ForeignKey,Integer,Float,DateTime
-from app.db.session import Base
+from sqlalchemy import (
+    Column,
+    String,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Float,
+    Integer,
+    Enum
+)
+
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
-from datetime  import datetime
+
+from app.db.session import Base
+from app.db.enums import AgentStatus
+
+from datetime import datetime
+import uuid
 
 
 class Agent(Base):
     __tablename__ = "agents"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, nullable=False)
-    api_key_hash = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
 
-    key_id = Column(String, nullable=False, unique=True)
+    workspace_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
 
-    allowed_tasks = Column(JSON, default=list)
+    created_by = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
 
-    user_id = Column(UUID(as_uuid=True),
-                     ForeignKey("users.id"))
-    
-    max_steps = Column(Integer, default=20)
+    name = Column(
+        String,
+        nullable=False,
+        index=True
+    )
 
-    max_retries = Column(Integer, default=3)
+    description = Column(
+        String,
+        nullable=True
+    )
 
-    max_cost = Column(Float, default=5.0)
+    status = Column(
+        Enum(AgentStatus),
+        nullable=False,
+        default=AgentStatus.ACTIVE,
+        index=True
+    )
 
-    max_repeated_tasks = Column(Integer, default=5)
+    api_key_hash = Column(
+        String,
+        nullable=False
+    )
 
-    is_killed = Column(Boolean, default=False)
+    key_id = Column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True
+    )
 
-    workspace_id = Column(UUID(as_uuid=True), nullable=True)
+    allowed_tasks = Column(
+        String,
+        nullable=True
+    )
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    total_cost = Column(
+        Float,
+        default=0
+    )
 
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    mission_count = Column(
+        Integer,
+        default=0
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True
+    )
+
+    is_killed = Column(
+        Boolean,
+        default=False
+    )
+
+    created_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        index=True
+    )
+
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    workspace = relationship(
+        "Workspace",
+        back_populates="agents"
+    )
+
+    creator = relationship(
+        "User",
+        foreign_keys=[created_by],
+        back_populates="created_agents"
+    )
+
+    steps = relationship(
+        "DurableStep",
+        back_populates="agent",
+        cascade="all, delete"
+    )
+
+    usage_events = relationship(
+        "Usage",
+        back_populates="agent",
+        cascade="all, delete"
+    )
+
+    policy = relationship(
+        "AgentPolicy",
+        backref="agent",
+        uselist=False,
+        cascade="all, delete"
+    )

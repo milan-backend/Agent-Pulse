@@ -17,6 +17,8 @@ import {
 import CacheChart from "@/components/CacheChart";
 import UsageCharts from "@/components/UsageCharts";
 
+import { toast } from "sonner";
+
 export default function AnalyticsPage() {
 
   // =========================
@@ -49,6 +51,18 @@ export default function AnalyticsPage() {
       const analyticsData =
         await getAnalyticsOverview();
 
+      const overview =
+        analyticsData?.overview || {};
+
+      const costsData =
+        analyticsData?.costs || {};
+
+      const cacheData =
+        analyticsData?.cache || {};
+
+      const tokenData =
+        analyticsData?.tokens || {};
+
       // =========================
       // COSTS
       // =========================
@@ -56,34 +70,34 @@ export default function AnalyticsPage() {
       setCosts({
 
         total_steps:
-          analyticsData?.overview?.total_steps || 0,
+          overview?.total_steps || 0,
 
         total_cost:
-          analyticsData?.costs?.total_cost || 0,
+          costsData?.total_cost || 0,
 
         average_cost:
-          analyticsData?.costs?.average_cost || 0,
+          costsData?.average_cost || 0,
 
         successful_steps:
-          analyticsData?.overview?.successful_steps || 0,
+          overview?.successful_steps || 0,
 
         failed_steps:
-          analyticsData?.overview?.failed_steps || 0,
+          overview?.failed_steps || 0,
 
         success_rate:
-          analyticsData?.overview?.success_rate || 0,
+          overview?.success_rate || 0,
 
         cache_hits:
-          analyticsData?.cache?.cache_hits || 0,
+          cacheData?.cache_hits || 0,
 
         cache_misses:
-          analyticsData?.cache?.cache_misses || 0,
+          cacheData?.cache_misses || 0,
 
         cache_hit_rate:
-          analyticsData?.cache?.cache_hit_rate || 0,
+          cacheData?.cache_hit_rate || 0,
 
         total_tokens:
-          analyticsData?.tokens?.total_tokens || 0,
+          tokenData?.total_tokens || 0,
       });
 
       // =========================
@@ -91,7 +105,9 @@ export default function AnalyticsPage() {
       // =========================
 
       setBlocked(
-        analyticsData?.overview?.blocked_missions || 0
+        Number(
+          overview?.blocked_missions || 0
+        )
       );
 
       // =========================
@@ -99,7 +115,9 @@ export default function AnalyticsPage() {
       // =========================
 
       setAgents(
-        analyticsData?.overview?.total_agents || 0
+        Number(
+          overview?.total_agents || 0
+        )
       );
 
       // =========================
@@ -114,6 +132,12 @@ export default function AnalyticsPage() {
 
       console.error(err);
 
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to load analytics"
+      );
+
     } finally {
 
       setLoading(false);
@@ -127,6 +151,14 @@ export default function AnalyticsPage() {
   useEffect(() => {
 
     loadAnalytics();
+
+    const interval =
+      setInterval(() => {
+        loadAnalytics();
+      }, 15000);
+
+    return () =>
+      clearInterval(interval);
 
   }, []);
 
@@ -567,7 +599,11 @@ export default function AnalyticsPage() {
               ) => (
 
                 <div
-                  key={index}
+                  key={
+                    item?.id ||
+                    item?.step_id ||
+                    index
+                  }
                   className="
                     rounded-3xl
                     border
@@ -596,8 +632,12 @@ export default function AnalyticsPage() {
                           text-red-300
                         "
                       >
-                        {item?.action ||
-                          "Runtime Event"}
+                        {
+                          item?.action ||
+                          item?.event_type ||
+                          item?.status ||
+                          "Runtime Event"
+                        }
                       </h3>
 
                       <p
@@ -608,7 +648,10 @@ export default function AnalyticsPage() {
                       >
                         Agent ID:
                         {" "}
-                        {item?.agent_id}
+                        {
+                          item?.agent_id ||
+                          "Unknown Agent"
+                        }
                       </p>
 
                       <p
@@ -620,7 +663,10 @@ export default function AnalyticsPage() {
                       >
                         Cost:
                         {" "}
-                        ${item?.cost || 0}
+                        $
+                        {Number(
+                          item?.cost || 0
+                        ).toFixed(4)}
                       </p>
 
                     </div>

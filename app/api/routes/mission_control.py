@@ -1,24 +1,22 @@
-from datetime import datetime
-
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
-    Header
+    Header,
+    HTTPException
 )
 
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
-from app.models.agent import Agent
 from app.models.user import User
+from app.models.workspace import Workspace
 
 from app.api.deps_user import (
     get_current_user
 )
 
-from app.api.routes.workspace_access import (
+from app.core.workspace_access import (
     get_workspace_membership
 )
 
@@ -26,12 +24,53 @@ from app.api.rbac import (
     require_operator
 )
 
+from app.services.feature_access import (
+    require_feature
+)
+
+from app.services.mission_control_service import (
+    kill_agent_runtime,
+    pause_agent_runtime,
+    resume_agent_runtime
+)
+
 router = APIRouter()
 
 
-# =========================
-# KILL AGENT RUNTIME
-# =========================
+# ============================================
+# VALIDATE RUNTIME FEATURE
+# ============================================
+
+def validate_runtime_feature(
+    db,
+    workspace_id,
+    feature_name
+):
+
+    workspace = (
+        db.query(Workspace)
+        .filter(
+            Workspace.id == workspace_id
+        )
+        .first()
+    )
+
+    if not workspace:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    require_feature(
+        workspace,
+        feature_name
+    )
+
+
+# ============================================
+# KILL AGENT
+# ============================================
 
 @router.post("/kill/{agent_id}")
 def kill_agent(
@@ -47,8 +86,6 @@ def kill_agent(
     )
 ):
 
-    # VALIDATE MEMBERSHIP
-
     membership = (
         get_workspace_membership(
             db=db,
@@ -57,70 +94,27 @@ def kill_agent(
         )
     )
 
-    # REQUIRE OPERATOR
-
-    require_operator(membership)
-
-    # FIND AGENT
-
-    agent = db.query(Agent).filter(
-
-        Agent.id == agent_id,
-
-        Agent.workspace_id ==
-        workspace_id
-
-    ).first()
-
-    if not agent:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Agent not found"
-        )
-
-    # UPDATE AGENT STATE
-
-    agent.is_killed = True
-
-    agent.is_active = False
-
-    # OPTIONAL TRACKING
-
-    agent.killed_at = (
-        datetime.utcnow()
+    require_operator(
+        membership
     )
 
-    agent.killed_by = (
-        current_user.email
+    validate_runtime_feature(
+        db,
+        workspace_id,
+        "single_agent_kill"
     )
 
-    db.commit()
-
-    return {
-
-        "success": True,
-
-        "message":
-            "Agent killed successfully",
-
-        "agent_id":
-            agent.id,
-
-        "workspace_id":
-            workspace_id,
-
-        "controlled_by":
-            current_user.email,
-
-        "status":
-            "killed"
-    }
+    return kill_agent_runtime(
+        db=db,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        current_user=current_user
+    )
 
 
-# =========================
-# PAUSE AGENT RUNTIME
-# =========================
+# ============================================
+# PAUSE AGENT
+# ============================================
 
 @router.post("/pause/{agent_id}")
 def pause_agent(
@@ -136,8 +130,6 @@ def pause_agent(
     )
 ):
 
-    # VALIDATE MEMBERSHIP
-
     membership = (
         get_workspace_membership(
             db=db,
@@ -146,68 +138,27 @@ def pause_agent(
         )
     )
 
-    # REQUIRE OPERATOR
-
-    require_operator(membership)
-
-    # FIND AGENT
-
-    agent = db.query(Agent).filter(
-
-        Agent.id == agent_id,
-
-        Agent.workspace_id ==
-        workspace_id
-
-    ).first()
-
-    if not agent:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Agent not found"
-        )
-
-    # UPDATE STATE
-
-    agent.is_active = False
-
-    # OPTIONAL TRACKING
-
-    agent.paused_at = (
-        datetime.utcnow()
+    require_operator(
+        membership
     )
 
-    agent.pause_reason = (
-        "Paused by operator"
+    validate_runtime_feature(
+        db,
+        workspace_id,
+        "single_agent_pause"
     )
 
-    db.commit()
-
-    return {
-
-        "success": True,
-
-        "message":
-            "Agent paused successfully",
-
-        "agent_id":
-            agent.id,
-
-        "workspace_id":
-            workspace_id,
-
-        "controlled_by":
-            current_user.email,
-
-        "status":
-            "paused"
-    }
+    return pause_agent_runtime(
+        db=db,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        current_user=current_user
+    )
 
 
-# =========================
-# RESUME AGENT RUNTIME
-# =========================
+# ============================================
+# RESUME AGENT
+# ============================================
 
 @router.post("/resume/{agent_id}")
 def resume_agent(
@@ -223,8 +174,6 @@ def resume_agent(
     )
 ):
 
-    # VALIDATE MEMBERSHIP
-
     membership = (
         get_workspace_membership(
             db=db,
@@ -233,62 +182,19 @@ def resume_agent(
         )
     )
 
-    # REQUIRE OPERATOR
-
-    require_operator(membership)
-
-    # FIND AGENT
-
-    agent = db.query(Agent).filter(
-
-        Agent.id == agent_id,
-
-        Agent.workspace_id ==
-        workspace_id
-
-    ).first()
-
-    if not agent:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Agent not found"
-        )
-
-    # UPDATE STATE
-
-    agent.is_active = True
-
-    agent.is_killed = False
-
-    # OPTIONAL TRACKING
-
-    agent.resumed_at = (
-        datetime.utcnow()
+    require_operator(
+        membership
     )
 
-    agent.resumed_by = (
-        current_user.email
+    validate_runtime_feature(
+        db,
+        workspace_id,
+        "single_agent_resume"
     )
 
-    db.commit()
-
-    return {
-
-        "success": True,
-
-        "message":
-            "Agent resumed successfully",
-
-        "agent_id":
-            agent.id,
-
-        "workspace_id":
-            workspace_id,
-
-        "controlled_by":
-            current_user.email,
-
-        "status":
-            "active"
-    }
+    return resume_agent_runtime(
+        db=db,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        current_user=current_user
+    )

@@ -2,104 +2,187 @@
 
 import { useEffect, useState } from "react"
 
-import {
-  useParams,
-  useRouter,
-} from "next/navigation"
+import { useRouter } from "next/navigation"
 
 import {
-  fetchMissionById,
+  getMissionList,
+  retryMission,
+  killMission,
+  resumeMission,
+  getMissionOverview,
 } from "@/components/api"
 
-import {
-  auth,
-} from "@/lib/auth"
+import { auth } from "@/lib/auth"
 
-import TimelineEvent from "@/components/ui/TimelineEvent"
+import { toast } from "sonner"
+
+import {
+  Rocket,
+  RotateCcw,
+  Play,
+  Square,
+  Eye,
+  Activity,
+  ShieldCheck,
+  AlertTriangle,
+} from "lucide-react"
+
+import StatusBadge from "@/components/ui/StatusBadge"
 
 import SectionHeader from "@/components/ui/SectionHeader"
 
 import LiveIndicator from "@/components/ui/LiveIndicator"
 
-import StatusBadge from "@/components/ui/StatusBadge"
+export default function MissionsPage() {
 
-import {
-  ShieldCheck,
-  Cpu,
-  Database,
-  AlertTriangle,
-} from "lucide-react"
+  const router =
+    useRouter()
 
-export default function MissionDetailPage() {
+  const [missions, setMissions] =
+    useState<any[]>([])
 
-  // =========================
-  // ROUTER
-  // =========================
-
-  const router = useRouter()
-
-  const params = useParams()
-
-  const stepId =
-    params.id as string
-
-  // =========================
-  // STATE
-  // =========================
-
-  const [mission, setMission] =
+  const [overview, setOverview] =
     useState<any>(null)
 
   const [loading, setLoading] =
     useState(true)
 
-  // =========================
-  // LOAD MISSION
-  // =========================
+  async function loadData() {
+
+    try {
+
+      const [
+        missionData,
+        overviewData,
+      ] = await Promise.all([
+        getMissionList(),
+        getMissionOverview(),
+      ])
+
+      setMissions(
+        Array.isArray(
+          missionData
+        )
+          ? missionData
+          : []
+      )
+
+      setOverview(
+        overviewData
+      )
+
+    } catch (err) {
+
+      console.error(err)
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to load missions"
+      )
+
+    } finally {
+
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
 
-    const loadMission = async () => {
+    if (!auth.getToken()) {
 
-      try {
+      router.push("/login")
 
-        if (!auth.getToken()) {
-
-          window.location.href =
-            "/login"
-
-          return
-        }
-
-        // FETCH MISSION
-
-        const data =
-          await fetchMissionById(
-            stepId
-          )
-
-        setMission(data)
-
-      } catch (err) {
-
-        console.error(err)
-
-      } finally {
-
-        setLoading(false)
-      }
+      return
     }
 
-    if (stepId) {
+    loadData()
 
-      loadMission()
+  }, [router])
+
+  async function handleRetry(
+    missionId: string
+  ) {
+
+    try {
+
+      const response =
+        await retryMission(
+          missionId
+        )
+
+      toast.success(
+        response?.message ||
+        "Mission retried"
+      )
+
+      loadData()
+
+    } catch (err) {
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Retry failed"
+      )
     }
+  }
 
-  }, [stepId])
+  async function handleKill(
+    missionId: string
+  ) {
 
-  // =========================
-  // LOADING
-  // =========================
+    try {
+
+      const response =
+        await killMission(
+          missionId
+        )
+
+      toast.success(
+        response?.message ||
+        "Mission killed"
+      )
+
+      loadData()
+
+    } catch (err) {
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Kill failed"
+      )
+    }
+  }
+
+  async function handleResume(
+    missionId: string
+  ) {
+
+    try {
+
+      const response =
+        await resumeMission(
+          missionId
+        )
+
+      toast.success(
+        response?.message ||
+        "Mission resumed"
+      )
+
+      loadData()
+
+    } catch (err) {
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Resume failed"
+      )
+    }
+  }
 
   if (loading) {
 
@@ -108,40 +191,17 @@ export default function MissionDetailPage() {
       <div
         className="
           min-h-screen
-          bg-black
-          text-cyan-400
-          p-10
+          bg-[#050816]
+          text-cyan-300
+          flex
+          items-center
+          justify-center
         "
       >
-        Loading mission...
+        Loading missions...
       </div>
     )
   }
-
-  // =========================
-  // ERROR
-  // =========================
-
-  if (!mission) {
-
-    return (
-
-      <div
-        className="
-          min-h-screen
-          bg-black
-          text-red-400
-          p-10
-        "
-      >
-        Failed to load mission.
-      </div>
-    )
-  }
-
-  // =========================
-  // PAGE
-  // =========================
 
   return (
 
@@ -161,113 +221,44 @@ export default function MissionDetailPage() {
           flex
           items-center
           justify-between
-          mb-10
           flex-wrap
           gap-5
+          mb-10
         "
       >
 
-        <div>
-
-          <SectionHeader
-            title={
-              mission.task_name ||
-              "Mission Trace"
-            }
-            subtitle="
-              Deep execution
-              observability and
-              runtime telemetry.
-            "
-          />
-
-        </div>
-
-        <div
-          className="
-            flex
-            items-center
-            gap-4
+        <SectionHeader
+          title="Mission Runtime"
+          subtitle="
+            Autonomous AI mission
+            execution and telemetry.
           "
-        >
+        />
 
-          <LiveIndicator />
+        <LiveIndicator />
 
-          <button
-            onClick={() =>
-              router.push("/missions")
-            }
-            className="
-              px-6
-              py-3
-              rounded-xl
-              bg-gray-900
-              border
-              border-cyan-500
-              hover:bg-cyan-500
-              hover:text-black
-              transition-all
-              font-bold
-            "
-          >
-            Back To Missions
-          </button>
-
-        </div>
       </div>
 
-      {/* TOP STATS */}
+      {/* METRICS */}
 
       <div
         className="
           grid
           grid-cols-1
-          md:grid-cols-2
-          xl:grid-cols-4
+          md:grid-cols-4
           gap-6
-          mb-8
+          mb-10
         "
       >
 
-        {/* STATUS */}
+        {/* TOTAL */}
 
         <div
           className="
-            bg-[#091121]
+            rounded-3xl
             border
             border-cyan-500/20
-            rounded-3xl
-            p-6
-          "
-        >
-
-          <p
-            className="
-              text-gray-400
-              mb-2
-            "
-          >
-            Mission Status
-          </p>
-
-          <div className="mt-4">
-
-            <StatusBadge
-              status={mission.status}
-            />
-
-          </div>
-
-        </div>
-
-        {/* RETRIES */}
-
-        <div
-          className="
-            bg-[#091121]
-            border
-            border-green-500/20
-            rounded-3xl
+            bg-cyan-500/10
             p-6
           "
         >
@@ -282,586 +273,149 @@ export default function MissionDetailPage() {
 
             <div>
 
-              <p
-                className="
-                  text-gray-400
-                  mb-2
-                "
-              >
-                Retry Count
+              <p className="text-slate-400">
+                Total Missions
               </p>
 
               <h2
                 className="
-                  text-4xl
-                  font-bold
-                  text-green-400
+                  mt-3
+                  text-5xl
+                  font-black
+                  text-cyan-300
                 "
               >
-                {mission.retry_count || 0}
+                {
+                  overview?.total_missions || 0
+                }
+              </h2>
+
+            </div>
+
+            <Rocket
+              className="
+                text-cyan-300
+              "
+              size={34}
+            />
+
+          </div>
+
+        </div>
+
+        {/* RUNNING */}
+
+        <div
+          className="
+            rounded-3xl
+            border
+            border-purple-500/20
+            bg-purple-500/10
+            p-6
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
+
+            <div>
+
+              <p className="text-slate-400">
+                Running
+              </p>
+
+              <h2
+                className="
+                  mt-3
+                  text-5xl
+                  font-black
+                  text-purple-300
+                "
+              >
+                {
+                  overview?.running || 0
+                }
+              </h2>
+
+            </div>
+
+            <Activity
+              className="
+                text-purple-300
+              "
+              size={34}
+            />
+
+          </div>
+
+        </div>
+
+        {/* COMPLETED */}
+
+        <div
+          className="
+            rounded-3xl
+            border
+            border-green-500/20
+            bg-green-500/10
+            p-6
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
+
+            <div>
+
+              <p className="text-slate-400">
+                Completed
+              </p>
+
+              <h2
+                className="
+                  mt-3
+                  text-5xl
+                  font-black
+                  text-green-300
+                "
+              >
+                {
+                  overview?.completed || 0
+                }
               </h2>
 
             </div>
 
             <ShieldCheck
               className="
-                text-green-400
+                text-green-300
               "
-              size={30}
+              size={34}
             />
 
           </div>
+
         </div>
 
-        {/* CACHE */}
+        {/* FAILED */}
 
         <div
           className="
-            bg-[#091121]
-            border
-            border-yellow-500/20
             rounded-3xl
-            p-6
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-            "
-          >
-
-            <div>
-
-              <p
-                className="
-                  text-gray-400
-                  mb-2
-                "
-              >
-                Cache Hit
-              </p>
-
-              <h2
-                className="
-                  text-4xl
-                  font-bold
-                  text-yellow-400
-                "
-              >
-                {mission.cache_hit
-                  ? "YES"
-                  : "NO"}
-              </h2>
-
-            </div>
-
-            <Database
-              className="
-                text-yellow-400
-              "
-              size={30}
-            />
-
-          </div>
-        </div>
-
-        {/* RUNTIME */}
-
-        <div
-          className="
-            bg-[#091121]
-            border
-            border-pink-500/20
-            rounded-3xl
-            p-6
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-            "
-          >
-
-            <div>
-
-              <p
-                className="
-                  text-gray-400
-                  mb-2
-                "
-              >
-                Runtime Controlled
-              </p>
-
-              <h2
-                className="
-                  text-4xl
-                  font-bold
-                  text-pink-400
-                "
-              >
-                {mission.runtime_controlled
-                  ? "YES"
-                  : "NO"}
-              </h2>
-
-            </div>
-
-            <Cpu
-              className="
-                text-pink-400
-              "
-              size={30}
-            />
-
-          </div>
-        </div>
-      </div>
-
-      {/* MISSION DETAILS */}
-
-      <div
-        className="
-          bg-[#091121]
-          border
-          border-cyan-500/20
-          rounded-3xl
-          p-8
-          mb-8
-        "
-      >
-
-        <div
-          className="
-            flex
-            items-center
-            justify-between
-            mb-8
-            flex-wrap
-            gap-5
-          "
-        >
-
-          <SectionHeader
-            title="Mission Runtime"
-            subtitle="
-              Full execution metadata
-              and orchestration state.
-            "
-          />
-
-          <LiveIndicator />
-
-        </div>
-
-        <div
-          className="
-            grid
-            grid-cols-1
-            xl:grid-cols-2
-            gap-6
-          "
-        >
-
-          {/* LEFT */}
-
-          <div className="space-y-5">
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Mission ID
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-cyan-400
-                  break-all
-                "
-              >
-                {mission.id}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Agent ID
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-yellow-400
-                  break-all
-                "
-              >
-                {mission.agent_id}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Event Type
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-purple-400
-                "
-              >
-                {mission.event_type || "N/A"}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Created At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-green-400
-                "
-              >
-                {mission.created_at}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Updated At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-cyan-400
-                "
-              >
-                {mission.updated_at}
-              </h2>
-
-            </div>
-
-          </div>
-
-          {/* RIGHT */}
-
-          <div className="space-y-5">
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Started At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-cyan-400
-                "
-              >
-                {mission.started_at || "N/A"}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Paused At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-yellow-400
-                "
-              >
-                {mission.paused_at || "N/A"}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Resumed At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-green-400
-                "
-              >
-                {mission.resumed_at || "N/A"}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Killed At
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-red-400
-                "
-              >
-                {mission.killed_at || "N/A"}
-              </h2>
-
-            </div>
-
-            <div
-              className="
-                bg-black/30
-                rounded-2xl
-                p-6
-              "
-            >
-
-              <p className="text-gray-400">
-                Pause Reason
-              </p>
-
-              <h2
-                className="
-                  mt-2
-                  text-lg
-                  font-bold
-                  text-orange-400
-                "
-              >
-                {mission.pause_reason || "N/A"}
-              </h2>
-
-            </div>
-
-          </div>
-        </div>
-      </div>
-
-      {/* INPUT / OUTPUT */}
-
-      <div
-        className="
-          grid
-          grid-cols-1
-          xl:grid-cols-2
-          gap-8
-          mb-8
-        "
-      >
-
-        {/* INPUT */}
-
-        <div
-          className="
-            bg-[#091121]
-            border
-            border-cyan-500/20
-            rounded-3xl
-            p-8
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              mb-6
-            "
-          >
-
-            <SectionHeader
-              title="Input Data"
-              subtitle="
-                Mission execution input.
-              "
-            />
-
-            <LiveIndicator />
-
-          </div>
-
-          <pre
-            className="
-              bg-black/40
-              rounded-2xl
-              p-6
-              overflow-auto
-              text-sm
-              text-cyan-300
-            "
-          >
-            {JSON.stringify(
-              mission.input_data,
-              null,
-              2
-            )}
-          </pre>
-
-        </div>
-
-        {/* OUTPUT */}
-
-        <div
-          className="
-            bg-[#091121]
-            border
-            border-green-500/20
-            rounded-3xl
-            p-8
-          "
-        >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              mb-6
-            "
-          >
-
-            <SectionHeader
-              title="Output Data"
-              subtitle="
-                Mission execution output.
-              "
-            />
-
-            <LiveIndicator />
-
-          </div>
-
-          <pre
-            className="
-              bg-black/40
-              rounded-2xl
-              p-6
-              overflow-auto
-              text-sm
-              text-green-300
-            "
-          >
-            {JSON.stringify(
-              mission.output_data,
-              null,
-              2
-            )}
-          </pre>
-
-        </div>
-      </div>
-
-      {/* ERROR */}
-
-      {mission.error_message && (
-
-        <div
-          className="
-            bg-[#091121]
             border
             border-red-500/20
-            rounded-3xl
-            p-8
-            mb-8
+            bg-red-500/10
+            p-6
           "
         >
 
@@ -869,136 +423,352 @@ export default function MissionDetailPage() {
             className="
               flex
               items-center
-              gap-4
-              mb-5
+              justify-between
             "
           >
+
+            <div>
+
+              <p className="text-slate-400">
+                Failed
+              </p>
+
+              <h2
+                className="
+                  mt-3
+                  text-5xl
+                  font-black
+                  text-red-300
+                "
+              >
+                {
+                  overview?.failed || 0
+                }
+              </h2>
+
+            </div>
 
             <AlertTriangle
               className="
-                text-red-400
+                text-red-300
               "
-              size={30}
+              size={34}
             />
-
-            <h2
-              className="
-                text-3xl
-                font-bold
-                text-red-400
-              "
-            >
-              Runtime Error
-            </h2>
 
           </div>
 
-          <pre
+        </div>
+
+      </div>
+
+      {/* MISSIONS */}
+
+      <div className="space-y-8">
+
+        {missions.map((mission) => (
+
+          <div
+            key={mission.mission_id}
             className="
-              bg-black/40
-              rounded-2xl
-              p-6
-              overflow-auto
-              text-sm
-              text-red-300
+              rounded-3xl
+              border
+              border-cyan-500/20
+              bg-[#091121]
+              p-8
             "
           >
-            {mission.error_message}
-          </pre>
 
-        </div>
-      )}
+            {/* TOP */}
 
-      {/* TIMELINE */}
+            <div
+              className="
+                flex
+                items-center
+                justify-between
+                flex-wrap
+                gap-5
+              "
+            >
 
-      <div
-        className="
-          bg-[#091121]
-          border
-          border-cyan-500/20
-          rounded-3xl
-          p-8
-        "
-      >
+              <div>
 
-        <div
-          className="
-            flex
-            items-center
-            justify-between
-            mb-8
-          "
-        >
+                <h2
+                  className="
+                    text-3xl
+                    font-black
+                  "
+                >
+                  {
+                    mission.task_name ||
+                    "Untitled Mission"
+                  }
+                </h2>
 
-          <SectionHeader
-            title="Execution Timeline"
-            subtitle="
-              Runtime execution
-              lifecycle telemetry.
-            "
-          />
+                <p
+                  className="
+                    mt-3
+                    text-slate-400
+                    break-all
+                  "
+                >
+                  {
+                    mission.mission_id
+                  }
+                </p>
 
-          <LiveIndicator />
+              </div>
 
-        </div>
+              <StatusBadge
+                status={
+                  mission.status ||
+                  "unknown"
+                }
+              />
 
-        <div className="space-y-6">
+            </div>
 
-          <TimelineEvent
-            event="created"
-            timestamp={mission.created_at}
-            cost={0}
-          />
+            {/* SMALL STATS */}
 
-          {mission.started_at && (
+            <div
+              className="
+                grid
+                grid-cols-1
+                md:grid-cols-3
+                gap-5
+                mt-8
+              "
+            >
 
-            <TimelineEvent
-              event="started"
-              timestamp={mission.started_at}
-              cost={0}
-            />
-          )}
+              <div
+                className="
+                  rounded-2xl
+                  bg-black/30
+                  p-5
+                "
+              >
 
-          {mission.paused_at && (
+                <p className="text-slate-400">
+                  Retry Count
+                </p>
 
-            <TimelineEvent
-              event="paused"
-              timestamp={mission.paused_at}
-              cost={0}
-            />
-          )}
+                <h2
+                  className="
+                    mt-2
+                    text-3xl
+                    font-black
+                    text-green-400
+                  "
+                >
+                  {
+                    mission.retry_count || 0
+                  }
+                </h2>
 
-          {mission.resumed_at && (
+              </div>
 
-            <TimelineEvent
-              event="resumed"
-              timestamp={mission.resumed_at}
-              cost={0}
-            />
-          )}
+              <div
+                className="
+                  rounded-2xl
+                  bg-black/30
+                  p-5
+                "
+              >
 
-          {mission.killed_at && (
+                <p className="text-slate-400">
+                  Cache Hit
+                </p>
 
-            <TimelineEvent
-              event="killed"
-              timestamp={mission.killed_at}
-              cost={0}
-            />
-          )}
+                <h2
+                  className="
+                    mt-2
+                    text-3xl
+                    font-black
+                    text-yellow-400
+                  "
+                >
+                  {
+                    mission.cache_hit
+                      ? "YES"
+                      : "NO"
+                  }
+                </h2>
 
-          {mission.updated_at && (
+              </div>
 
-            <TimelineEvent
-              event={
-                mission.status ||
-                "updated"
-              }
-              timestamp={mission.updated_at}
-              cost={0}
-            />
-          )}
+              <div
+                className="
+                  rounded-2xl
+                  bg-black/30
+                  p-5
+                "
+              >
 
-        </div>
+                <p className="text-slate-400">
+                  Created At
+                </p>
+
+                <h2
+                  className="
+                    mt-2
+                    text-sm
+                    font-bold
+                    text-cyan-300
+                  "
+                >
+                  {
+                    mission.created_at
+                      ? new Date(
+                          mission.created_at
+                        ).toLocaleString()
+                      : "N/A"
+                  }
+                </h2>
+
+              </div>
+
+            </div>
+
+            {/* ACTIONS */}
+
+            <div
+              className="
+                flex
+                items-center
+                gap-4
+                flex-wrap
+                mt-8
+              "
+            >
+
+              {/* VIEW */}
+
+              <button
+                onClick={() =>
+                  router.push(
+                    `/dashboard/missions/${mission.mission_id}`
+                  )
+                }
+                className="
+                  flex
+                  items-center
+                  gap-2
+                  px-5
+                  py-3
+                  rounded-2xl
+                  bg-cyan-500/10
+                  border
+                  border-cyan-500/20
+                  hover:bg-cyan-500
+                  hover:text-black
+                  transition-all
+                  font-bold
+                "
+              >
+
+                <Eye size={18} />
+
+                View Mission
+
+              </button>
+
+              {/* RETRY */}
+
+              <button
+                onClick={() =>
+                  handleRetry(
+                    mission.mission_id
+                  )
+                }
+                className="
+                  flex
+                  items-center
+                  gap-2
+                  px-5
+                  py-3
+                  rounded-2xl
+                  bg-green-500/10
+                  border
+                  border-green-500/20
+                  hover:bg-green-500
+                  hover:text-black
+                  transition-all
+                  font-bold
+                "
+              >
+
+                <RotateCcw size={18} />
+
+                Retry
+
+              </button>
+
+              {/* KILL */}
+
+              <button
+                onClick={() =>
+                  handleKill(
+                    mission.mission_id
+                  )
+                }
+                className="
+                  flex
+                  items-center
+                  gap-2
+                  px-5
+                  py-3
+                  rounded-2xl
+                  bg-red-500/10
+                  border
+                  border-red-500/20
+                  hover:bg-red-500
+                  hover:text-black
+                  transition-all
+                  font-bold
+                "
+              >
+
+                <Square size={18} />
+
+                Kill
+
+              </button>
+
+              {/* RESUME */}
+
+              <button
+                onClick={() =>
+                  handleResume(
+                    mission.mission_id
+                  )
+                }
+                className="
+                  flex
+                  items-center
+                  gap-2
+                  px-5
+                  py-3
+                  rounded-2xl
+                  bg-yellow-500/10
+                  border
+                  border-yellow-500/20
+                  hover:bg-yellow-500
+                  hover:text-black
+                  transition-all
+                  font-bold
+                "
+              >
+
+                <Play size={18} />
+
+                Resume
+
+              </button>
+
+            </div>
+
+          </div>
+        ))}
+
       </div>
 
     </div>

@@ -1,27 +1,10 @@
-from enum import Enum
-
 from pydantic import (
     BaseModel,
     EmailStr
 )
 
+from app.db.enums import WorkspaceRole
 
-# =========================
-# WORKSPACE ROLE ENUM
-# =========================
-
-class WorkspaceRole(str, Enum):
-
-    viewer = "viewer"
-
-    operator = "operator"
-
-    admin = "admin"
-
-
-# =========================
-# ADD MEMBER REQUEST
-# =========================
 
 class AddMemberRequest(BaseModel):
 
@@ -29,10 +12,6 @@ class AddMemberRequest(BaseModel):
 
     role: WorkspaceRole
 
-
-# =========================
-# UPDATE ROLE REQUEST
-# =========================
 
 class UpdateRoleRequest(BaseModel):
 

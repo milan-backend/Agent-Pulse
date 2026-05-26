@@ -1,64 +1,222 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import HTTPException
 
-from app.db.session import get_db
+from sqlalchemy.sql import func
 
-from app.models.agent import Agent
+from app.models.usage import Usage
 
-from app.api.deps_user import get_current_user
+from app.models.workspace import Workspace
 
-from app.api.rbac import require_admin
+from app.models.workspace_subscription import (
+    WorkspaceSubscription
+)
 
-router = APIRouter()
+from app.models.plan import Plan
+
+from app.models.billing_event import (
+    BillingEvent
+)
 
 
-@router.put("/update-budget/{agent_id}")
-def update_budget_controls(
-    agent_id: str,
-    max_steps: int,
-    max_retries: int,
-    max_cost: float,
-    max_repeated_tasks: int,
-    db: Session = Depends(get_db),
-    current_user = Depends(get_current_user)
+def create_usage_event(
+    db,
+    workspace_id,
+    agent_id,
+    step_id,
+    event_type,
+    status=None,
+    model_used=None,
+    request_id=None,
+    cost=0,
+    prompt_tokens=0,
+    completion_tokens=0,
+    latency_ms=None,
+    cache_hit=False,
+    event_metadata=None
 ):
 
-    # RBAC protection
-    require_admin(current_user)
+    # =========================
+    # WORKSPACE BILLING CHECK
+    # =========================
 
-    # Find agent
-    agent = db.query(Agent).filter(
-        Agent.id == agent_id,
-        Agent.workspace_id == current_user.workspace_id
-    ).first()
+    workspace = (
+        db.query(Workspace)
+        .filter(
+            Workspace.id == workspace_id
+        )
+        .first()
+    )
 
-    if not agent:
+    if not workspace:
+
         raise HTTPException(
             status_code=404,
-            detail="Agent not found"
+            detail="Workspace not found"
         )
 
-    # Update runtime governance limits
-    agent.max_steps = max_steps
+    subscription = (
+        db.query(WorkspaceSubscription)
+        .filter(
+            WorkspaceSubscription.workspace_id
+            == workspace_id,
 
-    agent.max_retries = max_retries
+            WorkspaceSubscription.status
+            == "active"
+        )
+        .first()
+    )
 
-    agent.max_cost = max_cost
+    if not subscription:
 
-    agent.max_repeated_tasks = max_repeated_tasks
+        raise HTTPException(
+            status_code=403,
+            detail="No active subscription"
+        )
 
-    db.commit()
+    plan = (
+        db.query(Plan)
+        .filter(
+            Plan.id == subscription.plan_id
+        )
+        .first()
+    )
 
-    db.refresh(agent)
+    if not plan:
 
-    return {
-        "success": True,
-        "message": "Budget controls updated successfully",
-        "agent_id": agent.id,
-        "limits": {
-            "max_steps": agent.max_steps,
-            "max_retries": agent.max_retries,
-            "max_cost": agent.max_cost,
-            "max_repeated_tasks": agent.max_repeated_tasks
-        }
-    }
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid plan"
+        )
+
+    # =========================
+    # FEATURE ACCESS CHECK
+    # =========================
+
+    features = (
+        plan.features or {}
+    )
+
+    if not features.get(
+        "agent_execution",
+        False
+    ):
+
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Plan does not allow "
+                "agent execution"
+            )
+        )
+
+    # =========================
+    # BILLING LIMIT CHECK
+    # =========================
+
+    workspace_total_cost = (
+        db.query(
+            func.sum(Usage.cost)
+        )
+        .filter(
+            Usage.workspace_id ==
+            workspace_id
+        )
+        .scalar()
+    )
+
+    workspace_total_cost = float(
+        workspace_total_cost or 0
+    )
+
+    max_monthly_cost = (
+        plan.limits.get(
+            "max_monthly_cost",
+            10
+        )
+    )
+
+    projected_cost = (
+        workspace_total_cost + cost
+    )
+
+    if projected_cost > max_monthly_cost:
+
+        billing_event = BillingEvent(
+
+            workspace_id=workspace_id,
+
+            agent_id=agent_id,
+
+            step_id=step_id,
+
+            event_type="monthly_limit_exceeded",
+
+            amount=projected_cost,
+
+            event_metadata={
+
+                "limit":
+                    max_monthly_cost,
+
+                "attempted_cost":
+                    projected_cost
+            }
+        )
+
+        db.add(billing_event)
+
+        db.flush()
+
+        raise HTTPException(
+
+            status_code=403,
+
+            detail=(
+                "Workspace monthly "
+                "billing limit exceeded"
+            )
+        )
+
+    # =========================
+    # CREATE USAGE EVENT
+    # =========================
+
+    usage = Usage(
+
+        workspace_id=workspace_id,
+
+        agent_id=agent_id,
+
+        step_id=step_id,
+
+        event_type=event_type,
+
+        status=status,
+
+        model_used=model_used,
+
+        request_id=request_id,
+
+        cost=cost,
+
+        prompt_tokens=prompt_tokens,
+
+        completion_tokens=completion_tokens,
+
+        total_tokens=(
+
+            prompt_tokens +
+            completion_tokens
+        ),
+
+        latency_ms=latency_ms,
+
+        cache_hit=cache_hit,
+
+        event_metadata=event_metadata
+    )
+
+    db.add(usage)
+
+    db.flush()
+
+    return usage

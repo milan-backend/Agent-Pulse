@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 
+from app.models.workspace import Workspace
+
 from app.models.durable_step import (
     DurableStep
 )
@@ -19,12 +21,50 @@ from app.api.deps_user import (
     get_current_user
 )
 
-from app.api.routes.workspace_access import (
+from app.core.workspace_access import (
     get_workspace_membership
+)
+
+from app.services.feature_access import (
+    require_feature
 )
 
 router = APIRouter()
 
+
+# ============================================
+# VALIDATE TASK ACCESS
+# ============================================
+
+def validate_task_access(
+    db,
+    workspace_id
+):
+
+    workspace = (
+        db.query(Workspace)
+        .filter(
+            Workspace.id == workspace_id
+        )
+        .first()
+    )
+
+    if not workspace:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    require_feature(
+        workspace,
+        "audit_logs"
+    )
+
+
+# ============================================
+# GET AGENT TASKS
+# ============================================
 
 @router.get("/agent/{agent_id}")
 def get_agent_tasks(
@@ -57,6 +97,11 @@ def get_agent_tasks(
             detail="Workspace access denied"
         )
 
+    validate_task_access(
+        db,
+        workspace_id
+    )
+
     # FETCH TASKS
 
     steps = (
@@ -80,20 +125,24 @@ def get_agent_tasks(
 
     return {
 
-        "success": True,
+        "success":
+            True,
 
-        "agent_id": agent_id,
+        "agent_id":
+            str(agent_id),
 
-        "workspace_id": workspace_id,
+        "workspace_id":
+            str(workspace_id),
 
-        "count": len(steps),
+        "count":
+            len(steps),
 
         "tasks": [
 
             {
 
                 "step_id":
-                    step.id,
+                    str(step.id),
 
                 "task_name":
                     step.task_name,
@@ -117,16 +166,26 @@ def get_agent_tasks(
                     step.cache_hit,
 
                 "event_type":
-                    step.event_type,
+                    getattr(
+                        step,
+                        "event_type",
+                        None
+                    ),
 
                 "started_at":
-                    step.started_at,
+                    str(step.started_at)
+                    if step.started_at
+                    else None,
 
                 "created_at":
-                    step.created_at,
+                    str(step.created_at)
+                    if step.created_at
+                    else None,
 
                 "updated_at":
-                    step.updated_at
+                    str(step.updated_at)
+                    if step.updated_at
+                    else None
 
             }
 

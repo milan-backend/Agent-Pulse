@@ -1,8 +1,5 @@
 "use client";
 
-import {API_URL} from 
-"@/components/api";
-
 import Link from "next/link";
 
 import {
@@ -21,7 +18,14 @@ import {
   Clock3,
   Database,
   Cpu,
+  Activity,
 } from "lucide-react";
+
+import { toast } from "sonner";
+
+import {
+  getAgentTasks,
+} from "@/components/api";
 
 interface Task {
 
@@ -56,7 +60,7 @@ export default function AgentTasksPage() {
     useParams();
 
   const agentId =
-    params?.agent_id;
+    params?.agent_id as string;
 
   const [tasks, setTasks] =
     useState<Task[]>([]);
@@ -64,61 +68,56 @@ export default function AgentTasksPage() {
   const [loading, setLoading] =
     useState(true);
 
-  useEffect(() => {
+  async function fetchTasks() {
 
-    async function fetchTasks() {
+    try {
 
-      try {
+      setLoading(true);
 
-        const token =
-          localStorage.getItem(
-            "token"
-          );
-
-        const workspaceId =
-          localStorage.getItem(
-            "workspace_id"
-          );
-
-        const response =
-          await fetch(
-            `${API_URL}/agent/${agentId}`,
-            {
-
-              headers: {
-
-                Authorization:
-                  `Bearer ${token}`,
-
-                "workspace-id":
-                  workspaceId || "",
-              },
-            }
-          );
-
-        if (!response.ok) {
-
-          throw new Error(
-            "Failed to fetch tasks"
-          );
-        }
-
-        const data =
-          await response.json();
-
-        setTasks(
-          data.tasks || []
+      const data =
+        await getAgentTasks(
+          agentId
         );
 
-      } catch (error) {
+      const taskArray =
+        Array.isArray(data)
 
-        console.error(error);
+          ? data
 
-      } finally {
+          : Array.isArray(data?.tasks)
 
-        setLoading(false);
-      }
+          ? data.tasks
+
+          : [];
+
+      const sortedTasks =
+        [...taskArray].sort(
+          (a, b) =>
+            new Date(
+              b.created_at || 0
+            ).getTime() -
+            new Date(
+              a.created_at || 0
+            ).getTime()
+        );
+
+      setTasks(sortedTasks);
+
+    } catch (error) {
+
+      console.error(error);
+
+      toast.error(
+        "Failed to load agent tasks"
+      );
+
+    } finally {
+
+      setLoading(false);
     }
+  }
+
+  useEffect(() => {
 
     if (agentId) {
 
@@ -131,7 +130,9 @@ export default function AgentTasksPage() {
     status: string
   ) {
 
-    switch (status) {
+    switch (
+      status?.toLowerCase()
+    ) {
 
       case "completed":
 
@@ -216,69 +217,137 @@ export default function AgentTasksPage() {
 
           </Link>
 
-          <h1
-            className="
-              mt-6
-              text-6xl
-              font-black
-            "
-          >
+          <div className="
+            mt-6
+            flex
+            items-center
+            gap-5
+          ">
 
-            Agent Tasks
+            <div
+              className="
+                h-20
+                w-20
+                rounded-3xl
+                border
+                border-cyan-500/20
+                bg-cyan-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
 
-          </h1>
+              <Activity
+                size={40}
+                className="
+                  text-cyan-300
+                "
+              />
 
-          <p
-            className="
-              mt-3
-              text-lg
-              text-zinc-400
-            "
-          >
+            </div>
 
-            Runtime execution history
-            and telemetry.
+            <div>
 
-          </p>
+              <h1
+                className="
+                  text-6xl
+                  font-black
+                "
+              >
+
+                Agent Tasks
+
+              </h1>
+
+              <p
+                className="
+                  mt-3
+                  text-lg
+                  text-zinc-400
+                "
+              >
+
+                Runtime execution history
+                and telemetry.
+
+              </p>
+
+            </div>
+
+          </div>
 
         </div>
 
-        {/* TOTAL */}
+        {/* RIGHT */}
 
         <div
           className="
-            rounded-3xl
-            border
-            border-cyan-500/20
-            bg-cyan-500/10
-            px-8
-            py-6
+            flex
+            items-center
+            gap-4
+            flex-wrap
           "
         >
 
-          <p
+          <button
+            onClick={fetchTasks}
             className="
-              text-sm
-              text-zinc-400
-            "
-          >
-
-            Total Tasks
-
-          </p>
-
-          <h2
-            className="
-              mt-2
-              text-5xl
-              font-black
+              rounded-2xl
+              border
+              border-cyan-500/20
+              bg-cyan-500/10
+              px-6
+              py-4
               text-cyan-300
+              font-bold
+              transition-all
+              hover:bg-cyan-500/20
             "
           >
 
-            {tasks.length}
+            Refresh Tasks
 
-          </h2>
+          </button>
+
+          {/* TOTAL */}
+
+          <div
+            className="
+              rounded-3xl
+              border
+              border-cyan-500/20
+              bg-cyan-500/10
+              px-8
+              py-6
+            "
+          >
+
+            <p
+              className="
+                text-sm
+                text-zinc-400
+              "
+            >
+
+              Total Tasks
+
+            </p>
+
+            <h2
+              className="
+                mt-2
+                text-5xl
+                font-black
+                text-cyan-300
+              "
+            >
+
+              {tasks.length}
+
+            </h2>
+
+          </div>
 
         </div>
 
@@ -550,6 +619,8 @@ export default function AgentTasksPage() {
                   <pre
                     className="
                       mt-5
+                      max-h-[400px]
+                      overflow-y-auto
                       overflow-x-auto
                       whitespace-pre-wrap
                       break-all
@@ -558,10 +629,10 @@ export default function AgentTasksPage() {
                     "
                   >
                     {JSON.stringify(
-                      task.input_data,
+                      task.input_data || {},
                       null,
                       2
-                    )}
+                    ).slice(0, 10000)}
                   </pre>
 
                 </div>
@@ -610,6 +681,8 @@ export default function AgentTasksPage() {
                   <pre
                     className="
                       mt-5
+                      max-h-[400px]
+                      overflow-y-auto
                       overflow-x-auto
                       whitespace-pre-wrap
                       break-all
@@ -618,10 +691,10 @@ export default function AgentTasksPage() {
                     "
                   >
                     {JSON.stringify(
-                      task.output_data,
+                      task.output_data || {},
                       null,
                       2
-                    )}
+                    ).slice(0, 10000)}
                   </pre>
 
                 </div>

@@ -6,20 +6,29 @@ from fastapi import (
 )
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.db.session import get_db
 
+from app.models.workspace import Workspace
 from app.models.usage import Usage
-from app.models.agent import Agent
 from app.models.user import User
 
 from app.api.deps_user import (
     get_current_user
 )
 
-from app.api.routes.workspace_access import (
+from app.core.workspace_access import (
     get_workspace_membership
+)
+
+from app.services.feature_access import (
+    require_feature
+)
+
+from app.services.analytics_service import (
+    get_workspace_agent_ids,
+    get_total_cost,
+    get_token_analytics
 )
 
 router = APIRouter(
@@ -28,9 +37,39 @@ router = APIRouter(
 )
 
 
-# =========================
+# ============================================
+# VALIDATE USAGE ACCESS
+# ============================================
+
+def validate_usage_access(
+    db,
+    workspace_id
+):
+
+    workspace = (
+        db.query(Workspace)
+        .filter(
+            Workspace.id == workspace_id
+        )
+        .first()
+    )
+
+    if not workspace:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Workspace not found"
+        )
+
+    require_feature(
+        workspace,
+        "usage_logs"
+    )
+
+
+# ============================================
 # USAGE OVERVIEW
-# =========================
+# ============================================
 
 @router.get("/overview")
 def get_usage_overview(
@@ -52,57 +91,40 @@ def get_usage_overview(
         workspace_id=workspace_id
     )
 
+    validate_usage_access(
+        db,
+        workspace_id
+    )
+
     # GET WORKSPACE AGENTS
 
-    agent_ids = db.query(
-        Agent.id
-    ).filter(
-        Agent.workspace_id ==
+    agent_ids = get_workspace_agent_ids(
+        db,
         workspace_id
-    ).all()
-
-    agent_ids = [
-        agent[0]
-        for agent in agent_ids
-    ]
+    )
 
     # TOTAL LOGS
 
-    total_logs = db.query(
-        Usage
-    ).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).count()
+    total_logs = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(agent_ids)
+        )
+        .count()
+    )
 
     # TOTAL COST
 
-    total_cost = db.query(
-        func.sum(Usage.cost)
-    ).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).scalar() or 0
+    total_cost = get_total_cost(
+        db,
+        agent_ids
+    )
 
-    # TOTAL PROMPT TOKENS
+    # TOKEN ANALYTICS
 
-    prompt_tokens = db.query(
-        func.sum(Usage.prompt_tokens)
-    ).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).scalar() or 0
-
-    # TOTAL COMPLETION TOKENS
-
-    completion_tokens = db.query(
-        func.sum(Usage.completion_tokens)
-    ).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).scalar() or 0
-
-    # TOTAL TOKENS
-
-    total_tokens = (
-        prompt_tokens +
-        completion_tokens
+    token_data = get_token_analytics(
+        db,
+        agent_ids
     )
 
     return {
@@ -114,19 +136,25 @@ def get_usage_overview(
             round(total_cost, 4),
 
         "prompt_tokens":
-            prompt_tokens,
+            token_data[
+                "prompt_tokens"
+            ],
 
         "completion_tokens":
-            completion_tokens,
+            token_data[
+                "completion_tokens"
+            ],
 
         "total_tokens":
-            total_tokens
+            token_data[
+                "total_tokens"
+            ]
     }
 
 
-# =========================
+# ============================================
 # LIVE USAGE FEED
-# =========================
+# ============================================
 
 @router.get("/feed")
 def get_usage_feed(
@@ -148,45 +176,47 @@ def get_usage_feed(
         workspace_id=workspace_id
     )
 
+    validate_usage_access(
+        db,
+        workspace_id
+    )
+
     # GET WORKSPACE AGENTS
 
-    agent_ids = db.query(
-        Agent.id
-    ).filter(
-        Agent.workspace_id ==
+    agent_ids = get_workspace_agent_ids(
+        db,
         workspace_id
-    ).all()
-
-    agent_ids = [
-        agent[0]
-        for agent in agent_ids
-    ]
+    )
 
     # GET RECENT LOGS
 
-    logs = db.query(
-        Usage
-    ).filter(
-        Usage.agent_id.in_(agent_ids)
-    ).order_by(
-        Usage.timestamp.desc()
-    ).limit(50).all()
+    logs = (
+        db.query(Usage)
+        .filter(
+            Usage.agent_id.in_(agent_ids)
+        )
+        .order_by(
+            Usage.created_at.desc()
+        )
+        .limit(50)
+        .all()
+    )
 
     return [
 
         {
 
             "id":
-                log.id,
+                str(log.id),
 
             "agent_id":
-                log.agent_id,
+                str(log.agent_id),
 
             "step_id":
-                log.step_id,
+                str(log.step_id),
 
-            "action":
-                log.action,
+            "event_type":
+                log.event_type,
 
             "prompt_tokens":
                 log.prompt_tokens,
@@ -196,28 +226,25 @@ def get_usage_feed(
 
             "total_tokens":
                 (
-                    log.prompt_tokens or 0
-                ) + (
-                    log.completion_tokens or 0
+                    (log.prompt_tokens or 0)
+                    +
+                    (log.completion_tokens or 0)
                 ),
 
             "cost":
                 log.cost,
 
-            "usage_events":
-                log.usage_events,
-
-            "timestamp":
-                log.timestamp
+            "created_at":
+                str(log.created_at)
         }
 
         for log in logs
     ]
 
 
-# =========================
+# ============================================
 # STEP USAGE DETAILS
-# =========================
+# ============================================
 
 @router.get("/step/{step_id}")
 def get_step_usage(
@@ -241,15 +268,23 @@ def get_step_usage(
         workspace_id=workspace_id
     )
 
+    validate_usage_access(
+        db,
+        workspace_id
+    )
+
     # GET STEP LOGS
 
-    logs = db.query(
-        Usage
-    ).filter(
-        Usage.step_id == step_id
-    ).order_by(
-        Usage.timestamp.desc()
-    ).all()
+    logs = (
+        db.query(Usage)
+        .filter(
+            Usage.step_id == step_id
+        )
+        .order_by(
+            Usage.created_at.desc()
+        )
+        .all()
+    )
 
     # NOT FOUND
 
@@ -265,16 +300,16 @@ def get_step_usage(
         {
 
             "id":
-                log.id,
+                str(log.id),
 
             "agent_id":
-                log.agent_id,
+                str(log.agent_id),
 
             "step_id":
-                log.step_id,
+                str(log.step_id),
 
-            "action":
-                log.action,
+            "event_type":
+                log.event_type,
 
             "prompt_tokens":
                 log.prompt_tokens,
@@ -284,19 +319,16 @@ def get_step_usage(
 
             "total_tokens":
                 (
-                    log.prompt_tokens or 0
-                ) + (
-                    log.completion_tokens or 0
+                    (log.prompt_tokens or 0)
+                    +
+                    (log.completion_tokens or 0)
                 ),
 
             "cost":
                 log.cost,
 
-            "usage_events":
-                log.usage_events,
-
-            "timestamp":
-                log.timestamp
+            "created_at":
+                str(log.created_at)
         }
 
         for log in logs

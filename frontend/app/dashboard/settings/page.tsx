@@ -21,6 +21,8 @@ import {
   logout,
 } from "@/components/api";
 
+import { toast } from "sonner";
+
 export default function SettingsPage() {
 
   const [loadingKill, setLoadingKill] =
@@ -31,22 +33,35 @@ export default function SettingsPage() {
 
   async function handleKillAll() {
 
+    if (loadingKill) return;
+
     try {
 
       setLoadingKill(true);
 
+      const confirmed =
+        window.confirm(
+          "Are you sure you want to stop all runtime agents?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
       await stopAllAgents();
 
-      alert(
-        "All agents stopped."
+      toast.success(
+        "All agents stopped successfully"
       );
 
     } catch (err) {
 
       console.error(err);
 
-      alert(
-        "Failed to stop agents."
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to stop agents"
       );
 
     } finally {
@@ -57,22 +72,35 @@ export default function SettingsPage() {
 
   async function handleResumeAll() {
 
+    if (loadingResume) return;
+
     try {
 
       setLoadingResume(true);
 
+      const confirmed =
+        window.confirm(
+          "Resume all autonomous agents?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
       await resumeAllAgents();
 
-      alert(
-        "All agents resumed."
+      toast.success(
+        "All agents resumed successfully"
       );
 
     } catch (err) {
 
       console.error(err);
 
-      alert(
-        "Failed to resume agents."
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to resume agents"
       );
 
     } finally {
@@ -261,6 +289,8 @@ export default function SettingsPage() {
                 flex
                 items-center
                 justify-between
+                disabled:opacity-50
+                disabled:cursor-not-allowed
               "
             >
               <div className="flex items-center gap-4">
@@ -279,7 +309,11 @@ export default function SettingsPage() {
                       text-red-300
                     "
                   >
-                    Kill All Agents
+                    {
+                      loadingKill
+                        ? "Stopping Runtime..."
+                        : "Kill All Agents"
+                    }
                   </h3>
 
                   <p className="text-sm text-slate-400 mt-1">
@@ -315,6 +349,8 @@ export default function SettingsPage() {
                 flex
                 items-center
                 justify-between
+                disabled:opacity-50
+                disabled:cursor-not-allowed
               "
             >
               <div className="flex items-center gap-4">
@@ -333,7 +369,11 @@ export default function SettingsPage() {
                       text-green-300
                     "
                   >
-                    Resume Runtime
+                    {
+                      loadingResume
+                        ? "Resuming Runtime..."
+                        : "Resume Runtime"
+                    }
                   </h3>
 
                   <p className="text-sm text-slate-400 mt-1">
@@ -450,6 +490,36 @@ export default function SettingsPage() {
                     Runtime authentication
                     active.
                   </p>
+
+                  <div
+                    className="
+                      mt-4
+                      inline-flex
+                      items-center
+                      gap-2
+                      rounded-full
+                      border
+                      border-green-500/20
+                      bg-green-500/10
+                      px-3
+                      py-1
+                      text-xs
+                      font-bold
+                      text-green-300
+                    "
+                  >
+                    <div
+                      className="
+                        h-2
+                        w-2
+                        rounded-full
+                        bg-green-400
+                        animate-pulse
+                      "
+                    />
+
+                    ACTIVE
+                  </div>
                 </div>
 
                 <ShieldCheck
@@ -464,7 +534,16 @@ export default function SettingsPage() {
             {/* LOGOUT */}
 
             <button
-              onClick={logout}
+              onClick={() => {
+
+                toast.success(
+                  "Session ended successfully"
+                );
+
+                setTimeout(() => {
+                  logout();
+                }, 800);
+              }}
               className="
                 w-full
                 rounded-3xl

@@ -58,19 +58,44 @@ export default function LiveFeed({
   // =========================
 
   function getStatusLabel(
-    success?: boolean
+    success?: boolean,
+    status?: string
   ) {
 
+    if (status) {
+      return status
+        .replace("_", " ")
+        .toUpperCase()
+    }
+
     if (success === true) {
-      return "SUCCESS";
+      return "SUCCESS"
     }
 
     if (success === false) {
-      return "FAILED";
+      return "FAILED"
     }
 
-    return "RUNNING";
+    return "RUNNING"
   }
+
+  const sortedLogs =
+    [...logs].sort(
+      (
+        a,
+        b
+      ) =>
+        new Date(
+          b?.created_at || 0
+        ).getTime()
+        -
+        new Date(
+          a?.created_at || 0
+        ).getTime()
+    )
+
+  const hasLogs =
+    sortedLogs.length > 0
 
   return (
 
@@ -180,7 +205,7 @@ export default function LiveFeed({
 
       {/* EMPTY */}
 
-      {logs.length === 0 && (
+      {!hasLogs && (
 
         <div
           className="
@@ -228,7 +253,7 @@ export default function LiveFeed({
 
       {/* LOGS */}
 
-      {logs.length > 0 && (
+      {hasLogs && (
 
         <div
           className="
@@ -241,24 +266,36 @@ export default function LiveFeed({
           "
         >
 
-          {logs.map(
+          {sortedLogs.map(
             (
               log: any,
               index: number
             ) => {
 
               const success =
-                log?.success;
+                log?.success ??
+                (
+                  log?.status === "completed"
+                    ? true
+                    : log?.status === "failed"
+                    ? false
+                    : undefined
+                )
 
               const status =
                 getStatusLabel(
-                  success
+                  success,
+                  log?.status
                 );
 
               return (
 
                 <div
-                  key={index}
+                  key={
+                    log?.id ||
+                    log?.step_id ||
+                    index
+                  }
                   className="
                     rounded-3xl
                     border
@@ -332,11 +369,13 @@ export default function LiveFeed({
                             size={16}
                           />
 
-                          {log?.created_at
-                            ? new Date(
-                                log.created_at
-                              ).toLocaleString()
-                            : "LIVE"}
+                          {
+                            log?.created_at
+                              ? new Date(
+                                  log.created_at
+                                ).toLocaleString()
+                              : "LIVE"
+                          }
 
                         </div>
                       </div>
@@ -351,7 +390,12 @@ export default function LiveFeed({
                           break-words
                         "
                       >
-                        Runtime Usage Event
+                        {
+                          log?.action ||
+                          log?.event_type ||
+                          log?.status ||
+                          "Runtime Usage Event"
+                        }
                       </h3>
 
                       {/* IDS */}
@@ -483,8 +527,11 @@ export default function LiveFeed({
                           >
                             PROMPT:
                             {" "}
-                            {log?.prompt_tokens ||
-                              0}
+                            {
+                              Number(
+                                log?.prompt_tokens || 0
+                              ).toLocaleString()
+                            }
                           </span>
 
                         </div>
@@ -521,8 +568,11 @@ export default function LiveFeed({
                           >
                             COMPLETION:
                             {" "}
-                            {log?.completion_tokens ||
-                              0}
+                            {
+                              Number(
+                                log?.completion_tokens || 0
+                              ).toLocaleString()
+                            }
                           </span>
 
                         </div>
@@ -559,8 +609,19 @@ export default function LiveFeed({
                           >
                             TOTAL:
                             {" "}
-                            {log?.total_tokens ||
-                              0}
+                            {
+                              Number(
+                                log?.total_tokens ??
+                                (
+                                  Number(
+                                    log?.prompt_tokens || 0
+                                  ) +
+                                  Number(
+                                    log?.completion_tokens || 0
+                                  )
+                                )
+                              ).toLocaleString()
+                            }
                           </span>
 
                         </div>
@@ -598,7 +659,7 @@ export default function LiveFeed({
                             $
                             {Number(
                               log?.cost || 0
-                            ).toFixed(6)}
+                            ).toFixed(4)}
                           </span>
 
                         </div>
