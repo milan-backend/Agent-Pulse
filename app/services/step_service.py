@@ -119,7 +119,7 @@ async def create_step_execution(
 
         prompt=prompt_text,
 
-        completion_text="",
+        completion="",
 
         model_name="gpt-4o-mini"
     )
