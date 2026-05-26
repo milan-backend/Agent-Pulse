@@ -117,7 +117,7 @@ async def create_step_execution(
 
     usage = calculate_usage(
 
-        prompt_text=prompt_text,
+        prompt=prompt_text,
 
         completion_text="",
 

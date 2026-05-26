@@ -208,7 +208,7 @@ def process_step(self, step_id: str):
             )
 
             completion_usage = calculate_usage(
-                prompt_text="",
+                prompt="",
                 completion_text=output,
                 model_name="gpt-4o-mini"
             )
