@@ -260,7 +260,7 @@ export default function UsageLogsPage() {
     {
       title: "Runtime Cost",
       value:
-        `$${totalCost.toFixed(4)}`,
+        `$${totalCost.toFixed(6)}`,
       icon: Coins,
       color: `
         border-yellow-500/20

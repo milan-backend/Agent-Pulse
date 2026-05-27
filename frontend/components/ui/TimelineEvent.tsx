@@ -79,7 +79,7 @@ export default function TimelineEvent({
           >
             Cost: $
             {
-              Number(cost).toFixed(4)
+              Number(cost).toFixed(6)
             }
           </p>
         )}

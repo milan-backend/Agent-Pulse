@@ -355,7 +355,7 @@ export default function AnalyticsPage() {
                 $
                 {Number(
                   costs?.total_cost || 0
-                ).toFixed(2)}
+                ).toFixed(6)}
               </h2>
 
             </div>
@@ -666,7 +666,7 @@ export default function AnalyticsPage() {
                         $
                         {Number(
                           item?.cost || 0
-                        ).toFixed(4)}
+                        ).toFixed(6)}
                       </p>
 
                     </div>

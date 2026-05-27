@@ -118,10 +118,10 @@ def get_cost_analytics_data(
             total_steps,
 
         "total_cost":
-            round(total_cost, 4),
+            round(total_cost, 8),
 
         "average_cost":
-            round(average_cost, 6)
+            round(average_cost, 8)
     }
 
 
@@ -388,10 +388,10 @@ def get_analytics_overview_data(
         "costs": {
 
             "total_cost":
-                round(total_cost, 4),
+                round(total_cost, 8),
 
             "average_cost":
-                round(average_cost, 6)
+                round(average_cost, 8)
         },
 
         "tokens": {

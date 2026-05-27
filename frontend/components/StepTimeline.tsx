@@ -635,7 +635,7 @@ export default function StepTimeline({
                             {Number(
                               log?.execution_cost ||
                               0
-                            ).toFixed(4)}
+                            ).toFixed(6)}
                           </p>
                         </div>
                       </div>

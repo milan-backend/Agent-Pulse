@@ -340,7 +340,7 @@ export default function AgentCard({
                   $
                   {Number(
                     agent?.total_cost || 0
-                  ).toFixed(2)}
+                  ).toFixed(6)}
 
                 </h3>
 

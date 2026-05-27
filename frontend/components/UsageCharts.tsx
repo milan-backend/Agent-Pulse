@@ -538,7 +538,7 @@ export default function UsageCharts({
                     "
                   >
                     $
-                    {totalCost.toFixed(4)}
+                    {totalCost.toFixed(6)}
                   </h3>
 
                 </div>

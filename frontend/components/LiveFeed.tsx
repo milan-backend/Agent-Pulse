@@ -659,7 +659,7 @@ export default function LiveFeed({
                             $
                             {Number(
                               log?.cost || 0
-                            ).toFixed(4)}
+                            ).toFixed(6)}
                           </span>
 
                         </div>
