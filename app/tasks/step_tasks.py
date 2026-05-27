@@ -359,31 +359,40 @@ def process_step(self, step_id: str):
         # SAVE TOKEN + COST DATA
         # =========================================
 
-        step.prompt_tokens = (
+        step.prompt_tokens = int(
             completion_usage.get(
                 "prompt_tokens",
                 0
             )
         )
 
-        step.completion_tokens = (
+        step.completion_tokens = int(
             completion_usage.get(
                 "completion_tokens",
                 0
             )
         )
 
-        step.total_tokens = (
+        step.total_tokens = int(
             completion_usage.get(
                 "total_tokens",
                 0
             )
         )
 
-        step.runtime_cost = (
+        step.cost = float(
             completion_usage.get(
                 "cost",
-                0
+                0.0
+            )
+        )
+
+        agent.total_cost = float(
+            (agent.total_cost or 0.0)
+            +
+            completion_usage.get(
+                "cost",
+                0.0
             )
         )
 
@@ -407,19 +416,25 @@ def process_step(self, step_id: str):
 
             model_used="gemini-2.5-flash-lite",
 
-            cost=completion_usage.get(
-                "cost",
-                0
+            cost=float(
+                completion_usage.get(
+                    "cost",
+                    0.0
+                )
             ),
 
-            prompt_tokens=completion_usage.get(
-                "prompt_tokens",
-                0
+            prompt_tokens=int(
+                completion_usage.get(
+                    "prompt_tokens",
+                    0
+                )
             ),
 
-            completion_tokens=completion_usage.get(
-                "completion_tokens",
-                0
+            completion_tokens=int(
+                completion_usage.get(
+                    "completion_tokens",
+                    0
+                )
             )
         )
 
