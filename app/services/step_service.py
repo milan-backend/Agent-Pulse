@@ -20,11 +20,6 @@ from app.services.cache import generate_cache_key
 from app.services.audit_service import create_audit_log
 from app.services.usage_service import create_usage_event
 from app.services.guard import evaluate_agent_runtime
-from app.services.cost_service import calculate_llm_cost
-
-from app.services.tokenizer_service import (
-    calculate_usage
-)
 
 from app.tasks.step_tasks import process_step
 
@@ -77,7 +72,10 @@ async def create_step_execution(
             detail="Invalid subscription plan"
         )
 
+    # ============================================
     # TASK ACCESS CONTROL
+    # ============================================
+
     if (
         hasattr(current_agent, "allowed_tasks")
         and current_agent.allowed_tasks
@@ -86,14 +84,19 @@ async def create_step_execution(
         if request.task_name not in current_agent.allowed_tasks:
 
             return {
-                "error": "Access denied: task not allowed"
+                "error":
+                    "Access denied: task not allowed"
             }
 
+    # ============================================
     # CURRENT COUNTS
+    # ============================================
+
     current_step_count = (
         db.query(DurableStep)
         .filter(
-            DurableStep.agent_id == current_agent.id
+            DurableStep.agent_id
+            == current_agent.id
         )
         .count()
     )
@@ -103,37 +106,31 @@ async def create_step_execution(
     repeated_task_count = (
         db.query(DurableStep)
         .filter(
-            DurableStep.agent_id == current_agent.id,
-            DurableStep.task_name == request.task_name
+            DurableStep.agent_id
+            == current_agent.id,
+
+            DurableStep.task_name
+            == request.task_name
         )
         .count()
     )
 
-    # REAL TOKEN USAGE
+    # ============================================
+    # AGENT POLICY
+    # ============================================
 
-    prompt_text = str(
-        request.input_data
-    )
+    policy = current_agent.policy
 
-    usage = calculate_usage(
+    if not policy:
 
-        prompt=prompt_text,
+        return {
+            "error":
+                "Agent policy missing"
+        }
 
-        completion="",
-
-        model_name="gpt-4o-mini"
-    )
-
-    prompt_tokens = (
-        usage["prompt_tokens"]
-    )
-
-    completion_tokens = 0
-
-    step_cost = calculate_llm_cost(
-        prompt_tokens,
-        completion_tokens
-    )
+    # ============================================
+    # CURRENT TOTAL COST
+    # ============================================
 
     agent_total_cost = (
         db.query(Usage)
@@ -152,29 +149,17 @@ async def create_step_execution(
         for item in agent_total_cost
     )
 
-    future_total_cost = (
-        agent_total_cost +
-        step_cost
-    )
-
-    # AGENT POLICY
-    policy = current_agent.policy
-
-    if not policy:
-
-        return {
-            "error":
-            "Agent policy missing"
-        }
-
+    # ============================================
     # RUNTIME GUARD
+    # ============================================
+
     guard = evaluate_agent_runtime(
 
         total_steps=current_step_count,
 
         retry_count=current_retry_count,
 
-        total_cost=future_total_cost,
+        total_cost=agent_total_cost,
 
         repeated_task_count=repeated_task_count,
 
@@ -205,10 +190,13 @@ async def create_step_execution(
 
         return {
             "error":
-            f"Agent stopped: {guard['reason']}"
+                f"Agent stopped: {guard['reason']}"
         }
 
+    # ============================================
     # IDEMPOTENCY
+    # ============================================
+
     existing = None
 
     if policy.enable_idempotency:
@@ -245,52 +233,22 @@ async def create_step_execution(
             "error": existing.error_message
         }
 
+    # ============================================
     # REFRESH AGENT
+    # ============================================
+
     db.refresh(current_agent)
 
     if current_agent.status == "killed":
 
         return {
-            "error": "Agent manually stopped"
+            "error":
+                "Agent manually stopped"
         }
 
     # ============================================
     # CONCURRENT EXECUTION LIMIT
     # ============================================
-
-    subscription = (
-        db.query(WorkspaceSubscription)
-        .filter(
-            WorkspaceSubscription.workspace_id
-            == current_agent.workspace_id,
-
-            WorkspaceSubscription.status
-            == "active"
-        )
-        .first()
-    )
-
-    if not subscription:
-
-        return {
-            "error":
-            "No active subscription"
-        }
-
-    plan = (
-        db.query(Plan)
-        .filter(
-            Plan.id == subscription.plan_id
-        )
-        .first()
-    )
-
-    if not plan:
-
-        return {
-            "error":
-            "Invalid subscription plan"
-        }
 
     running_steps = (
         db.query(
@@ -320,7 +278,7 @@ async def create_step_execution(
         return {
 
             "error":
-            "Concurrent execution limit exceeded",
+                "Concurrent execution limit exceeded",
 
             "current_running":
                 running_steps,
@@ -329,49 +287,86 @@ async def create_step_execution(
                 max_parallel_runs
         }
 
+    # ============================================
     # CREATE STEP
+    # ============================================
+
     step = DurableStep(
+
         agent_id=current_agent.id,
+
         workspace_id=current_agent.workspace_id,
+
         task_name=request.task_name,
+
         input_data=request.input_data,
+
         status="pending",
-        idempotency_key=request.idempotency_key,
+
+        idempotency_key=
+            request.idempotency_key,
+
         runtime_controlled=True
     )
 
     db.add(step)
+
     db.flush()
 
-    # USAGE EVENT
+    # ============================================
+    # CREATE EXECUTION EVENT
+    # ============================================
+
     create_usage_event(
+
         db=db,
-        workspace_id=current_agent.workspace_id,
-        agent_id=current_agent.id,
-        step_id=step.id,
-        event_type="execution_started",
-        cost=step_cost,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
+
+        workspace_id=
+            current_agent.workspace_id,
+
+        agent_id=
+            current_agent.id,
+
+        step_id=
+            step.id,
+
+        event_type=
+            "execution_started"
     )
 
     db.commit()
 
+    # ============================================
     # BACKGROUND TASK
-    #process_step(step.id)
-    process_step.delay(str(step.id))
+    # ============================================
 
+    process_step.delay(
+        str(step.id)
+    )
+
+    # ============================================
     # WEBSOCKET EVENT
+    # ============================================
+
     await broadcast_message(
+
         json.dumps({
-            "type": "mission_updated"
+
+            "type":
+                "mission_updated"
         })
     )
 
     return {
-        "message": "Step scheduled",
-        "step_id": step.id,
-        "status": "pending"
+
+        "message":
+            "Step scheduled",
+
+        "step_id":
+            step.id,
+
+        "status":
+            "pending"
     }
 
 
@@ -385,7 +380,9 @@ def retry_failed_step(
         db.query(DurableStep)
         .filter(
             DurableStep.id == step_id,
-            DurableStep.agent_id == current_agent.id
+
+            DurableStep.agent_id
+            == current_agent.id
         )
         .first()
     )
@@ -393,13 +390,15 @@ def retry_failed_step(
     if not step:
 
         return {
-            "error": "Step not found"
+            "error":
+                "Step not found"
         }
 
     if step.status != "failed":
 
         return {
-            "message": "Step is not failed"
+            "message":
+                "Step is not failed"
         }
 
     policy = current_agent.policy
@@ -408,7 +407,7 @@ def retry_failed_step(
 
         return {
             "error":
-            "Agent policy missing"
+                "Agent policy missing"
         }
 
     if (
@@ -419,38 +418,71 @@ def retry_failed_step(
 
         return {
             "error":
-            "Retry limit exceeded"
+                "Retry limit exceeded"
         }
 
+    # ============================================
     # USAGE EVENT
+    # ============================================
+
     create_usage_event(
+
         db=db,
+
         agent_id=current_agent.id,
-        workspace_id=current_agent.workspace_id,
+
+        workspace_id=
+            current_agent.workspace_id,
+
         step_id=step.id,
+
         event_type="retry"
     )
 
+    # ============================================
     # AUDIT LOG
+    # ============================================
+
     create_audit_log(
+
         db=db,
-        workspace_id=current_agent.workspace_id,
-        user_id=current_agent.created_by,
-        agent_id=current_agent.id,
-        action="step_retried"
+
+        workspace_id=
+            current_agent.workspace_id,
+
+        user_id=
+            current_agent.created_by,
+
+        agent_id=
+            current_agent.id,
+
+        action=
+            "step_retried"
     )
 
-    # RESET
+    # ============================================
+    # RESET STEP
+    # ============================================
+
     step.status = "pending"
 
     db.commit()
 
+    # ============================================
     # BACKGROUND TASK
-    process_step.delay(str(step.id))
+    # ============================================
+
+    process_step.delay(
+        str(step.id)
+    )
 
     return {
-        "message": "Retry scheduled",
-        "step_id": step.id
+
+        "message":
+            "Retry scheduled",
+
+        "step_id":
+            step.id
     }
 
 
@@ -464,33 +496,68 @@ async def get_step_execution_status(
         db.query(DurableStep)
         .filter(
             DurableStep.id == step_id,
-            DurableStep.agent_id == current_agent.id
+
+            DurableStep.agent_id
+            == current_agent.id
         )
         .first()
     )
 
     if not step:
+
         raise HTTPException(
             status_code=404,
             detail="Step not found"
         )
 
     return {
-        "step_id": step.id,
-        "status": step.status,
-        "input_data": step.input_data,
-        "output_data": step.output_data,
-        "error_message": step.error_message,
-        "started_at": (
-            str(step.started_at)
-            if step.started_at else None
-        ),
-        "completed_at": (
-            str(step.completed_at)
-            if step.completed_at else None
-        ),
-        "created_at": (
-            str(step.created_at)
-            if step.created_at else None
-        )
+
+        "step_id":
+            step.id,
+
+        "status":
+            step.status,
+
+        "input_data":
+            step.input_data,
+
+        "output_data":
+            step.output_data,
+
+        "error_message":
+            step.error_message,
+
+        "prompt_tokens":
+            step.prompt_tokens,
+
+        "completion_tokens":
+            step.completion_tokens,
+
+        "total_tokens":
+            getattr(
+                step,
+                "total_tokens",
+                0
+            ),
+
+        "started_at":
+            (
+                str(step.started_at)
+                if step.started_at
+                else None
+            ),
+
+        "completed_at":
+            (
+                str(step.completed_at)
+                if step.completed_at
+                else None
+            ),
+
+        "created_at":
+            (
+                str(step.created_at)
+                if step.created_at
+                else None
+            )
     }
