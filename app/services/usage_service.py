@@ -4,8 +4,6 @@ from sqlalchemy.sql import func
 
 from app.models.usage import Usage
 
-from app.models.workspace import Workspace
-
 from app.models.workspace_subscription import (
     WorkspaceSubscription
 )
@@ -17,30 +15,68 @@ from app.models.billing_event import (
 )
 
 
+# ============================================
+# CREATE USAGE EVENT
+# ============================================
+
 def create_usage_event(
+
     db,
+
     workspace_id,
+
     agent_id,
+
     step_id,
+
     event_type,
+
     status=None,
+
     model_used=None,
+
     request_id=None,
-    cost=0,
+
+    cost=0.0,
+
     prompt_tokens=0,
+
     completion_tokens=0,
+
     latency_ms=None,
+
     cache_hit=False,
+
     event_metadata=None
 ):
 
-    # =========================
+    # ============================================
+    # FORCE SAFE TYPES
+    # ============================================
+
+    cost = float(
+        cost or 0.0
+    )
+
+    prompt_tokens = int(
+        prompt_tokens or 0
+    )
+
+    completion_tokens = int(
+        completion_tokens or 0
+    )
+
+    # ============================================
     # WORKSPACE BILLING CHECK
-    # =========================
+    # ============================================
 
     subscription = (
-        db.query(WorkspaceSubscription)
+
+        db.query(
+            WorkspaceSubscription
+        )
         .filter(
+
             WorkspaceSubscription.workspace_id
             == workspace_id,
 
@@ -53,14 +89,19 @@ def create_usage_event(
     if not subscription:
 
         raise HTTPException(
+
             status_code=403,
-            detail="No active subscription"
+
+            detail=
+                "No active subscription"
         )
 
     plan = (
+
         db.query(Plan)
         .filter(
-            Plan.id == subscription.plan_id
+            Plan.id ==
+            subscription.plan_id
         )
         .first()
     )
@@ -68,11 +109,18 @@ def create_usage_event(
     if not plan:
 
         raise HTTPException(
+
             status_code=403,
+
             detail="Invalid plan"
         )
 
+    # ============================================
+    # CURRENT WORKSPACE COST
+    # ============================================
+
     workspace_total_cost = (
+
         db.query(
             func.sum(Usage.cost)
         )
@@ -84,10 +132,15 @@ def create_usage_event(
     )
 
     workspace_total_cost = float(
-        workspace_total_cost or 0
+        workspace_total_cost or 0.0
     )
 
+    # ============================================
+    # MONTHLY LIMIT
+    # ============================================
+
     max_monthly_cost = (
+
         plan.limits.get(
             "max_monthly_cost",
             10
@@ -97,6 +150,10 @@ def create_usage_event(
     projected_cost = (
         workspace_total_cost + cost
     )
+
+    # ============================================
+    # BILLING LIMIT EXCEEDED
+    # ============================================
 
     if projected_cost > max_monthly_cost:
 
@@ -108,7 +165,8 @@ def create_usage_event(
 
             step_id=step_id,
 
-            event_type="monthly_limit_exceeded",
+            event_type=
+                "monthly_limit_exceeded",
 
             amount=projected_cost,
 
@@ -131,10 +189,15 @@ def create_usage_event(
             status_code=403,
 
             detail=(
+
                 "Workspace monthly "
                 "billing limit exceeded"
             )
         )
+
+    # ============================================
+    # CREATE USAGE RECORD
+    # ============================================
 
     usage = Usage(
 
@@ -152,15 +215,23 @@ def create_usage_event(
 
         request_id=request_id,
 
-        cost=cost,
+        cost=float(cost),
 
-        prompt_tokens=prompt_tokens,
+        prompt_tokens=int(
+            prompt_tokens
+        ),
 
-        completion_tokens=completion_tokens,
+        completion_tokens=int(
+            completion_tokens
+        ),
 
         total_tokens=(
-            prompt_tokens +
-            completion_tokens
+
+            int(prompt_tokens)
+
+            +
+
+            int(completion_tokens)
         ),
 
         latency_ms=latency_ms,
