@@ -1,26 +1,34 @@
 import os
-import google.generativeai as genai
+
+from google import genai
 
 
-genai.configure(
+# ============================================
+# GEMINI CLIENT
+# ============================================
+
+client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
 
-model = genai.GenerativeModel(
-    "gemini-1.5-flash"
-)
-
+# ============================================
+# GENERATE LLM RESPONSE
+# ============================================
 
 def generate_llm_response(
     prompt: str,
-    model_name: str = "gemini"
+    model_name: str = "gemini-2.0-flash"
 ):
 
     try:
 
-        response = model.generate_content(
-            prompt
+        response = client.models.generate_content(
+
+            model=model_name,
+
+            contents=prompt
+
         )
 
         return response.text
@@ -31,5 +39,5 @@ def generate_llm_response(
         print(str(e))
 
         raise Exception(
-            f"LLM generation failed: {str(e)}"
+            "LLM execution failed"
         )
