@@ -17,15 +17,14 @@ client = genai.Client(
 # ============================================
 
 def generate_llm_response(
-    prompt: str,
-    model_name: str = "gemini-2.0-flash"
+    prompt: str
 ):
 
     try:
 
         response = client.models.generate_content(
 
-            model=model_name,
+            model="gemini-2.5-flash-lite",
 
             contents=prompt
 
@@ -35,9 +34,10 @@ def generate_llm_response(
 
     except Exception as e:
 
-        print("GEMINI ERROR:")
+        print("========== GEMINI ERROR ==========")
+
         print(str(e))
 
-        raise Exception(
-            "LLM execution failed"
-        )
+        print("==================================")
+
+        raise Exception(str(e))

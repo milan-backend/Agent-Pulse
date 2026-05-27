@@ -17,7 +17,7 @@ from app.services.tokenizer_service import (
 )
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=5)
 def process_step(self, step_id: str):
 
     db = SessionLocal()
@@ -202,23 +202,63 @@ def process_step(self, step_id: str):
 
         try:
 
+            prompt = ""
+
+            if isinstance(
+                step.input_data,
+                dict
+            ):
+
+                prompt = step.input_data.get(
+                    "prompt",
+                    ""
+                )
+
+            else:
+
+                prompt = str(
+                    step.input_data
+                )
+
             output = generate_llm_response(
-                prompt=str(step.input_data),
-                model_name="gemini-2.0-flash"
+                prompt=prompt
             )
 
             completion_usage = calculate_usage(
-                prompt="",
+                prompt=prompt,
                 completion=output,
-                model_name="gemini-2.0-flash"
+                model_name="gemini-2.5-flash-lite"
             )
 
         except Exception as llm_error:
 
+            error_message = str(
+                llm_error
+            )
+
+            # =====================================
+            # HANDLE 429 RATE LIMIT
+            # =====================================
+
+            if "429" in error_message:
+
+                retry_count = (
+                    self.request.retries
+                )
+
+                countdown = (
+                    2 ** retry_count
+                )
+
+                raise self.retry(
+                    exc=llm_error,
+                    countdown=countdown
+                )
+
             step.status = "failed"
 
             step.error_message = (
-                f"LLM execution failed: {str(llm_error)}"
+                f"LLM execution failed: {error_message}"
             )
 
             step.output_data = {
@@ -319,7 +359,9 @@ def process_step(self, step_id: str):
 
             "success": True,
 
-            "result": output
+            "result": output,
+
+            "usage": completion_usage
         }
 
         step.output_data = result
