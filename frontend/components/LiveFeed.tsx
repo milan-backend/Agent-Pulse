@@ -6,7 +6,6 @@ import {
   Clock3,
   ShieldCheck,
   AlertTriangle,
-  Zap,
   DollarSign,
   Cpu,
   Database,
@@ -25,10 +24,12 @@ export default function LiveFeed({
   // =========================
 
   function getStatusColor(
-    success?: boolean
+    status?: string
   ) {
 
-    if (success === true) {
+    if (
+      status === "execution_completed"
+    ) {
 
       return `
         border-green-500/20
@@ -37,7 +38,9 @@ export default function LiveFeed({
       `;
     }
 
-    if (success === false) {
+    if (
+      status === "execution_failed"
+    ) {
 
       return `
         border-red-500/20
@@ -58,25 +61,22 @@ export default function LiveFeed({
   // =========================
 
   function getStatusLabel(
-    success?: boolean,
     status?: string
   ) {
 
-    if (status) {
-      return status
-        .replace("_", " ")
-        .toUpperCase()
+    if (
+      status === "execution_completed"
+    ) {
+      return "COMPLETED";
     }
 
-    if (success === true) {
-      return "SUCCESS"
+    if (
+      status === "execution_failed"
+    ) {
+      return "FAILED";
     }
 
-    if (success === false) {
-      return "FAILED"
-    }
-
-    return "RUNNING"
+    return "RUNNING";
   }
 
   const sortedLogs =
@@ -272,19 +272,8 @@ export default function LiveFeed({
               index: number
             ) => {
 
-              const success =
-                log?.success ??
-                (
-                  log?.status === "completed"
-                    ? true
-                    : log?.status === "failed"
-                    ? false
-                    : undefined
-                )
-
               const status =
                 getStatusLabel(
-                  success,
                   log?.status
                 );
 
@@ -346,7 +335,7 @@ export default function LiveFeed({
                             text-sm
                             font-bold
                             ${getStatusColor(
-                              success
+                              log?.status
                             )}
                           `}
                         >
@@ -391,10 +380,11 @@ export default function LiveFeed({
                         "
                       >
                         {
-                          log?.action ||
-                          log?.event_type ||
-                          log?.status ||
-                          "Runtime Usage Event"
+                          log?.status === "execution_completed"
+                            ? "Execution Completed"
+                            : log?.status === "execution_failed"
+                            ? "Execution Failed"
+                            : "Execution Started"
                         }
                       </h3>
 
@@ -507,7 +497,9 @@ export default function LiveFeed({
                             py-3
                             flex
                             items-center
+                            justify-center
                             gap-3
+                            min-w-[150px]
                           "
                         >
 
@@ -548,7 +540,9 @@ export default function LiveFeed({
                             py-3
                             flex
                             items-center
+                            justify-center
                             gap-3
+                            min-w-[150px]
                           "
                         >
 
@@ -589,7 +583,9 @@ export default function LiveFeed({
                             py-3
                             flex
                             items-center
+                            justify-center
                             gap-3
+                            min-w-[150px]
                           "
                         >
 
@@ -638,7 +634,9 @@ export default function LiveFeed({
                             py-3
                             flex
                             items-center
+                            justify-center
                             gap-3
+                            min-w-[150px]
                           "
                         >
 
@@ -651,7 +649,8 @@ export default function LiveFeed({
 
                           <span
                             className="
-                              text-sm
+                              text-xs
+                              lg:text-sm
                               font-bold
                               text-pink-300
                             "
@@ -659,7 +658,7 @@ export default function LiveFeed({
                             $
                             {Number(
                               log?.cost || 0
-                            ).toFixed(6)}
+                            ).toFixed(4)}
                           </span>
 
                         </div>
@@ -678,16 +677,17 @@ export default function LiveFeed({
                         flex
                         items-center
                         justify-center
+                        shrink-0
 
                         ${
-                          success === true
+                          log?.status === "execution_completed"
 
                             ? `
                               border-green-500/20
                               bg-green-500/10
                             `
 
-                            : success === false
+                            : log?.status === "execution_failed"
 
                             ? `
                               border-red-500/20
@@ -702,7 +702,7 @@ export default function LiveFeed({
                       `}
                     >
 
-                      {success === true ? (
+                      {log?.status === "execution_completed" ? (
 
                         <ShieldCheck
                           className="
@@ -711,7 +711,7 @@ export default function LiveFeed({
                           size={30}
                         />
 
-                      ) : success === false ? (
+                      ) : log?.status === "execution_failed" ? (
 
                         <AlertTriangle
                           className="

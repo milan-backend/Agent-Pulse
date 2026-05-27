@@ -179,9 +179,6 @@ export default function UsageLogsPage() {
       0
     );
 
-  const hasLogs =
-    logs.length > 0;
-
   // =========================
   // FORMAT NUMBERS
   // =========================
@@ -260,7 +257,7 @@ export default function UsageLogsPage() {
     {
       title: "Runtime Cost",
       value:
-        `$${totalCost.toFixed(6)}`,
+        `$${totalCost.toFixed(4)}`,
       icon: Coins,
       color: `
         border-yellow-500/20
@@ -493,7 +490,7 @@ export default function UsageLogsPage() {
                       font-black
                       tracking-tight
                       leading-none
-                      whitespace-nowrap
+                      break-all
                     "
                   >
                     {card.value}
