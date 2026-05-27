@@ -16,6 +16,10 @@ from app.services.tokenizer_service import (
     calculate_usage
 )
 
+from app.services.usage_service import (
+    create_usage_event
+)
+
 
 @shared_task(bind=True, max_retries=5)
 def process_step(self, step_id: str):
@@ -350,6 +354,74 @@ def process_step(self, step_id: str):
                 "message":
                     "Mission paused during execution"
             }
+
+        # =========================================
+        # SAVE TOKEN + COST DATA
+        # =========================================
+
+        step.prompt_tokens = (
+            completion_usage.get(
+                "prompt_tokens",
+                0
+            )
+        )
+
+        step.completion_tokens = (
+            completion_usage.get(
+                "completion_tokens",
+                0
+            )
+        )
+
+        step.total_tokens = (
+            completion_usage.get(
+                "total_tokens",
+                0
+            )
+        )
+
+        step.runtime_cost = (
+            completion_usage.get(
+                "cost",
+                0
+            )
+        )
+
+        # =========================================
+        # CREATE USAGE EVENT
+        # =========================================
+
+        create_usage_event(
+
+            db=db,
+
+            workspace_id=step.workspace_id,
+
+            agent_id=step.agent_id,
+
+            step_id=step.id,
+
+            event_type="execution_completed",
+
+            status="completed",
+
+            model_used="gemini-2.5-flash-lite",
+
+            cost=completion_usage.get(
+                "cost",
+                0
+            ),
+
+            prompt_tokens=completion_usage.get(
+                "prompt_tokens",
+                0
+            ),
+
+            completion_tokens=completion_usage.get(
+                "completion_tokens",
+                0
+            )
+        )
 
         # =========================================
         # SUCCESS
