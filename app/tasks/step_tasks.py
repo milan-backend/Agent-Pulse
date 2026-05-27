@@ -204,13 +204,13 @@ def process_step(self, step_id: str):
 
             output = generate_llm_response(
                 prompt=str(step.input_data),
-                model_name="gemini"
+                model_name="gemini-2.0-flash"
             )
 
             completion_usage = calculate_usage(
                 prompt="",
                 completion=output,
-                model_name="gemini"
+                model_name="gemini-2.0-flash"
             )
 
         except Exception as llm_error:
