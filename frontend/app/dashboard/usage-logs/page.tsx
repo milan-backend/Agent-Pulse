@@ -12,9 +12,7 @@ import {
   Bot,
 } from "lucide-react";
 
-import {
-  getDashboardUsageLogs,
-} from "@/components/api";
+import { getDashboardUsageLogs } from "@/components/api";
 
 import LiveFeed from "@/components/LiveFeed";
 
@@ -197,7 +195,7 @@ export default function UsageLogsPage() {
   }
 
   // =========================
-  // CARD DATA
+  // CARDS
   // =========================
 
   const cards = [
@@ -256,9 +254,14 @@ export default function UsageLogsPage() {
 
     {
       title: "Runtime Cost",
+
       value:
-        `$${totalCost.toFixed(4)}`,
+        totalCost < 0.01
+          ? `$${totalCost.toFixed(4)}`
+          : `$${totalCost.toFixed(2)}`,
+
       icon: Coins,
+
       color: `
         border-yellow-500/20
         bg-yellow-500/10
@@ -445,7 +448,9 @@ export default function UsageLogsPage() {
                 className={`
                   rounded-[30px]
                   border
-                  p-7
+                  p-6
+                  overflow-hidden
+                  relative
                   min-h-[180px]
                   flex
                   flex-col
@@ -453,9 +458,26 @@ export default function UsageLogsPage() {
                   transition-all
                   duration-300
                   hover:scale-[1.02]
+                  hover:shadow-[0_0_40px_rgba(0,255,255,0.08)]
+                  hover:border-cyan-400/30
                   ${card.color}
                 `}
               >
+
+                {/* GLOW */}
+
+                <div
+                  className="
+                    absolute
+                    top-0
+                    right-0
+                    h-32
+                    w-32
+                    rounded-full
+                    bg-white/5
+                    blur-3xl
+                  "
+                />
 
                 {/* TITLE */}
 
@@ -465,6 +487,8 @@ export default function UsageLogsPage() {
                     font-semibold
                     text-white/90
                     leading-snug
+                    relative
+                    z-10
                   "
                 >
                   {card.title}
@@ -475,43 +499,58 @@ export default function UsageLogsPage() {
                 <div
                   className="
                     flex
-                    items-center
+                    items-end
                     justify-between
-                    gap-4
+                    gap-3
                     mt-7
+                    min-w-0
+                    relative
+                    z-10
                   "
                 >
 
                   {/* VALUE */}
 
-                  <h2
-                    className="
-                      text-4xl
-                      font-black
-                      tracking-tight
-                      leading-none
-                      break-all
-                    "
-                  >
-                    {card.value}
-                  </h2>
+                  <div className="min-w-0 flex-1">
+
+                    <h2
+                      className="
+                        text-3xl
+                        xl:text-4xl
+                        font-black
+                        tracking-tight
+                        leading-none
+                        truncate
+                        whitespace-nowrap
+                        overflow-hidden
+                      "
+                      title={card.value}
+                    >
+                      {card.value}
+                    </h2>
+
+                  </div>
 
                   {/* ICON */}
 
                   <div
                     className="
-                      shrink-0
+                      h-11
+                      w-11
+                      rounded-2xl
                       flex
                       items-center
                       justify-center
+                      bg-white/5
+                      border
+                      border-white/10
+                      shrink-0
+                      backdrop-blur-sm
                     "
                   >
-
-                    <Icon
-                      size={28}
-                    />
-
+                    <Icon size={20} />
                   </div>
+
                 </div>
               </div>
             );
@@ -519,7 +558,7 @@ export default function UsageLogsPage() {
         )}
       </div>
 
-      {/* STATUS BAR */}
+      {/* TELEMETRY */}
 
       <div
         className="
@@ -591,7 +630,7 @@ export default function UsageLogsPage() {
           </div>
         </div>
 
-        {/* LIVE */}
+        {/* LIVE STATUS */}
 
         <div
           className="
