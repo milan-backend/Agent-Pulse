@@ -178,7 +178,7 @@ export default function UsageLogsPage() {
     );
 
   // =========================
-  // FORMAT NUMBERS
+  // FORMAT
   // =========================
 
   function formatNumber(
@@ -254,14 +254,11 @@ export default function UsageLogsPage() {
 
     {
       title: "Runtime Cost",
-
       value:
         totalCost < 0.01
           ? `$${totalCost.toFixed(4)}`
           : `$${totalCost.toFixed(2)}`,
-
       icon: Coins,
-
       color: `
         border-yellow-500/20
         bg-yellow-500/10
@@ -421,14 +418,14 @@ export default function UsageLogsPage() {
         </div>
       </div>
 
-      {/* METRICS */}
+      {/* METRIC CARDS */}
 
       <div
         className="
           grid
           grid-cols-1
           md:grid-cols-2
-          xl:grid-cols-5
+          xl:grid-cols-[1fr_1fr_1fr_1fr_1.2fr]
           gap-6
         "
       >
@@ -448,9 +445,7 @@ export default function UsageLogsPage() {
                 className={`
                   rounded-[30px]
                   border
-                  p-6
-                  overflow-hidden
-                  relative
+                  p-7
                   min-h-[180px]
                   flex
                   flex-col
@@ -458,26 +453,10 @@ export default function UsageLogsPage() {
                   transition-all
                   duration-300
                   hover:scale-[1.02]
-                  hover:shadow-[0_0_40px_rgba(0,255,255,0.08)]
-                  hover:border-cyan-400/30
+                  overflow-hidden
                   ${card.color}
                 `}
               >
-
-                {/* GLOW */}
-
-                <div
-                  className="
-                    absolute
-                    top-0
-                    right-0
-                    h-32
-                    w-32
-                    rounded-full
-                    bg-white/5
-                    blur-3xl
-                  "
-                />
 
                 {/* TITLE */}
 
@@ -487,8 +466,6 @@ export default function UsageLogsPage() {
                     font-semibold
                     text-white/90
                     leading-snug
-                    relative
-                    z-10
                   "
                 >
                   {card.title}
@@ -499,37 +476,34 @@ export default function UsageLogsPage() {
                 <div
                   className="
                     flex
-                    items-end
+                    items-center
                     justify-between
                     gap-3
                     mt-7
-                    min-w-0
-                    relative
-                    z-10
+                    w-full
+                    overflow-hidden
                   "
                 >
 
                   {/* VALUE */}
 
-                  <div className="min-w-0 flex-1">
-
-                    <h2
-                      className="
-                        text-3xl
-                        xl:text-4xl
-                        font-black
-                        tracking-tight
-                        leading-none
-                        truncate
-                        whitespace-nowrap
-                        overflow-hidden
-                      "
-                      title={card.value}
-                    >
-                      {card.value}
-                    </h2>
-
-                  </div>
+                  <h2
+                    className="
+                      text-2xl
+                      xl:text-3xl
+                      font-black
+                      tracking-tight
+                      leading-none
+                      whitespace-nowrap
+                      overflow-hidden
+                      text-ellipsis
+                      flex-1
+                      min-w-0
+                    "
+                    title={String(card.value)}
+                  >
+                    {card.value}
+                  </h2>
 
                   {/* ICON */}
 
@@ -537,6 +511,8 @@ export default function UsageLogsPage() {
                     className="
                       h-11
                       w-11
+                      min-h-[44px]
+                      min-w-[44px]
                       rounded-2xl
                       flex
                       items-center
@@ -545,6 +521,7 @@ export default function UsageLogsPage() {
                       border
                       border-white/10
                       shrink-0
+                      overflow-hidden
                       backdrop-blur-sm
                     "
                   >
@@ -558,7 +535,7 @@ export default function UsageLogsPage() {
         )}
       </div>
 
-      {/* TELEMETRY */}
+      {/* STREAM HEADER */}
 
       <div
         className="
