@@ -1,5 +1,3 @@
-// frontend/app/dashboard/settings/page.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -19,6 +17,7 @@ import {
   stopAllAgents,
   resumeAllAgents,
   logout,
+  deactivateAccount,
 } from "@/components/api";
 
 import { toast } from "sonner";
@@ -30,6 +29,13 @@ export default function SettingsPage() {
 
   const [loadingResume, setLoadingResume] =
     useState(false);
+
+  const [loadingDeactivate, setLoadingDeactivate] =
+    useState(false);
+
+  // ============================================
+  // KILL ALL
+  // ============================================
 
   async function handleKillAll() {
 
@@ -70,6 +76,10 @@ export default function SettingsPage() {
     }
   }
 
+  // ============================================
+  // RESUME ALL
+  // ============================================
+
   async function handleResumeAll() {
 
     if (loadingResume) return;
@@ -109,9 +119,70 @@ export default function SettingsPage() {
     }
   }
 
+  // ============================================
+  // DEACTIVATE ACCOUNT
+  // ============================================
+
+  async function handleDeactivateAccount() {
+
+    if (loadingDeactivate) return;
+
+    const password =
+      window.prompt(
+        "Enter your password to deactivate account"
+      );
+
+    if (!password) {
+      return;
+    }
+
+    try {
+
+      setLoadingDeactivate(true);
+
+      const confirmed =
+        window.confirm(
+          "Are you sure you want to deactivate your account?"
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      await deactivateAccount(
+        password
+      );
+
+      toast.success(
+        "Account deactivated successfully"
+      );
+
+      setTimeout(() => {
+
+        logout();
+
+      }, 1200);
+
+    } catch (err) {
+
+      console.error(err);
+
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Failed to deactivate account"
+      );
+
+    } finally {
+
+      setLoadingDeactivate(false);
+    }
+  }
+
   return (
 
     <div className="space-y-8">
+
       {/* HERO */}
 
       <div
@@ -125,6 +196,7 @@ export default function SettingsPage() {
           relative
         "
       >
+
         {/* GLOW */}
 
         <div
@@ -143,6 +215,7 @@ export default function SettingsPage() {
         {/* CONTENT */}
 
         <div className="relative z-10">
+
           <div
             className="
               flex
@@ -151,6 +224,7 @@ export default function SettingsPage() {
               mb-6
             "
           >
+
             <div
               className="
                 h-16
@@ -164,15 +238,18 @@ export default function SettingsPage() {
                 justify-center
               "
             >
+
               <Settings
                 className="
                   text-cyan-300
                 "
                 size={32}
               />
+
             </div>
 
             <div>
+
               <h1
                 className="
                   text-5xl
@@ -191,6 +268,7 @@ export default function SettingsPage() {
                 Configure global runtime
                 infrastructure controls.
               </p>
+
             </div>
           </div>
         </div>
@@ -206,7 +284,8 @@ export default function SettingsPage() {
           gap-8
         "
       >
-        {/* AGENT CONTROL */}
+
+        {/* RUNTIME CONTROL */}
 
         <div
           className="
@@ -217,6 +296,7 @@ export default function SettingsPage() {
             p-8
           "
         >
+
           <div
             className="
               flex
@@ -225,7 +305,9 @@ export default function SettingsPage() {
               mb-8
             "
           >
+
             <div>
+
               <h2
                 className="
                   text-3xl
@@ -243,6 +325,7 @@ export default function SettingsPage() {
               >
                 Manage global agent runtime.
               </p>
+
             </div>
 
             <div
@@ -258,18 +341,21 @@ export default function SettingsPage() {
                 justify-center
               "
             >
+
               <Cpu
                 className="
                   text-red-300
                 "
                 size={28}
               />
+
             </div>
           </div>
 
           {/* BUTTONS */}
 
           <div className="space-y-5">
+
             {/* STOP */}
 
             <button
@@ -293,7 +379,9 @@ export default function SettingsPage() {
                 disabled:cursor-not-allowed
               "
             >
+
               <div className="flex items-center gap-4">
+
                 <Power
                   className="
                     text-red-300
@@ -302,6 +390,7 @@ export default function SettingsPage() {
                 />
 
                 <div className="text-left">
+
                   <h3
                     className="
                       text-xl
@@ -319,6 +408,7 @@ export default function SettingsPage() {
                   <p className="text-sm text-slate-400 mt-1">
                     Emergency runtime stop.
                   </p>
+
                 </div>
               </div>
 
@@ -328,6 +418,7 @@ export default function SettingsPage() {
                 "
                 size={24}
               />
+
             </button>
 
             {/* RESUME */}
@@ -353,7 +444,9 @@ export default function SettingsPage() {
                 disabled:cursor-not-allowed
               "
             >
+
               <div className="flex items-center gap-4">
+
                 <PlayCircle
                   className="
                     text-green-300
@@ -362,6 +455,7 @@ export default function SettingsPage() {
                 />
 
                 <div className="text-left">
+
                   <h3
                     className="
                       text-xl
@@ -380,6 +474,7 @@ export default function SettingsPage() {
                     Restart all autonomous
                     agents.
                   </p>
+
                 </div>
               </div>
 
@@ -389,6 +484,7 @@ export default function SettingsPage() {
                 "
                 size={24}
               />
+
             </button>
           </div>
         </div>
@@ -404,6 +500,7 @@ export default function SettingsPage() {
             p-8
           "
         >
+
           <div
             className="
               flex
@@ -412,7 +509,9 @@ export default function SettingsPage() {
               mb-8
             "
           >
+
             <div>
+
               <h2
                 className="
                   text-3xl
@@ -430,6 +529,7 @@ export default function SettingsPage() {
               >
                 Session and API controls.
               </p>
+
             </div>
 
             <div
@@ -445,18 +545,21 @@ export default function SettingsPage() {
                 justify-center
               "
             >
+
               <KeyRound
                 className="
                   text-cyan-300
                 "
                 size={28}
               />
+
             </div>
           </div>
 
           {/* CARDS */}
 
           <div className="space-y-5">
+
             {/* API */}
 
             <div
@@ -468,6 +571,7 @@ export default function SettingsPage() {
                 p-6
               "
             >
+
               <div
                 className="
                   flex
@@ -475,7 +579,9 @@ export default function SettingsPage() {
                   justify-between
                 "
               >
+
                 <div>
+
                   <h3
                     className="
                       text-xl
@@ -508,6 +614,7 @@ export default function SettingsPage() {
                       text-green-300
                     "
                   >
+
                     <div
                       className="
                         h-2
@@ -519,6 +626,7 @@ export default function SettingsPage() {
                     />
 
                     ACTIVE
+
                   </div>
                 </div>
 
@@ -528,6 +636,7 @@ export default function SettingsPage() {
                   "
                   size={28}
                 />
+
               </div>
             </div>
 
@@ -558,7 +667,9 @@ export default function SettingsPage() {
                 justify-between
               "
             >
+
               <div className="flex items-center gap-4">
+
                 <LogOut
                   className="
                     text-red-300
@@ -567,6 +678,7 @@ export default function SettingsPage() {
                 />
 
                 <div className="text-left">
+
                   <h3
                     className="
                       text-xl
@@ -581,6 +693,7 @@ export default function SettingsPage() {
                     Terminate current admin
                     session.
                   </p>
+
                 </div>
               </div>
 
@@ -590,8 +703,149 @@ export default function SettingsPage() {
                 "
                 size={24}
               />
+
             </button>
           </div>
+        </div>
+
+        {/* DANGER ZONE */}
+
+        <div
+          className="
+            rounded-[32px]
+            border
+            border-red-500/20
+            bg-[linear-gradient(180deg,#120707_0%,#190909_100%)]
+            p-8
+            xl:col-span-2
+          "
+        >
+
+          {/* HEADER */}
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+              mb-8
+            "
+          >
+
+            <div>
+
+              <h2
+                className="
+                  text-3xl
+                  font-black
+                "
+              >
+                Danger Zone
+              </h2>
+
+              <p
+                className="
+                  text-slate-400
+                  mt-2
+                "
+              >
+                Sensitive account actions.
+              </p>
+
+            </div>
+
+            <div
+              className="
+                h-14
+                w-14
+                rounded-2xl
+                border
+                border-red-500/20
+                bg-red-500/10
+                flex
+                items-center
+                justify-center
+              "
+            >
+
+              <AlertTriangle
+                className="
+                  text-red-300
+                "
+                size={28}
+              />
+
+            </div>
+
+          </div>
+
+          {/* DEACTIVATE */}
+
+          <button
+            onClick={
+              handleDeactivateAccount
+            }
+            disabled={loadingDeactivate}
+            className="
+              w-full
+              rounded-3xl
+              border
+              border-red-500/20
+              bg-red-500/10
+              hover:bg-red-500/20
+              transition-all
+              p-6
+              flex
+              items-center
+              justify-between
+              disabled:opacity-50
+              disabled:cursor-not-allowed
+            "
+          >
+
+            <div className="flex items-center gap-4">
+
+              <AlertTriangle
+                className="
+                  text-red-300
+                "
+                size={28}
+              />
+
+              <div className="text-left">
+
+                <h3
+                  className="
+                    text-xl
+                    font-black
+                    text-red-300
+                  "
+                >
+                  {
+                    loadingDeactivate
+                      ? "Deactivating Account..."
+                      : "Deactivate Account"
+                  }
+                </h3>
+
+                <p className="text-sm text-slate-400 mt-1">
+                  Disable access to your
+                  account and runtime.
+                </p>
+
+              </div>
+
+            </div>
+
+            <Power
+              className="
+                text-red-300
+              "
+              size={24}
+            />
+
+          </button>
+
         </div>
       </div>
     </div>

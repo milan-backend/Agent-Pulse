@@ -182,6 +182,28 @@ export async function login(
 
 
 /* =========================================================
+   DEACTIVATE ACCOUNT
+========================================================= */
+
+export async function deactivateAccount(
+  password: string
+) {
+  return request(
+    "/auth/deactivate-account",
+    {
+      method: "DELETE",
+
+      body: {
+        password,
+      },
+    }
+  );
+}
+
+
+
+
+/* =========================================================
    VERIFY EMAIL
 ========================================================= */
 

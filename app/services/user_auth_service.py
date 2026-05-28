@@ -17,9 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.models.agent import Agent
 from app.models.workspace import Workspace
-from app.models.agent_policy import AgentPolicy
 from app.models.plan import Plan
 from app.models.workspace_subscription import (
     WorkspaceSubscription
@@ -34,8 +32,6 @@ from app.services.email_service import (
 )
 
 from app.core.security import (
-    generate_api_key,
-    hash_api_key,
     hash_password,
     verify_password
 )
@@ -99,7 +95,7 @@ def signup_user(
         timedelta(hours=24)
     )
 
-    # CREATE USER FIRST
+    # CREATE USER
     user = User(
 
         name=request.name,
@@ -111,6 +107,8 @@ def signup_user(
         ),
 
         is_verified=False,
+
+        is_active=True,
 
         email_verification_token=
             verification_token,
@@ -139,7 +137,7 @@ def signup_user(
 
     db.flush()
 
-    # MEMBERSHIP
+    # CREATE MEMBERSHIP
     membership = WorkspaceMember(
 
         workspace_id=workspace.id,
@@ -179,50 +177,11 @@ def signup_user(
 
     db.add(subscription)
 
-    # GENERATE API KEY
-    raw_api_key, key_id = (
-        generate_api_key()
-    )
-
-    hashed_api_key = hash_api_key(
-        raw_api_key
-    )
-
-    # CREATE DEFAULT AGENT
-    agent = Agent(
-
-        name=f"{request.name}-agent",
-
-        api_key_hash=hashed_api_key,
-
-        key_id=key_id,
-
-        created_by=user.id,
-
-        workspace_id=workspace.id,
-
-        status="active",
-
-        is_active=True
-    )
-
-    db.add(agent)
-
     db.commit()
 
     db.refresh(user)
 
     db.refresh(workspace)
-
-    db.refresh(agent)
-
-    policy = AgentPolicy(
-        agent_id=agent.id
-    )
-
-    db.add(policy)
-
-    db.commit()
 
     # SEND VERIFICATION EMAIL
     send_verification_email(
@@ -244,10 +203,7 @@ def signup_user(
             str(workspace.id),
 
         "role":
-            "admin",
-
-        "api_key":
-            raw_api_key
+            "admin"
     }
 
 
@@ -275,6 +231,15 @@ def login_user(
             detail="Invalid credentials"
         )
 
+    # ACCOUNT DEACTIVATED
+    if not user.is_active:
+
+        raise HTTPException(
+            status_code=403,
+            detail="Account deactivated"
+        )
+
+    # EMAIL NOT VERIFIED
     if not user.is_verified:
 
         raise HTTPException(
@@ -594,6 +559,14 @@ def authenticate_user(
         raise HTTPException(
             status_code=401,
             detail="User not found"
+        )
+
+    # ACCOUNT DEACTIVATED
+    if not user.is_active:
+
+        raise HTTPException(
+            status_code=403,
+            detail="Account deactivated"
         )
 
     return user

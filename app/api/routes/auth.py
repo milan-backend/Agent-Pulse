@@ -1,6 +1,7 @@
 from fastapi import (
     APIRouter,
-    Depends
+    Depends,
+    HTTPException
 )
 
 from sqlalchemy.orm import Session
@@ -11,7 +12,8 @@ from app.schemas.auth import (
     SignupRequest,
     LoginRequest,
     ForgetPasswordRequest,
-    ResetPasswordRequest
+    ResetPasswordRequest,
+    DeactivateAccountRequest
 )
 
 from app.services.user_auth_service import (
@@ -20,6 +22,16 @@ from app.services.user_auth_service import (
     request_password_reset,
     reset_password,
     verify_user_email
+)
+
+from app.api.deps_user import (
+    get_current_user
+)
+
+from app.models.user import User
+
+from app.core.security import (
+    verify_password
 )
 
 
@@ -107,13 +119,73 @@ def reset_user_password(
 
 
 # ============================================
-# TEST AUTH
+# CURRENT USER
 # ============================================
 
 @router.get("/me")
-def me():
+def me(
+    current_user: User = Depends(
+        get_current_user
+    )
+):
 
     return {
+
+        "user_id":
+            str(current_user.id),
+
+        "name":
+            current_user.name,
+
+        "email":
+            current_user.email,
+
+        "is_verified":
+            current_user.is_verified,
+
+        "is_active":
+            current_user.is_active
+    }
+
+
+# ============================================
+# DEACTIVATE ACCOUNT
+# ============================================
+
+@router.delete("/deactivate-account")
+def deactivate_account(
+
+    request: DeactivateAccountRequest,
+
+    db: Session = Depends(get_db),
+
+    current_user: User = Depends(
+        get_current_user
+    )
+):
+
+    # VERIFY PASSWORD AGAIN
+    valid = verify_password(
+
+        request.password,
+
+        current_user.password_hash
+    )
+
+    if not valid:
+
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid password"
+        )
+
+    # SOFT DELETE ACCOUNT
+    current_user.is_active = False
+
+    db.commit()
+
+    return {
+
         "message":
-            "Auth working"
+            "Account deactivated successfully"
     }
