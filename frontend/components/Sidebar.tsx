@@ -20,6 +20,7 @@ import {
   Activity,
   ShieldCheck,
   LogOut,
+  CreditCard,
 } from "lucide-react";
 
 const navItems = [
@@ -51,6 +52,12 @@ const navItems = [
     label: "Usage Logs",
     href: "/dashboard/usage-logs",
     icon: ScrollText,
+  },
+
+  {
+    label: "Billing",
+    href: "/billing",
+    icon: CreditCard,
   },
 
   {

@@ -86,3 +86,10 @@ yarn-error.log*
 next-env.d.ts
 
 test_gemini.py
+seed_plan.py
+test_db.py
+test_limits.py
+update_free_limits.py
+update_free_plan.py
+view_plan.py
+fix_free_plan.py
