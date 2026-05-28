@@ -12,7 +12,9 @@ import {
   Bot,
 } from "lucide-react";
 
-import { getDashboardUsageLogs } from "@/components/api";
+import {
+  getDashboardUsageLogs,
+} from "@/components/api";
 
 import LiveFeed from "@/components/LiveFeed";
 
@@ -178,7 +180,7 @@ export default function UsageLogsPage() {
     );
 
   // =========================
-  // FORMAT
+  // FORMAT NUMBERS
   // =========================
 
   function formatNumber(
@@ -195,7 +197,7 @@ export default function UsageLogsPage() {
   }
 
   // =========================
-  // CARDS
+  // CARD DATA
   // =========================
 
   const cards = [
@@ -418,7 +420,7 @@ export default function UsageLogsPage() {
         </div>
       </div>
 
-      {/* METRIC CARDS */}
+      {/* METRICS */}
 
       <div
         className="
@@ -476,12 +478,11 @@ export default function UsageLogsPage() {
                 <div
                   className="
                     flex
-                    items-center
+                    items-end
                     justify-between
-                    gap-3
+                    gap-4
                     mt-7
                     w-full
-                    overflow-hidden
                   "
                 >
 
@@ -489,16 +490,12 @@ export default function UsageLogsPage() {
 
                   <h2
                     className="
-                      text-2xl
-                      xl:text-3xl
+                      text-[30px]
+                      xl:text-[34px]
                       font-black
                       tracking-tight
                       leading-none
                       whitespace-nowrap
-                      overflow-hidden
-                      text-ellipsis
-                      flex-1
-                      min-w-0
                     "
                     title={String(card.value)}
                   >
@@ -509,10 +506,10 @@ export default function UsageLogsPage() {
 
                   <div
                     className="
-                      h-11
-                      w-11
-                      min-h-[44px]
-                      min-w-[44px]
+                      h-12
+                      w-12
+                      min-w-[48px]
+                      min-h-[48px]
                       rounded-2xl
                       flex
                       items-center
@@ -521,11 +518,10 @@ export default function UsageLogsPage() {
                       border
                       border-white/10
                       shrink-0
-                      overflow-hidden
                       backdrop-blur-sm
                     "
                   >
-                    <Icon size={20} />
+                    <Icon size={22} />
                   </div>
 
                 </div>
@@ -535,7 +531,7 @@ export default function UsageLogsPage() {
         )}
       </div>
 
-      {/* STREAM HEADER */}
+      {/* STATUS BAR */}
 
       <div
         className="
@@ -607,7 +603,7 @@ export default function UsageLogsPage() {
           </div>
         </div>
 
-        {/* LIVE STATUS */}
+        {/* LIVE */}
 
         <div
           className="
