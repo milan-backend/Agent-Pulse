@@ -192,10 +192,10 @@ export default function BillingPage() {
             border
             border-cyan-500/20
             bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
-            p-10
+            p-6 md:p-8
             overflow-hidden
             relative
-            mb-10
+            mb-6
           "
         >
 
@@ -218,16 +218,15 @@ export default function BillingPage() {
               className="
                 flex
                 items-center
-                gap-6
-                flex-wrap
+                gap-5
               "
             >
 
               <div
                 className="
-                  h-24
-                  w-24
-                  rounded-[32px]
+                  h-16
+                  w-16
+                  rounded-2xl
                   border
                   border-cyan-500/20
                   bg-cyan-500/10
@@ -248,7 +247,7 @@ export default function BillingPage() {
 
                 <h1
                   className="
-                    text-6xl
+                    text-4xl md:text-5xl
                     font-black
                     leading-none
                   "
@@ -260,7 +259,7 @@ export default function BillingPage() {
                   className="
                     mt-4
                     text-slate-400
-                    text-xl
+                    text-base md:text-lg
                     max-w-3xl
                   "
                 >
