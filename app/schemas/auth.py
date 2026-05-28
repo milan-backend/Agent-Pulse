@@ -28,3 +28,14 @@ class ResetPasswordRequest(BaseModel):
     token: str
 
     new_password: str
+
+
+# ============================================
+# DEACTIVATE ACCOUNT
+# ============================================
+
+class DeactivateAccountRequest(
+    BaseModel
+):
+
+    password: str
