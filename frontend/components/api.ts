@@ -68,6 +68,31 @@ async function request(
   );
 
   if (!response.ok) {
+
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined"
+    ) {
+
+      console.error(
+        "Unauthorized request"
+      );
+
+      localStorage.removeItem(
+        "token"
+      );
+
+      sessionStorage.removeItem(
+        "authenticated"
+      );
+
+      // OPTIONAL:
+      // uncomment if auto redirect needed
+
+      // window.location.href =
+      //   "/login";
+    }
+
     let errorMessage =
       "Request failed";
 
