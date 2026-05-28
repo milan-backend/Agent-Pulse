@@ -98,7 +98,7 @@ icon: ScrollText,
 
 label: "Billing",
 
-href: "/billing",
+href: "/dashboard/billing",
 
 icon: CreditCard,
 
