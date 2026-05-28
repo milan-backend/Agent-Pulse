@@ -24,6 +24,10 @@ import { toast } from "sonner";
 
 export default function SettingsPage() {
 
+  // ============================================
+  // STATE
+  // ============================================
+
   const [loadingKill, setLoadingKill] =
     useState(false);
 
@@ -33,8 +37,14 @@ export default function SettingsPage() {
   const [loadingDeactivate, setLoadingDeactivate] =
     useState(false);
 
+  const [showDeactivateModal, setShowDeactivateModal] =
+    useState(false);
+
+  const [deactivatePassword, setDeactivatePassword] =
+    useState("");
+
   // ============================================
-  // KILL ALL
+  // STOP ALL AGENTS
   // ============================================
 
   async function handleKillAll() {
@@ -77,7 +87,7 @@ export default function SettingsPage() {
   }
 
   // ============================================
-  // RESUME ALL
+  // RESUME ALL AGENTS
   // ============================================
 
   async function handleResumeAll() {
@@ -127,30 +137,12 @@ export default function SettingsPage() {
 
     if (loadingDeactivate) return;
 
-    const password =
-      window.prompt(
-        "Enter your password to deactivate account"
-      );
-
-    if (!password) {
-      return;
-    }
-
     try {
 
       setLoadingDeactivate(true);
 
-      const confirmed =
-        window.confirm(
-          "Are you sure you want to deactivate your account?"
-        );
-
-      if (!confirmed) {
-        return;
-      }
-
       await deactivateAccount(
-        password
+        deactivatePassword
       );
 
       toast.success(
@@ -176,6 +168,10 @@ export default function SettingsPage() {
     } finally {
 
       setLoadingDeactivate(false);
+
+      setShowDeactivateModal(false);
+
+      setDeactivatePassword("");
     }
   }
 
@@ -721,8 +717,6 @@ export default function SettingsPage() {
           "
         >
 
-          {/* HEADER */}
-
           <div
             className="
               flex
@@ -782,8 +776,8 @@ export default function SettingsPage() {
           {/* DEACTIVATE */}
 
           <button
-            onClick={
-              handleDeactivateAccount
+            onClick={() =>
+              setShowDeactivateModal(true)
             }
             disabled={loadingDeactivate}
             className="
@@ -821,11 +815,7 @@ export default function SettingsPage() {
                     text-red-300
                   "
                 >
-                  {
-                    loadingDeactivate
-                      ? "Deactivating Account..."
-                      : "Deactivate Account"
-                  }
+                  Deactivate Account
                 </h3>
 
                 <p className="text-sm text-slate-400 mt-1">
@@ -848,6 +838,215 @@ export default function SettingsPage() {
 
         </div>
       </div>
+
+      {/* ============================================
+          DEACTIVATE MODAL
+      ============================================ */}
+
+      {
+        showDeactivateModal && (
+
+          <div
+            className="
+              fixed
+              inset-0
+              z-50
+              bg-black/70
+              backdrop-blur-sm
+              flex
+              items-center
+              justify-center
+              p-6
+            "
+          >
+
+            <div
+              className="
+                w-full
+                max-w-lg
+                rounded-[32px]
+                border
+                border-red-500/20
+                bg-[#091120]
+                p-8
+                shadow-2xl
+              "
+            >
+
+              {/* HEADER */}
+
+              <div
+                className="
+                  flex
+                  items-center
+                  gap-4
+                  mb-6
+                "
+              >
+
+                <div
+                  className="
+                    h-14
+                    w-14
+                    rounded-2xl
+                    border
+                    border-red-500/20
+                    bg-red-500/10
+                    flex
+                    items-center
+                    justify-center
+                  "
+                >
+
+                  <AlertTriangle
+                    className="
+                      text-red-300
+                    "
+                    size={28}
+                  />
+
+                </div>
+
+                <div>
+
+                  <h2
+                    className="
+                      text-3xl
+                      font-black
+                    "
+                  >
+                    Deactivate Account
+                  </h2>
+
+                  <p
+                    className="
+                      text-slate-400
+                      mt-1
+                    "
+                  >
+                    This action disables
+                    access to your account.
+                  </p>
+
+                </div>
+              </div>
+
+              {/* INPUT */}
+
+              <div className="space-y-3">
+
+                <label
+                  className="
+                    text-sm
+                    font-bold
+                    text-slate-300
+                  "
+                >
+                  Confirm Password
+                </label>
+
+                <input
+                  type="password"
+                  value={deactivatePassword}
+                  onChange={(e) =>
+                    setDeactivatePassword(
+                      e.target.value
+                    )
+                  }
+                  placeholder="Enter password"
+                  className="
+                    w-full
+                    rounded-2xl
+                    border
+                    border-red-500/20
+                    bg-red-500/5
+                    px-5
+                    py-4
+                    text-white
+                    outline-none
+                    focus:border-red-400
+                  "
+                />
+
+              </div>
+
+              {/* ACTIONS */}
+
+              <div
+                className="
+                  flex
+                  items-center
+                  justify-end
+                  gap-4
+                  mt-8
+                "
+              >
+
+                {/* CANCEL */}
+
+                <button
+                  onClick={() => {
+
+                    setShowDeactivateModal(
+                      false
+                    );
+
+                    setDeactivatePassword(
+                      ""
+                    );
+                  }}
+                  className="
+                    rounded-2xl
+                    border
+                    border-white/10
+                    px-6
+                    py-3
+                    text-slate-300
+                    hover:bg-white/5
+                    transition-all
+                  "
+                >
+                  Cancel
+                </button>
+
+                {/* CONFIRM */}
+
+                <button
+                  onClick={
+                    handleDeactivateAccount
+                  }
+                  disabled={
+                    loadingDeactivate
+                    || !deactivatePassword
+                  }
+                  className="
+                    rounded-2xl
+                    border
+                    border-red-500/20
+                    bg-red-500/10
+                    px-6
+                    py-3
+                    text-red-300
+                    font-bold
+                    hover:bg-red-500/20
+                    transition-all
+                    disabled:opacity-50
+                  "
+                >
+
+                  {
+                    loadingDeactivate
+                      ? "Deactivating..."
+                      : "Deactivate"
+                  }
+
+                </button>
+
+              </div>
+            </div>
+          </div>
+        )
+      }
     </div>
   );
 }
