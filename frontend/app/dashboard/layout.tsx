@@ -36,6 +36,8 @@ ShieldCheck,
 
 Cpu,
 
+CreditCard,
+
 } from "lucide-react";
 
 import { useEffect } from "react";
@@ -89,6 +91,16 @@ label: "Usage Logs",
 href: "/dashboard/usage-logs",
 
 icon: ScrollText,
+
+},
+
+{
+
+label: "Billing",
+
+href: "/billing",
+
+icon: CreditCard,
 
 },
 
