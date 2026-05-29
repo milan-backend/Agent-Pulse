@@ -19,6 +19,10 @@ client = genai.Client(
 def generate_llm_response(
     prompt: str
 ):
+    
+    if not prompt or not str(prompt).strip():
+        return "No prompt provided." \
+        "Gemini skipped."
 
     try:
 

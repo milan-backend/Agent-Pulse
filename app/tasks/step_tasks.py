@@ -237,15 +237,15 @@ def process_step(self, step_id: str):
                     "total_tokens": 0,
                     "cost": 0.0
                 }
-
-            output = generate_llm_response(
+            else:
+                output = generate_llm_response(
                 prompt=prompt
             )
 
-            completion_usage = calculate_usage(
-                prompt=prompt,
-                completion=output,
-                model_name="gemini-2.5-flash-lite"
+                completion_usage = calculate_usage(
+                   prompt=prompt,
+                   completion=output,
+                   model_name="gemini-2.5-flash-lite"
             )
 
         except Exception as llm_error:
