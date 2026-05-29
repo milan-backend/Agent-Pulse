@@ -101,12 +101,12 @@ def create_checkout_session(
 
                 success_url=(
                     f"{frontend_url}/"
-                    "billing/success"
+                    "/dashboard/billing/success"
                 ),
 
                 cancel_url=(
                     f"{frontend_url}/"
-                    "billing/cancel"
+                    "dashboard/billing/cancel"
                 ),
 
                 metadata={
