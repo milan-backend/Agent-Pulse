@@ -100,34 +100,17 @@ async def stripe_webhook(
             session["subscription"]
         )
 
-        # Fetch additional subscription details using UTC timestamps
+        # Fetch additional subscription details using safe bracket lookups
         current_period_end_dt = None
-
         if stripe_subscription_id:
-
             try:
-
-                stripe_sub = stripe.Subscription.retrieve(
-                    stripe_subscription_id
-                )
-
-                period_end_timestamp = stripe_sub.get(
-                    "current_period_end"
-                )
-
-                if period_end_timestamp:
-
-                    current_period_end_dt = (
-                        datetime.utcfromtimestamp(
-                            period_end_timestamp
-                        )
+                stripe_sub = stripe.Subscription.retrieve(stripe_subscription_id)
+                if "current_period_end" in stripe_sub and stripe_sub["current_period_end"]:
+                    current_period_end_dt = datetime.utcfromtimestamp(
+                        stripe_sub["current_period_end"]
                     )
-
             except Exception as e:
-
-                print(
-                    f"Failed to fetch stripe subscription details: {e}"
-                )
+                print(f"Failed to fetch stripe subscription details: {e}")
 
         plan = (
             db.query(Plan)
@@ -169,10 +152,7 @@ async def stripe_webhook(
             )
 
             if current_period_end_dt:
-
-                subscription.current_period_end = (
-                    current_period_end_dt
-                )
+                subscription.current_period_end = current_period_end_dt
 
         else:
 
@@ -189,13 +169,14 @@ async def stripe_webhook(
 
                 stripe_subscription_id=
                     stripe_subscription_id,
-
+                
                 current_period_end=current_period_end_dt
             )
 
             db.add(subscription)
 
         db.commit()
+
 
     # ============================================
     # SUBSCRIPTION UPDATED
@@ -220,19 +201,16 @@ async def stripe_webhook(
                 stripe_sub["status"]
             )
 
-            if stripe_sub.get(
-                "current_period_end"
-            ):
+            if "current_period_end" in stripe_sub and stripe_sub["current_period_end"]:
 
                 subscription.current_period_end = (
                     datetime.utcfromtimestamp(
-                        stripe_sub[
-                            "current_period_end"
-                        ]
+                        stripe_sub["current_period_end"]
                     )
                 )
 
             db.commit()
+
 
     # ============================================
     # SUBSCRIPTION DELETED
@@ -273,6 +251,7 @@ async def stripe_webhook(
 
             db.commit()
 
+
     # ============================================
     # PAYMENT FAILED
     # ============================================
@@ -282,9 +261,9 @@ async def stripe_webhook(
         invoice = event["data"]["object"]
 
         stripe_subscription_id = (
-            invoice.get(
-                "subscription"
-            )
+            invoice["subscription"]
+            if "subscription" in invoice
+            else None
         )
 
         if stripe_subscription_id:
@@ -308,6 +287,7 @@ async def stripe_webhook(
 
                 db.commit()
 
+
     # ============================================
     # PAYMENT SUCCEEDED (RENEWAL SUCCESS)
     # ============================================
@@ -317,9 +297,9 @@ async def stripe_webhook(
         invoice = event["data"]["object"]
 
         stripe_subscription_id = (
-            invoice.get(
-                "subscription"
-            )
+            invoice["subscription"]
+            if "subscription" in invoice
+            else None
         )
 
         if stripe_subscription_id:
@@ -340,32 +320,22 @@ async def stripe_webhook(
                 subscription.status = "active"
 
                 try:
-
-                    # Sync subscription period extension from Stripe on successful renewal payment
-
+                    # Safe retrieval and property membership check
                     stripe_sub = stripe.Subscription.retrieve(
                         stripe_subscription_id
                     )
 
-                    if stripe_sub.get(
-                        "current_period_end"
-                    ):
-
+                    if "current_period_end" in stripe_sub and stripe_sub["current_period_end"]:
                         subscription.current_period_end = (
                             datetime.utcfromtimestamp(
-                                stripe_sub[
-                                    "current_period_end"
-                                ]
+                                stripe_sub["current_period_end"]
                             )
                         )
-
                 except Exception as e:
-
-                    print(
-                        f"Failed to refresh period end during invoice.paid: {e}"
-                    )
+                    print(f"Failed to refresh period end during invoice.paid: {e}")
 
                 db.commit()
+
 
     return {
         "status": "success"
@@ -376,24 +346,14 @@ async def stripe_webhook(
 # ACTIVE SUBSCRIPTION FETCHING HELPER
 # ============================================
 
-def get_active_subscription(
-    workspace_id,
-    db: Session
-):
+def get_active_subscription(workspace_id, db: Session):
     """
     Fetches the workspace subscription details if active.
-    Returns the subscription object if valid,
-    otherwise returns None.
+    Returns the subscription object if valid, otherwise returns None.
     """
-
     subscription = (
-        db.query(
-            WorkspaceSubscription
-        )
-        .filter(
-            WorkspaceSubscription.workspace_id
-            == workspace_id
-        )
+        db.query(WorkspaceSubscription)
+        .filter(WorkspaceSubscription.workspace_id == workspace_id)
         .first()
     )
 
