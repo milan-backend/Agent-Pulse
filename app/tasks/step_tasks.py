@@ -224,6 +224,20 @@ def process_step(self, step_id: str):
                     step.input_data
                 )
 
+            if not prompt or not str(prompt).strip():
+
+                output = (
+                    "No prompt provided. "
+                    "LLM execution skipped"
+                )
+
+                completion_usage = {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0,
+                    "cost": 0.0
+                }
+
             output = generate_llm_response(
                 prompt=prompt
             )
