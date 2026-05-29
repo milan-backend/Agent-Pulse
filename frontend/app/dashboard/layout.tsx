@@ -38,6 +38,8 @@ Cpu,
 
 CreditCard,
 
+Shield,
+
 } from "lucide-react";
 
 import { useEffect } from "react";
@@ -102,6 +104,12 @@ href: "/dashboard/billing",
 
 icon: CreditCard,
 
+},
+
+{
+  label: "My Plan",
+  href: "/dashboard/my-plan",
+  icon: Shield,
 },
 
 {
