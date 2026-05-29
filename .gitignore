@@ -93,3 +93,8 @@ update_free_limits.py
 update_free_plan.py
 view_plan.py
 fix_free_plan.py
+check_subscription.py
+find_plan_features.py
+fix_limits.py
+kill_resume_added.py
+update_plan_features.py

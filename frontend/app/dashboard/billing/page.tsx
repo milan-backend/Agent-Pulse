@@ -1,7 +1,13 @@
 "use client";
 
 import {
-  createCheckout
+  useEffect,
+  useState
+} from "react";
+
+import {
+  createCheckout,
+  getCurrentPlan
 } from "@/components/api";
 
 import {
@@ -118,6 +124,39 @@ const plans = [
 ];
 
 export default function BillingPage() {
+
+  const [
+    currentPlan,
+    setCurrentPlan
+  ] = useState("free");
+
+  useEffect(() => {
+
+    const loadPlan = async () => {
+
+      try {
+
+        const data =
+          await getCurrentPlan();
+
+        setCurrentPlan(
+          (
+            data?.plan ||
+            "free"
+          ).toLowerCase()
+        );
+
+      } catch {
+
+        setCurrentPlan(
+          "free"
+        );
+      }
+    };
+
+    loadPlan();
+
+  }, []);
 
   const handleCheckout = async (
     planName: string
@@ -271,6 +310,71 @@ export default function BillingPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* CURRENT PLAN CARD */}
+
+        <div
+          className="
+            mb-8
+            rounded-[32px]
+            border
+            border-green-500/20
+            bg-[linear-gradient(180deg,#071120_0%,#091525_100%)]
+            p-8
+          "
+        >
+
+          <div
+            className="
+              flex
+              items-center
+              justify-between
+            "
+          >
+
+            <div>
+
+              <p
+                className="
+                  text-green-300
+                  font-black
+                  uppercase
+                  tracking-wider
+                "
+              >
+                Your Current Plan
+              </p>
+
+              <h2
+                className="
+                  text-4xl
+                  font-black
+                  mt-2
+                "
+              >
+                {currentPlan.toUpperCase()}
+              </h2>
+
+            </div>
+
+            <div
+              className="
+                px-5
+                py-3
+                rounded-full
+                bg-green-500/10
+                border
+                border-green-500/20
+                text-green-300
+                font-black
+              "
+            >
+              ACTIVE
+            </div>
+
+          </div>
+
         </div>
 
         {/* PRICING CARDS */}
@@ -505,15 +609,22 @@ export default function BillingPage() {
 
                 <button
 
-                  disabled={plan.disabled}
+                  disabled={
+                    currentPlan ===
+                    plan.name.toLowerCase()
+                  }
 
                   onClick={() =>
+
+                    plan.planKey &&
                     handleCheckout(
-                      plan.planKey!
+                      plan.planKey
                     )
+
                   }
 
                   className={`
+
                     w-full
                     py-4
                     rounded-2xl
@@ -522,23 +633,33 @@ export default function BillingPage() {
                     transition-all
 
                     ${
-                      plan.disabled
-                        ? `
-                          bg-slate-700
-                          text-slate-300
-                          cursor-not-allowed
-                        `
-                        : `
-                          bg-cyan-400
-                          text-black
-                          hover:scale-[1.02]
-                          hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]
-                        `
+                      currentPlan ===
+                      plan.name.toLowerCase()
+
+                      ? `
+                        bg-green-600
+                        text-white
+                        cursor-not-allowed
+                      `
+
+                      : `
+                        bg-cyan-400
+                        text-black
+                        hover:scale-[1.02]
+                        hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]
+                      `
                     }
                   `}
                 >
 
-                  {plan.button}
+                  {
+                    currentPlan ===
+                    plan.name.toLowerCase()
+
+                      ? "Current Plan"
+
+                      : plan.button
+                  }
 
                 </button>
               </div>

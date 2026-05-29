@@ -305,6 +305,13 @@ export async function createCheckout(
   );
 }
 
+export async function getCurrentPlan()
+{
+  return request(
+    "/billing/current-plan"
+  );
+}
+
 
 /* =========================================================
    DASHBOARD
