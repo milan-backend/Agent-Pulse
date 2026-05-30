@@ -373,6 +373,18 @@ export default function MissionPage() {
             </p>
           </div>
 
+          {mission.original_mission_id && (
+            <div>
+              <p className="text-slate-400">
+                Original Failed Misssion
+              </p>
+
+              <p className="mt-2 break-all">
+                {mission.original_mission_id}
+              </p>
+            </div>
+          )}
+
           <div>
             <p className="text-slate-400">
               Agent ID
