@@ -275,17 +275,14 @@ async def create_step_execution(
 
     if running_steps >= max_parallel_runs:
 
-        return {
+        raise HTTPException(
+            status_code=429,
+            detail=(f"Concurrent execution limit exceeded."
+            f"Running={running_steps},"
+            f"Limits={max_parallel_runs}"
+            )
+        )
 
-            "error":
-                "Concurrent execution limit exceeded",
-
-            "current_running":
-                running_steps,
-
-            "limit":
-                max_parallel_runs
-        }
 
     # ============================================
     # CREATE STEP
