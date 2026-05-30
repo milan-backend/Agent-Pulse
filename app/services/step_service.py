@@ -188,10 +188,52 @@ async def create_step_execution(
 
     if guard["stop"]:
 
-        raise HTTPException(
-            status_code=429,
-            detail=f"Agent stopped: {guard['reason']}"
-        )
+      failed_step = DurableStep(
+
+        agent_id=current_agent.id,
+
+        workspace_id=current_agent.workspace_id,
+
+        task_name=request.task_name,
+
+        input_data=request.input_data,
+
+        status="failed",
+
+        error_message=guard["reason"],
+
+        runtime_controlled=True,
+
+        idempotency_key=request.idempotency_key
+    )
+
+    db.add(failed_step)
+
+    db.flush()
+
+    create_usage_event(
+
+        db=db,
+
+        workspace_id=
+            current_agent.workspace_id,
+
+        agent_id=
+            current_agent.id,
+
+        step_id=
+            failed_step.id,
+
+        event_type=
+            "execution_failed"
+    )
+
+    db.commit()
+
+    raise HTTPException(
+        status_code=429,
+        detail=f"Agent stopped: {guard['reason']}"
+    )
 
     # ============================================
     # IDEMPOTENCY

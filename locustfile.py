@@ -1,8 +1,15 @@
 from locust import HttpUser, task, between
 import uuid
+import random
 
-API_KEY = "d2b3f5fe.UoomLcUJ-ExwaMi-2NkyBViZ7mPUem32J6HyQ1Nbdfg"
+API_KEY = "e5b93c6e.x94g1WzMPp7kVNLhoRt2lIAPr9fPzXEwEvzUzvNZ1bU"
 
+TASKS = [
+    "ping",
+    "health_check",
+    "test",
+    "status"
+]
 
 class StepUser(HttpUser):
 
@@ -14,30 +21,20 @@ class StepUser(HttpUser):
     def execute_step(self):
 
         payload = {
-            "task_name": "ping",
+            "task_name": random.choice(TASKS),
             "input_data": {
                 "prompt": "hi"
             },
             "idempotency_key": str(uuid.uuid4())
         }
 
-        with self.client.post(
+        response = self.client.post(
             "/steps/execute",
             json=payload,
             headers={
                 "X-API-Key": API_KEY
-            },
-            catch_response=True
-        ) as response:
+            }
+        )
 
-            print("\n========================")
-            print("STATUS:", response.status_code)
-            print("BODY:", response.text)
-            print("========================\n")
-
-            if response.status_code == 200:
-                response.success()
-            else:
-                response.failure(
-                    f"{response.status_code}: {response.text}"
-                )
+        print(response.status_code)
+        print(response.text)
