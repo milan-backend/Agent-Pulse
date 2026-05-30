@@ -505,6 +505,8 @@ def retry_failed_step(
     # ============================================
 
     step.status = "pending"
+    
+    step.error_message = None
 
     db.commit()
 
