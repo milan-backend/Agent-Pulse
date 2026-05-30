@@ -5,6 +5,8 @@ from fastapi import (
     HTTPException
 )
 
+import uuid
+
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -494,11 +496,31 @@ def retry_mission(
 
     # RESET
 
-    step.status = "pending"
+    
+    new_step = DurableStep(
+        agent_id=step.agent_id,
 
+        workspace_id=step.workspace_id,
+
+        task_name=step.task_name,
+        
+        input_data=step.input_data,
+
+        status="pending",
+
+        runtime_controlled=True,
+
+        retry_of_step_id=step.id,
+
+        idempotency_key=str(uuid.uuid4())
+    )
+
+    db.add(new_step)
+    
     db.commit()
 
-    process_step.delay(str(step.id))
+
+    process_step.delay(str(new_step.id))
 
     return {
 
@@ -506,7 +528,7 @@ def retry_mission(
             "Mission retry scheduled",
 
         "mission_id":
-            str(step.id)
+            str(new_step.id)
     }
 
 
