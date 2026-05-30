@@ -355,6 +355,12 @@ def get_mission(
         "mission_id":
             str(step.id),
 
+        "original_mission_id": (
+           str(step.retry_of_step_id)
+           if step.retry_of_step_id
+           else None
+        ),
+
         "task_name":
             step.task_name,
 
