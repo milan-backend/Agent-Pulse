@@ -27,6 +27,7 @@ from app.api.routes.ws import broadcast_message
 
 import json
 
+from datetime import datetime, timedelta
 
 async def create_step_execution(
     db: Session,
@@ -103,6 +104,9 @@ async def create_step_execution(
 
     current_retry_count = 0
 
+    five_minutes_ago = datetime.utcnow()
+    -timedelta(minutes=5)
+
     repeated_task_count = (
         db.query(DurableStep)
         .filter(
@@ -110,7 +114,9 @@ async def create_step_execution(
             == current_agent.id,
 
             DurableStep.task_name
-            == request.task_name
+            == request.task_name,
+
+            DurableStep.created_at >= five_minutes_ago
         )
         .count()
     )

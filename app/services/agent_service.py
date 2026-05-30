@@ -139,7 +139,7 @@ def create_agent_service(
 
         max_cost=10,
 
-        max_repeated_tasks=3,
+        max_repeated_tasks=20,
 
         enable_idempotency=True,
 
