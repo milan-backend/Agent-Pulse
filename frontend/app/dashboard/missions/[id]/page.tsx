@@ -374,12 +374,12 @@ export default function MissionPage() {
           </div>
 
           {mission.original_mission_id && (
-            <div>
+            <div className="mt-4">
               <p className="text-slate-400">
                 Original Failed Misssion
               </p>
 
-              <p className="mt-2 break-all">
+              <p className="mt-2 break-all text-orange-400">
                 {mission.original_mission_id}
               </p>
             </div>

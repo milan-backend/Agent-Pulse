@@ -525,6 +525,13 @@ export default function MissionsPage() {
                 }
               />
 
+              {mission.is_retry && (
+                <p className="text-orange-400
+                text-sm mt-2">
+                  🔄 Retry Mission
+                </p>
+              )}
+
             </div>
 
             {/* SMALL STATS */}

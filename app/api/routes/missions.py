@@ -361,6 +361,8 @@ def get_mission(
            else None
         ),
 
+        "is_retry": step.retry_of_step_id is not None,
+
         "task_name":
             step.task_name,
 
