@@ -100,3 +100,5 @@ kill_resume_added.py
 update_plan_features.py
 locustfile.py
 check_steps.py
+retry_step_add.py
+view_column.py

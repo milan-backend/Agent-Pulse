@@ -30,6 +30,13 @@ class DurableStep(Base):
         default=uuid.uuid4
     )
 
+    retry_of_step_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("durable_steps.id"),
+        nullable=True,
+        index=True
+    )
+
     workspace_id = Column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),

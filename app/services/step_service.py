@@ -504,10 +504,26 @@ def retry_failed_step(
     # RESET STEP
     # ============================================
 
-    step.status = "pending"
-    
-    step.error_message = None
+    new_step = DurableStep(
+        agent_id=step.agent_id,
 
+        workspace_id=step.workspace_id,
+
+        task_name=step.task_name,
+        
+        input_data=step.input_data,
+
+        status="pending",
+
+        runtime_controlled=True,
+
+        retry_of_step_id=step.id,
+
+        idempotency_key=str(uuid.uuid4())
+    )
+
+    db.add(new_step)
+    
     db.commit()
 
     # ============================================
@@ -515,7 +531,7 @@ def retry_failed_step(
     # ============================================
 
     process_step.delay(
-        str(step.id)
+        str(new_step.id)
     )
 
     return {
@@ -524,7 +540,7 @@ def retry_failed_step(
             "Retry scheduled",
 
         "step_id":
-            step.id
+            new_step.id
     }
 
 
