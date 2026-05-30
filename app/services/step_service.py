@@ -83,10 +83,10 @@ async def create_step_execution(
 
         if request.task_name not in current_agent.allowed_tasks:
 
-            return {
-                "error":
-                    "Access denied: task not allowed"
-            }
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: task not allowed"
+            )
 
     # ============================================
     # CURRENT COUNTS
@@ -123,10 +123,10 @@ async def create_step_execution(
 
     if not policy:
 
-        return {
-            "error":
-                "Agent policy missing"
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="Agent policy missing"
+        )
 
     # ============================================
     # CURRENT TOTAL COST
@@ -188,10 +188,10 @@ async def create_step_execution(
 
     if guard["stop"]:
 
-        return {
-            "error":
-                f"Agent stopped: {guard['reason']}"
-        }
+        raise HTTPException(
+            status_code=429,
+            detail=f"Agent stopped: {guard['reason']}"
+        )
 
     # ============================================
     # IDEMPOTENCY
@@ -241,10 +241,10 @@ async def create_step_execution(
 
     if current_agent.status == "killed":
 
-        return {
-            "error":
-                "Agent manually stopped"
-        }
+        raise HTTPException(
+            status_code=409,
+            detail="Agent manually stopped"
+        )
 
     # ============================================
     # CONCURRENT EXECUTION LIMIT
@@ -277,7 +277,8 @@ async def create_step_execution(
 
         raise HTTPException(
             status_code=429,
-            detail=(f"Concurrent execution limit exceeded."
+            detail=(
+            f"Concurrent execution limit exceeded."
             f"Running={running_steps},"
             f"Limits={max_parallel_runs}"
             )
@@ -386,26 +387,26 @@ def retry_failed_step(
 
     if not step:
 
-        return {
-            "error":
-                "Step not found"
-        }
+        raise HTTPException(
+            status_code=404,
+            detail="Step not found"
+        )
 
     if step.status != "failed":
 
-        return {
-            "message":
-                "Step is not failed"
-        }
+        raise HTTPException(
+            status_code=409,
+            detail="Step is not failed"
+        )
 
     policy = current_agent.policy
 
     if not policy:
 
-        return {
-            "error":
-                "Agent policy missing"
-        }
+        raise HTTPException(
+            status_code=500,
+            detail="Agent policy missing"
+        )
 
     if (
         policy.enable_retry_control
@@ -413,10 +414,10 @@ def retry_failed_step(
         policy.max_retries
     ):
 
-        return {
-            "error":
-                "Retry limit exceeded"
-        }
+        raise HTTPException(
+            status_code=429,
+            detail="Retry limit exceeded"
+        )
 
     # ============================================
     # USAGE EVENT
