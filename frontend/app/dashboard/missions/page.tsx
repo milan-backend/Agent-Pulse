@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link";
+
 import { useEffect, useState } from "react"
 
 import { useRouter } from "next/navigation"
@@ -525,12 +527,34 @@ export default function MissionsPage() {
                 }
               />
 
-              {mission.is_retry && (
-                <p className="text-orange-400
-                text-sm mt-2">
-                  🔄 Retry Mission
-                </p>
-              )}
+              {mission.is_retry && mission.original_mission_id && (
+    <Link
+        href={`/dashboard/missions/${mission.original_mission_id}`}
+        className="
+            inline-flex
+            items-center
+            gap-2
+            mt-3
+            px-4
+            py-2
+            rounded-xl
+            border
+            border-cyan-400/40
+            bg-cyan-500/10
+            text-cyan-300
+            font-semibold
+            text-sm
+            shadow-lg
+            shadow-cyan-500/20
+            hover:bg-cyan-500/20
+            hover:border-cyan-300
+            transition-all
+            duration-200
+        "
+    >
+        🔁 View Original Mission
+    </Link>
+)}
 
             </div>
 
