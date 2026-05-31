@@ -2,7 +2,7 @@ from locust import HttpUser, task, between
 import uuid
 import random
 
-API_KEY = "e5b93c6e.x94g1WzMPp7kVNLhoRt2lIAPr9fPzXEwEvzUzvNZ1bU"
+API_KEY = "28d2d833.6itnFfSdACCU0UxejWYtnbJHK3g8hQj_dzkYqEEEltY"
 
 TASKS = [
     "ping",
@@ -23,8 +23,8 @@ class StepUser(HttpUser):
         payload = {
             "task_name": random.choice(TASKS),
             "input_data": {
-                "prompt": "hi"
-            },
+            "additionalProp1": {}
+  },
             "idempotency_key": str(uuid.uuid4())
         }
 
