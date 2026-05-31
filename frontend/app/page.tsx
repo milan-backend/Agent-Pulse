@@ -1,11 +1,10 @@
-"use client";
-
 import React from "react";
 import MatrixBg from "@/components/MatrixBg";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
 import Problem from "@/components/Problem";
 import Features from "@/components/Features";
+import Docs from "@/components/Docs";
 import Showcase from "@/components/Showcase";
 import Pricing from "@/components/Pricing";
 import Footer from "@/components/Footer";
@@ -28,13 +27,16 @@ export default function AgentPulseLandingPage() {
       {/* 5. Capability Grid & Detailed Architectural Feature Sections */}
       <Features />
 
-      {/* 6. Dashboard Preview Placeholder Grids */}
+      {/* 6. Developer Documentation Code Snippet Panel */}
+      <Docs />
+
+      {/* 7. Interactive App Screenshot View Window */}
       <Showcase />
 
-      {/* 7. Free, Pro ($29), and Enterprise Pricing Tiers */}
+      {/* 8. Predictable SaaS Pricing Matrix Tiers */}
       <Pricing />
 
-      {/* 8. Bottom Retention Banner & Clean Footer Link Arrays */}
+      {/* 9. Bottom Retention Banner & Footer Links Grid */}
       <Footer />
     </div>
   );
