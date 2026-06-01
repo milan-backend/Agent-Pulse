@@ -39,14 +39,12 @@ export default function AgentTasksPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Tasks Specific Search States Hooks Mapping
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
   async function fetchTasks() {
     try {
       setLoading(true);
-      // Calls your modified core function with active query filters
       const data = await getAgentTasks(agentId, searchQuery, statusFilter);
       const taskArray = Array.isArray(data)
         ? data
@@ -70,7 +68,7 @@ export default function AgentTasksPage() {
     if (agentId) {
       fetchTasks();
     }
-  }, [agentId, statusFilter]); // Re-fires whenever dropdown option runs or switches
+  }, [agentId, statusFilter]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
@@ -139,11 +137,11 @@ export default function AgentTasksPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full bg-black/40 border border-cyan-500/10 rounded-2xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-cyan-400/50 transition-colors text-zinc-400 appearance-none cursor-pointer"
             >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="running">Running</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
+              <option value="" className="bg-[#08111f] text-white">All Statuses</option>
+              <option value="pending" className="bg-[#08111f] text-white">Pending</option>
+              <option value="running" className="bg-[#08111f] text-white">Running</option>
+              <option value="completed" className="bg-[#08111f] text-white">Completed</option>
+              <option value="failed" className="bg-[#08111f] text-white">Failed</option>
             </select>
           </div>
           <button

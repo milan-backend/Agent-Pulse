@@ -35,13 +35,11 @@ export default function MissionsPage() {
   const [overview, setOverview] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  // Search Filter State Hooks
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("")
 
   async function loadData() {
     try {
-      // Passes active query strings down to your customized axios hooks context
       const [missionData, overviewData] = await Promise.all([
         getMissionList(searchQuery, statusFilter),
         getMissionOverview(),
@@ -63,9 +61,8 @@ export default function MissionsPage() {
       return
     }
     loadData()
-  }, [router, statusFilter]) // Hot-reloads list instantly when dropdown option clicks
+  }, [router, statusFilter])
 
-  // Trigger search on keyboard button tap
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
       loadData()
@@ -186,11 +183,11 @@ export default function MissionsPage() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-cyan-400 transition-colors text-slate-300 appearance-none cursor-pointer"
             >
-              <option value="">All Statuses</option>
-              <option value="pending">Pending</option>
-              <option value="running">Running</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
+              <option value="" className="bg-[#091121] text-white">All Statuses</option>
+              <option value="pending" className="bg-[#091121] text-white">Pending</option>
+              <option value="running" className="bg-[#091121] text-white">Running</option>
+              <option value="completed" className="bg-[#091121] text-white">Completed</option>
+              <option value="failed" className="bg-[#091121] text-white">Failed</option>
             </select>
           </div>
           <button
