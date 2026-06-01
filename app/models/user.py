@@ -100,3 +100,9 @@ class User(Base):
         foreign_keys="Agent.created_by",
         back_populates="creator"
     )
+
+    refresh_tokens = relationship(
+        "RefreshToken",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
