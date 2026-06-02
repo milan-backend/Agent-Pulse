@@ -485,7 +485,6 @@ LOGOUT
 
 export function logout() {
   if (typeof window !== "undefined") {
-    // Fire background call to revoke session cookies cleanly on your FastAPI backend
     fetch(`${API_URL}/auth/logout`, { method: "POST" }).catch((err) =>
       console.error("Session cleanup request skipped:", err)
     );
