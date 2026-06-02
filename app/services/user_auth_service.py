@@ -65,7 +65,7 @@ def set_secure_refresh_cookie(response: Response, token_string: str):
         secure=True,        # Requires HTTPS production domain layer paths
         samesite="lax",     # Cross-Site Request Forgery (CSRF) protection boundary
         max_age=604800,     # 7 Days in seconds execution lifespan
-        path="/auth"        # Restricted access mapping to protect non-auth footprints
+        path="/"            # Global path availability across your whole custom api domain
     )
 
 # ============================================
@@ -306,7 +306,7 @@ def logout_user(db: Session, refresh_token: str, response: Response):
             token_record.revoked = True
             db.commit()
 
-    response.delete_cookie(key="refresh_token", path="/auth")
+    response.delete_cookie(key="refresh_token", path="/")
     return {"message": "Logged out successfully"}
 
 # ============================================
