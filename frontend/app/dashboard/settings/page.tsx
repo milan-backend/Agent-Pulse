@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-
 import {
   KeyRound,
   ShieldCheck,
@@ -23,65 +22,36 @@ import {
 import { toast } from "sonner";
 
 export default function SettingsPage() {
-
   // ============================================
   // STATE
   // ============================================
-
-  const [loadingKill, setLoadingKill] =
-    useState(false);
-
-  const [loadingResume, setLoadingResume] =
-    useState(false);
-
-  const [loadingDeactivate, setLoadingDeactivate] =
-    useState(false);
-
-  const [showDeactivateModal, setShowDeactivateModal] =
-    useState(false);
-
-  const [deactivatePassword, setDeactivatePassword] =
-    useState("");
+  const [loadingKill, setLoadingKill] = useState(false);
+  const [loadingResume, setLoadingResume] = useState(false);
+  const [loadingDeactivate, setLoadingDeactivate] = useState(false);
+  const [showDeactivateModal, setShowDeactivateModal] = useState(false);
+  const [deactivatePassword, setDeactivatePassword] = useState("");
 
   // ============================================
   // STOP ALL AGENTS
   // ============================================
-
   async function handleKillAll() {
-
     if (loadingKill) return;
-
     try {
-
       setLoadingKill(true);
-
-      const confirmed =
-        window.confirm(
-          "Are you sure you want to stop all runtime agents?"
-        );
-
+      const confirmed = window.confirm(
+        "Are you sure you want to stop all runtime agents?"
+      );
       if (!confirmed) {
         return;
       }
-
       await stopAllAgents();
-
-      toast.success(
-        "All agents stopped successfully"
-      );
-
+      toast.success("All agents stopped successfully");
     } catch (err) {
-
       console.error(err);
-
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to stop agents"
+        err instanceof Error ? err.message : "Failed to stop agents"
       );
-
     } finally {
-
       setLoadingKill(false);
     }
   }
@@ -89,42 +59,22 @@ export default function SettingsPage() {
   // ============================================
   // RESUME ALL AGENTS
   // ============================================
-
   async function handleResumeAll() {
-
     if (loadingResume) return;
-
     try {
-
       setLoadingResume(true);
-
-      const confirmed =
-        window.confirm(
-          "Resume all autonomous agents?"
-        );
-
+      const confirmed = window.confirm("Resume all autonomous agents?");
       if (!confirmed) {
         return;
       }
-
       await resumeAllAgents();
-
-      toast.success(
-        "All agents resumed successfully"
-      );
-
+      toast.success("All agents resumed successfully");
     } catch (err) {
-
       console.error(err);
-
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to resume agents"
+        err instanceof Error ? err.message : "Failed to resume agents"
       );
-
     } finally {
-
       setLoadingResume(false);
     }
   }
@@ -132,55 +82,30 @@ export default function SettingsPage() {
   // ============================================
   // DEACTIVATE ACCOUNT
   // ============================================
-
   async function handleDeactivateAccount() {
-
     if (loadingDeactivate) return;
-
     try {
-
       setLoadingDeactivate(true);
-
-      await deactivateAccount(
-        deactivatePassword
-      );
-
-      toast.success(
-        "Account deactivated successfully"
-      );
-
+      await deactivateAccount(deactivatePassword);
+      toast.success("Account deactivated successfully");
       setTimeout(() => {
-
         logout();
-
       }, 1200);
-
     } catch (err) {
-
       console.error(err);
-
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Failed to deactivate account"
+        err instanceof Error ? err.message : "Failed to deactivate account"
       );
-
     } finally {
-
       setLoadingDeactivate(false);
-
       setShowDeactivateModal(false);
-
       setDeactivatePassword("");
     }
   }
 
   return (
-
     <div className="space-y-8">
-
       {/* HERO */}
-
       <div
         className="
           rounded-[32px]
@@ -192,9 +117,7 @@ export default function SettingsPage() {
           relative
         "
       >
-
         {/* GLOW */}
-
         <div
           className="
             absolute
@@ -209,18 +132,8 @@ export default function SettingsPage() {
         />
 
         {/* CONTENT */}
-
         <div className="relative z-10">
-
-          <div
-            className="
-              flex
-              items-center
-              gap-4
-              mb-6
-            "
-          >
-
+          <div className="flex items-center gap-4 mb-6">
             <div
               className="
                 h-16
@@ -234,55 +147,21 @@ export default function SettingsPage() {
                 justify-center
               "
             >
-
-              <Settings
-                className="
-                  text-cyan-300
-                "
-                size={32}
-              />
-
+              <Settings className="text-cyan-300" size={32} />
             </div>
-
             <div>
-
-              <h1
-                className="
-                  text-5xl
-                  font-black
-                "
-              >
-                Runtime Settings
-              </h1>
-
-              <p
-                className="
-                  mt-2
-                  text-slate-400
-                "
-              >
-                Configure global runtime
-                infrastructure controls.
+              <h1 className="text-5xl font-black">Runtime Settings</h1>
+              <p className="mt-2 text-slate-400">
+                Configure global runtime infrastructure controls.
               </p>
-
             </div>
           </div>
         </div>
       </div>
 
       {/* GRID */}
-
-      <div
-        className="
-          grid
-          grid-cols-1
-          xl:grid-cols-2
-          gap-8
-        "
-      >
-
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         {/* RUNTIME CONTROL */}
-
         <div
           className="
             rounded-[32px]
@@ -292,38 +171,11 @@ export default function SettingsPage() {
             p-8
           "
         >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              mb-8
-            "
-          >
-
+          <div className="flex items-center justify-between mb-8">
             <div>
-
-              <h2
-                className="
-                  text-3xl
-                  font-black
-                "
-              >
-                Runtime Control
-              </h2>
-
-              <p
-                className="
-                  text-slate-400
-                  mt-2
-                "
-              >
-                Manage global agent runtime.
-              </p>
-
+              <h2 className="text-3xl font-black">Runtime Control</h2>
+              <p className="text-slate-400 mt-2">Manage global agent runtime.</p>
             </div>
-
             <div
               className="
                 h-14
@@ -337,27 +189,15 @@ export default function SettingsPage() {
                 justify-center
               "
             >
-
-              <Cpu
-                className="
-                  text-red-300
-                "
-                size={28}
-              />
-
+              <Cpu className="text-red-300" size={28} />
             </div>
           </div>
 
           {/* BUTTONS */}
-
           <div className="space-y-5">
-
             {/* STOP */}
-
             <button
-              onClick={
-                handleKillAll
-              }
+              onClick={handleKillAll}
               disabled={loadingKill}
               className="
                 w-full
@@ -375,54 +215,23 @@ export default function SettingsPage() {
                 disabled:cursor-not-allowed
               "
             >
-
               <div className="flex items-center gap-4">
-
-                <Power
-                  className="
-                    text-red-300
-                  "
-                  size={28}
-                />
-
+                <Power className="text-red-300" size={28} />
                 <div className="text-left">
-
-                  <h3
-                    className="
-                      text-xl
-                      font-black
-                      text-red-300
-                    "
-                  >
-                    {
-                      loadingKill
-                        ? "Stopping Runtime..."
-                        : "Kill All Agents"
-                    }
+                  <h3 className="text-xl font-black text-red-300">
+                    {loadingKill ? "Stopping Runtime..." : "Kill All Agents"}
                   </h3>
-
                   <p className="text-sm text-slate-400 mt-1">
                     Emergency runtime stop.
                   </p>
-
                 </div>
               </div>
-
-              <AlertTriangle
-                className="
-                  text-red-300
-                "
-                size={24}
-              />
-
+              <AlertTriangle className="text-red-300" size={24} />
             </button>
 
             {/* RESUME */}
-
             <button
-              onClick={
-                handleResumeAll
-              }
+              onClick={handleResumeAll}
               disabled={loadingResume}
               className="
                 w-full
@@ -440,53 +249,23 @@ export default function SettingsPage() {
                 disabled:cursor-not-allowed
               "
             >
-
               <div className="flex items-center gap-4">
-
-                <PlayCircle
-                  className="
-                    text-green-300
-                  "
-                  size={28}
-                />
-
+                <PlayCircle className="text-green-300" size={28} />
                 <div className="text-left">
-
-                  <h3
-                    className="
-                      text-xl
-                      font-black
-                      text-green-300
-                    "
-                  >
-                    {
-                      loadingResume
-                        ? "Resuming Runtime..."
-                        : "Resume Runtime"
-                    }
+                  <h3 className="text-xl font-black text-green-300">
+                    {loadingResume ? "Resuming Runtime..." : "Resume Runtime"}
                   </h3>
-
                   <p className="text-sm text-slate-400 mt-1">
-                    Restart all autonomous
-                    agents.
+                    Restart all autonomous agents.
                   </p>
-
                 </div>
               </div>
-
-              <ShieldCheck
-                className="
-                  text-green-300
-                "
-                size={24}
-              />
-
+              <ShieldCheck className="text-green-300" size={24} />
             </button>
           </div>
         </div>
 
         {/* SECURITY */}
-
         <div
           className="
             rounded-[32px]
@@ -496,38 +275,11 @@ export default function SettingsPage() {
             p-8
           "
         >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              mb-8
-            "
-          >
-
+          <div className="flex items-center justify-between mb-8">
             <div>
-
-              <h2
-                className="
-                  text-3xl
-                  font-black
-                "
-              >
-                Security
-              </h2>
-
-              <p
-                className="
-                  text-slate-400
-                  mt-2
-                "
-              >
-                Session and API controls.
-              </p>
-
+              <h2 className="text-3xl font-black">Security</h2>
+              <p className="text-slate-400 mt-2">Session and API controls.</p>
             </div>
-
             <div
               className="
                 h-14
@@ -541,23 +293,13 @@ export default function SettingsPage() {
                 justify-center
               "
             >
-
-              <KeyRound
-                className="
-                  text-cyan-300
-                "
-                size={28}
-              />
-
+              <KeyRound className="text-cyan-300" size={28} />
             </div>
           </div>
 
           {/* CARDS */}
-
           <div className="space-y-5">
-
             {/* API */}
-
             <div
               className="
                 rounded-3xl
@@ -567,32 +309,14 @@ export default function SettingsPage() {
                 p-6
               "
             >
-
-              <div
-                className="
-                  flex
-                  items-center
-                  justify-between
-                "
-              >
-
+              <div className="flex items-center justify-between">
                 <div>
-
-                  <h3
-                    className="
-                      text-xl
-                      font-black
-                      text-cyan-300
-                    "
-                  >
+                  <h3 className="text-xl font-black text-cyan-300">
                     API Gateway
                   </h3>
-
                   <p className="text-sm text-slate-400 mt-2">
-                    Runtime authentication
-                    active.
+                    Runtime authentication active.
                   </p>
-
                   <div
                     className="
                       mt-4
@@ -610,41 +334,18 @@ export default function SettingsPage() {
                       text-green-300
                     "
                   >
-
-                    <div
-                      className="
-                        h-2
-                        w-2
-                        rounded-full
-                        bg-green-400
-                        animate-pulse
-                      "
-                    />
-
+                    <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
                     ACTIVE
-
                   </div>
                 </div>
-
-                <ShieldCheck
-                  className="
-                    text-cyan-300
-                  "
-                  size={28}
-                />
-
+                <ShieldCheck className="text-cyan-300" size={28} />
               </div>
             </div>
 
             {/* LOGOUT */}
-
             <button
               onClick={() => {
-
-                toast.success(
-                  "Session ended successfully"
-                );
-
+                toast.success("Session ended successfully");
                 setTimeout(() => {
                   logout();
                 }, 800);
@@ -663,49 +364,23 @@ export default function SettingsPage() {
                 justify-between
               "
             >
-
               <div className="flex items-center gap-4">
-
-                <LogOut
-                  className="
-                    text-red-300
-                  "
-                  size={28}
-                />
-
+                <LogOut className="text-red-300" size={28} />
                 <div className="text-left">
-
-                  <h3
-                    className="
-                      text-xl
-                      font-black
-                      text-red-300
-                    "
-                  >
+                  <h3 className="text-xl font-black text-red-300">
                     Logout Session
                   </h3>
-
                   <p className="text-sm text-slate-400 mt-1">
-                    Terminate current admin
-                    session.
+                    Terminate current admin session.
                   </p>
-
                 </div>
               </div>
-
-              <LogOut
-                className="
-                  text-red-300
-                "
-                size={24}
-              />
-
+              <LogOut className="text-red-300" size={24} />
             </button>
           </div>
         </div>
 
         {/* DANGER ZONE */}
-
         <div
           className="
             rounded-[32px]
@@ -716,38 +391,11 @@ export default function SettingsPage() {
             xl:col-span-2
           "
         >
-
-          <div
-            className="
-              flex
-              items-center
-              justify-between
-              mb-8
-            "
-          >
-
+          <div className="flex items-center justify-between mb-8">
             <div>
-
-              <h2
-                className="
-                  text-3xl
-                  font-black
-                "
-              >
-                Danger Zone
-              </h2>
-
-              <p
-                className="
-                  text-slate-400
-                  mt-2
-                "
-              >
-                Sensitive account actions.
-              </p>
-
+              <h2 className="text-3xl font-black">Danger Zone</h2>
+              <p className="text-slate-400 mt-2">Sensitive account actions.</p>
             </div>
-
             <div
               className="
                 h-14
@@ -761,24 +409,13 @@ export default function SettingsPage() {
                 justify-center
               "
             >
-
-              <AlertTriangle
-                className="
-                  text-red-300
-                "
-                size={28}
-              />
-
+              <AlertTriangle className="text-red-300" size={28} />
             </div>
-
           </div>
 
           {/* DEACTIVATE */}
-
           <button
-            onClick={() =>
-              setShowDeactivateModal(true)
-            }
+            onClick={() => setShowDeactivateModal(true)}
             disabled={loadingDeactivate}
             className="
               w-full
@@ -796,257 +433,147 @@ export default function SettingsPage() {
               disabled:cursor-not-allowed
             "
           >
-
             <div className="flex items-center gap-4">
-
-              <AlertTriangle
-                className="
-                  text-red-300
-                "
-                size={28}
-              />
-
+              <AlertTriangle className="text-red-300" size={28} />
               <div className="text-left">
-
-                <h3
-                  className="
-                    text-xl
-                    font-black
-                    text-red-300
-                  "
-                >
+                <h3 className="text-xl font-black text-red-300">
                   Deactivate Account
                 </h3>
-
                 <p className="text-sm text-slate-400 mt-1">
-                  Disable access to your
-                  account and runtime.
+                  Disable access to your account and runtime.
                 </p>
-
               </div>
-
             </div>
-
-            <Power
-              className="
-                text-red-300
-              "
-              size={24}
-            />
-
+            <Power className="text-red-300" size={24} />
           </button>
-
         </div>
       </div>
 
       {/* ============================================
           DEACTIVATE MODAL
       ============================================ */}
-
-      {
-        showDeactivateModal && (
-
+      {showDeactivateModal && (
+        <div
+          className="
+            fixed
+            inset-0
+            z-50
+            bg-black/70
+            backdrop-blur-sm
+            flex
+            items-center
+            justify-center
+            p-6
+          "
+        >
           <div
             className="
-              fixed
-              inset-0
-              z-50
-              bg-black/70
-              backdrop-blur-sm
-              flex
-              items-center
-              justify-center
-              p-6
+              w-full
+              max-w-lg
+              rounded-[32px]
+              border
+              border-red-500/20
+              bg-[#091120]
+              p-8
+              shadow-2xl
             "
           >
-
-            <div
-              className="
-                w-full
-                max-w-lg
-                rounded-[32px]
-                border
-                border-red-500/20
-                bg-[#091120]
-                p-8
-                shadow-2xl
-              "
-            >
-
-              {/* HEADER */}
-
+            {/* HEADER */}
+            <div className="flex items-center gap-4 mb-6">
               <div
                 className="
+                  h-14
+                  w-14
+                  rounded-2xl
+                  border
+                  border-red-500/20
+                  bg-red-500/10
                   flex
                   items-center
-                  gap-4
-                  mb-6
+                  justify-center
                 "
               >
-
-                <div
-                  className="
-                    h-14
-                    w-14
-                    rounded-2xl
-                    border
-                    border-red-500/20
-                    bg-red-500/10
-                    flex
-                    items-center
-                    justify-center
-                  "
-                >
-
-                  <AlertTriangle
-                    className="
-                      text-red-300
-                    "
-                    size={28}
-                  />
-
-                </div>
-
-                <div>
-
-                  <h2
-                    className="
-                      text-3xl
-                      font-black
-                    "
-                  >
-                    Deactivate Account
-                  </h2>
-
-                  <p
-                    className="
-                      text-slate-400
-                      mt-1
-                    "
-                  >
-                    This action disables
-                    access to your account.
-                  </p>
-
-                </div>
+                <AlertTriangle className="text-red-300" size={28} />
               </div>
-
-              {/* INPUT */}
-
-              <div className="space-y-3">
-
-                <label
-                  className="
-                    text-sm
-                    font-bold
-                    text-slate-300
-                  "
-                >
-                  Confirm Password
-                </label>
-
-                <input
-                  type="password"
-                  value={deactivatePassword}
-                  onChange={(e) =>
-                    setDeactivatePassword(
-                      e.target.value
-                    )
-                  }
-                  placeholder="Enter password"
-                  className="
-                    w-full
-                    rounded-2xl
-                    border
-                    border-red-500/20
-                    bg-red-500/5
-                    px-5
-                    py-4
-                    text-white
-                    outline-none
-                    focus:border-red-400
-                  "
-                />
-
-              </div>
-
-              {/* ACTIONS */}
-
-              <div
-                className="
-                  flex
-                  items-center
-                  justify-end
-                  gap-4
-                  mt-8
-                "
-              >
-
-                {/* CANCEL */}
-
-                <button
-                  onClick={() => {
-
-                    setShowDeactivateModal(
-                      false
-                    );
-
-                    setDeactivatePassword(
-                      ""
-                    );
-                  }}
-                  className="
-                    rounded-2xl
-                    border
-                    border-white/10
-                    px-6
-                    py-3
-                    text-slate-300
-                    hover:bg-white/5
-                    transition-all
-                  "
-                >
-                  Cancel
-                </button>
-
-                {/* CONFIRM */}
-
-                <button
-                  onClick={
-                    handleDeactivateAccount
-                  }
-                  disabled={
-                    loadingDeactivate
-                    || !deactivatePassword
-                  }
-                  className="
-                    rounded-2xl
-                    border
-                    border-red-500/20
-                    bg-red-500/10
-                    px-6
-                    py-3
-                    text-red-300
-                    font-bold
-                    hover:bg-red-500/20
-                    transition-all
-                    disabled:opacity-50
-                  "
-                >
-
-                  {
-                    loadingDeactivate
-                      ? "Deactivating..."
-                      : "Deactivate"
-                  }
-
-                </button>
-
+              <div>
+                <h2 className="text-3xl font-black">Deactivate Account</h2>
+                <p className="text-slate-400 mt-1">
+                  This action disables access to your account.
+                </p>
               </div>
             </div>
+
+            {/* INPUT */}
+            <div className="space-y-3">
+              <label className="text-sm font-bold text-slate-300">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                value={deactivatePassword}
+                onChange={(e) => setDeactivatePassword(e.target.value)}
+                placeholder="Enter password"
+                className="
+                  w-full
+                  rounded-2xl
+                  border
+                  border-red-500/20
+                  bg-red-500/5
+                  px-5
+                  py-4
+                  text-white
+                  outline-none
+                  focus:border-red-400
+                "
+              />
+            </div>
+
+            {/* ACTIONS */}
+            <div className="flex items-center justify-end gap-4 mt-8">
+              {/* CANCEL */}
+              <button
+                onClick={() => {
+                  setShowDeactivateModal(false);
+                  setDeactivatePassword("");
+                }}
+                className="
+                  rounded-2xl
+                  border
+                  border-white/10
+                  px-6
+                  py-3
+                  text-slate-300
+                  hover:bg-white/5
+                  transition-all
+                "
+              >
+                Cancel
+              </button>
+
+              {/* CONFIRM */}
+              <button
+                onClick={handleDeactivateAccount}
+                disabled={loadingDeactivate || !deactivatePassword}
+                className="
+                  rounded-2xl
+                  border
+                  border-red-500/20
+                  bg-red-500/10
+                  px-6
+                  py-3
+                  text-red-300
+                  font-bold
+                  hover:bg-red-500/20
+                  transition-all
+                  disabled:opacity-50
+                "
+              >
+                {loadingDeactivate ? "Deactivating..." : "Deactivate"}
+              </button>
+            </div>
           </div>
-        )
-      }
+        </div>
+      )}
     </div>
   );
 }

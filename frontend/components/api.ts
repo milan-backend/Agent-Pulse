@@ -1,135 +1,15 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
-// =========================================================
-// ENTERPRISE PRODUCTION TYPING HANDLERS
-// =========================================================
-
-export interface RequestOptions {
+type RequestOptions = {
   method?: string;
-  body?: unknown;
-  signal?: AbortSignal;
-}
-
-export interface WorkspaceItem {
-  workspace_id: string;
-  workspace_name: string;
-  role: string;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  user_id: string;
-  workspace_id: string;
-  role: string;
-  workspaces: WorkspaceItem[];
-  message?: string;
-}
-
-export interface ActionResponse {
-  success: boolean;
-  message: string;
-}
-
-export interface TicketResponse {
-  ticket: string;
-}
-
-export interface MissionOverview {
-  total_missions: number;
-  running: number;
-  completed: number;
-  failed: number;
-}
-
-export interface Mission {
-  mission_id: string;
-  task_name: string;
-  status: string;
-  is_retry?: boolean;
-  original_mission_id?: string;
-  retry_count: number;
-  cache_hit: boolean;
-  created_at: string | null;
-  updated_at: string | null;
-  agent_id?: string;
-  runtime_controlled?: boolean;
-  error_message?: string | null;
-}
-
-export interface UsageLog {
-  id?: string;
-  event_type?: string;
-  type?: string;
-  agent_id?: string;
-  step_id?: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens?: number;
-  cost: number;
-  created_at: string | null;
-}
-
-export interface AgentPolicy {
-  max_cost: number;
-  max_steps: number;
-  max_retries: number;
-  max_repeated_tasks: number;
-}
-
-export interface AgentResponse {
-  agent: {
-    id: string;
-    name: string;
-    is_active: boolean;
-    is_killed: boolean;
-    created_at: string | null;
-  };
-  policy: AgentPolicy;
-  mission_count: number;
-  total_cost: number;
-}
-
-export interface AgentTask {
-  step_id: string;
-  task_name: string;
-  status: string;
-  input_data: unknown;
-  output_data: unknown;
-  error_message: string | null;
-  retry_count: number;
-  cache_hit: boolean;
-  event_type: string | null;
-  started_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface CheckoutResponse {
-  checkout_url: string;
-}
-
-export interface PlanResponse {
-  plan_name: string;
-  status: string;
-  expires_at: string | null;
-}
-
-// =========================================================
-// CONCURRENCY & ROTATION MANAGER STATE
-// =========================================================
-let refreshPromise: Promise<string | null> | null = null;
-
-let activeSocketInstance: WebSocket | null = null;
-
-// FIX: Initialized variables with undefined instead of null to match structural function signatures exactly
-let activeSocketOnMessage: ((data: any) => void) | undefined = undefined;
-let activeSocketOnOpen: (() => void) | undefined = undefined;
-let activeSocketOnClose: (() => void) | undefined = undefined;
+  body?: any;
+};
 
 function authHeaders() {
   if (typeof window === "undefined") {
-    return { "Content-Type": "application/json" };
+    return {
+      "Content-Type": "application/json",
+    };
   }
 
   const token = localStorage.getItem("token");
@@ -142,79 +22,66 @@ function authHeaders() {
   };
 }
 
-function recreateDashboardSocket(): void {
-  if (activeSocketInstance) {
-    activeSocketInstance.onclose = null;
-    activeSocketInstance.close();
-  }
-  
-  if (activeSocketOnMessage) {
-    createDashboardSocket(activeSocketOnMessage, activeSocketOnOpen, activeSocketOnClose);
-  }
+// Global flag to avoid multiple overlapping token refresh requests
+let isRefreshing = false;
+let refreshSubscribers: (() => void)[] = [];
+
+function onTokenRefreshed() {
+  refreshSubscribers.forEach((callback) => callback());
+  refreshSubscribers = [];
 }
 
-async function performTokenRefresh(): Promise<string | null> {
-  try {
-    const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-    });
-
-    if (refreshResponse.ok) {
-      const data = await refreshResponse.json();
-      if (data?.access_token) {
-        localStorage.setItem("token", data.access_token);
-        
-        if (activeSocketInstance && activeSocketInstance.readyState === WebSocket.OPEN) {
-          console.log("Access token rotated. Re-shaking secure WebSocket channels...");
-          recreateDashboardSocket();
-        }
-        
-        return data.access_token;
-      }
-    }
-  } catch (err) {
-    console.error("Silent token refresh execution failed:", err);
-  }
-  return null;
-}
-
-async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${endpoint}`, {
+async function request(endpoint: string, options: RequestOptions = {}): Promise<any> {
+  const executeFetch = () => fetch(`${API_URL}${endpoint}`, {
     method: options.method || "GET",
     headers: authHeaders(),
     body: options.body ? JSON.stringify(options.body) : undefined,
-    credentials: "include",
-    signal: options.signal,
   });
 
-  if (
-    response.status === 401 && 
-    endpoint !== "/auth/login" && 
-    endpoint !== "/auth/refresh"
-  ) {
+  let response = await executeFetch();
+
+  // INTERCEPTOR: Automatically handle 401 Unauthorized errors for token rotation
+  if (response.status === 401 && endpoint !== "/auth/login" && endpoint !== "/auth/refresh") {
     if (typeof window !== "undefined") {
-      if (!refreshPromise) {
-        refreshPromise = performTokenRefresh().finally(() => {
-          refreshPromise = null;
+      console.warn("Access token expired, initializing automatic refresh rotation...");
+
+      if (!isRefreshing) {
+        isRefreshing = true;
+
+        try {
+          // Trigger the HTTP-Only secure rotation endpoint
+          const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" }
+          });
+
+          if (refreshResponse.ok) {
+            const data = await refreshResponse.json();
+            if (data.access_token) {
+              localStorage.setItem("token", data.access_token);
+            }
+            isRefreshing = false;
+            onTokenRefreshed();
+          } else {
+            throw new Error("Refresh token expired or invalid");
+          }
+        } catch (err) {
+          isRefreshing = false;
+          refreshSubscribers = [];
+          console.error("Token refresh sequence failed, routing to login page:", err);
+          logout();
+          throw err;
+        }
+      }
+
+      // Queue up overlapping parallel requests until token refresh completes
+      return new Promise((resolve) => {
+        refreshSubscribers.push(async () => {
+          const retryResponse = await executeFetch();
+          const text = await retryResponse.text();
+          resolve(text ? JSON.parse(text) : {});
         });
-      }
-
-      const newToken = await refreshPromise;
-      if (newToken) {
-        return await request<T>(endpoint, options);
-      }
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      localStorage.removeItem("workspace_id");
-      localStorage.removeItem("user_id");
-      localStorage.removeItem("workspaces");
-      sessionStorage.removeItem("authenticated");
-      window.location.href = "/login";
-      throw new Error("Session unauthorized.");
+      });
     }
   }
 
@@ -230,33 +97,33 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   }
 
   const text = await response.text();
-  return text ? (JSON.parse(text) as T) : ({} as T);
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch {
+    return text;
+  }
 }
 
 /* =========================================================
-AUTH SECTOR
+AUTH
 ========================================================= */
 
-export async function signup(name: string, email: string, password: string): Promise<ActionResponse> {
-  return request<ActionResponse>("/auth/signup", {
+export async function signup(name: string, email: string, password: string) {
+  return request("/auth/signup", {
     method: "POST",
     body: { name, email, password },
   });
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("token");
-    localStorage.removeItem("workspace_id");
-  }
-
-  const data = await request<LoginResponse>("/auth/login", {
+export async function login(email: string, password: string) {
+  const data = await request("/auth/login", {
     method: "POST",
     body: { email, password },
   });
 
   if (data.access_token) {
     localStorage.setItem("token", data.access_token);
+    sessionStorage.setItem("authenticated", "true");
   }
   if (data.workspace_id) {
     localStorage.setItem("workspace_id", data.workspace_id);
@@ -265,39 +132,53 @@ export async function login(email: string, password: string): Promise<LoginRespo
     localStorage.setItem("user_id", data.user_id);
   }
   if (data.workspaces) {
-    localStorage.setItem("workspaces", JSON.stringify(data.workspaces));
+    localStorage.setItem("workspaces", JSON.stringify(data.workspaces || []));
   }
-  
-  sessionStorage.setItem("authenticated", "true");
   return data;
 }
 
-export async function deactivateAccount(password: string): Promise<ActionResponse> {
-  return request<ActionResponse>("/auth/deactivate-account", {
+/* =========================================================
+DEACTIVATE ACCOUNT
+========================================================= */
+
+export async function deactivateAccount(password: string) {
+  return request("/auth/deactivate-account", {
     method: "DELETE",
     body: { password },
   });
 }
 
-export async function verifyEmail(token: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/auth/verify-email?token=${token}`);
+/* =========================================================
+VERIFY EMAIL
+========================================================= */
+
+export async function verifyEmail(token: string) {
+  return request(`/auth/verify-email?token=${token}`);
 }
 
-export async function forgotPassword(email: string): Promise<ActionResponse> {
-  return request<ActionResponse>("/auth/forgot-password", {
+/* =========================================================
+FORGOT PASSWORD
+========================================================= */
+
+export async function forgotPassword(email: string) {
+  return request("/auth/forgot-password", {
     method: "POST",
     body: { email },
   });
 }
 
-export async function resetPassword(token: string, new_password: string): Promise<ActionResponse> {
-  return request<ActionResponse>("/auth/reset-password", {
+/* =========================================================
+RESET PASSWORD
+========================================================= */
+
+export async function resetPassword(token: string, new_password: string) {
+  return request("/auth/reset-password", {
     method: "POST",
     body: { token, new_password },
   });
 }
 
-export async function getCurrentUser(): Promise<any> {
+export async function getCurrentUser() {
   return request("/auth/me");
 }
 
@@ -305,194 +186,213 @@ export async function getCurrentUser(): Promise<any> {
 BILLING
 ========================================================= */
 
-export async function createCheckout(planName: string): Promise<CheckoutResponse> {
-  return request<CheckoutResponse>(`/billing/checkout/${planName}`, {
+export async function createCheckout(planName: string) {
+  return request(`/billing/checkout/${planName}`, {
     method: "POST",
   });
 }
 
-export async function getCurrentPlan(): Promise<PlanResponse> {
-  return request<PlanResponse>("/billing/current-plan");
+export async function getCurrentPlan() {
+  return request("/billing/current-plan");
 }
 
 /* =========================================================
 DASHBOARD
 ========================================================= */
 
-export async function getDashboardSummary(): Promise<any> {
-  const response = await request<any>("/dashboard/summary");
+export async function getDashboardSummary() {
+  const response = await request("/dashboard/summary");
   return response?.data || response;
 }
 
-export async function getDashboardSteps(): Promise<any[]> {
-  const response = await request<any>("/dashboard/steps");
+export async function getDashboardSteps() {
+  const response = await request("/dashboard/steps");
   return response?.steps || response?.data || response || [];
 }
 
-export async function getDashboardAgents(): Promise<any> {
-  return await request("/dashboard/agents");
+export async function getDashboardAgents() {
+  const response = await request("/dashboard/agents");
+  return response;
 }
 
 /* =========================================================
 ANALYTICS
 ========================================================= */
 
-export async function getCostAnalytics(): Promise<any> {
-  const response = await request<any>("/analytics/costs");
+export async function getCostAnalytics() {
+  const response = await request("/analytics/costs");
   return response?.data || response;
 }
 
-export async function getBlockedMissions(): Promise<any> {
-  const response = await request<any>("/analytics/blocked");
+export async function getBlockedMissions() {
+  const response = await request("/analytics/blocked");
   return response?.data || response;
 }
 
-export async function getAgentAnalytics(): Promise<any> {
-  const response = await request<any>("/analytics/agents");
+export async function getAgentAnalytics() {
+  const response = await request("/analytics/agents");
   return response?.data || response;
 }
 
-export async function getAnalyticsOverview(): Promise<any> {
-  const response = await request<any>("/analytics/overview");
+export async function getAnalyticsOverview() {
+  const response = await request("/analytics/overview");
   return response?.data || response;
 }
 
 /* =========================================================
-MISSIONS
+MISSIONS (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
 ========================================================= */
 
-export async function getMissionOverview(): Promise<MissionOverview> {
-  const response = await request<any>("/missions/overview");
+export async function getMissionOverview() {
+  const response = await request("/missions/overview");
   return response?.data || response;
 }
 
-export async function getMissionList(q?: string, status?: string, signal?: AbortSignal): Promise<Mission[]> {
+export async function getMissionList(q?: string, status?: string) {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
   if (status) queryParams.append("status", status);
 
   const queryString = queryParams.toString();
   const endpoint = `/missions/list${queryString ? `?${queryString}` : ""}`;
-
-  const response = await request<any>(endpoint, { signal });
+  const response = await request(endpoint);
   return Array.isArray(response) ? response : [];
 }
 
-export async function fetchMissionById(missionId: string): Promise<Mission> {
-  const response = await request<any>(`/missions/${missionId}`);
+export async function fetchMissionById(missionId: string) {
+  const response = await request(`/missions/${missionId}`);
   return response?.data || response;
 }
 
-export async function retryMission(missionId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/missions/${missionId}/retry`, { method: "POST" });
+export async function retryMission(missionId: string) {
+  return request(`/missions/${missionId}/retry`, {
+    method: "POST",
+  });
 }
 
-export async function killMission(missionId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/missions/${missionId}/kill`, { method: "POST" });
+export async function killMission(missionId: string) {
+  return request(`/missions/${missionId}/kill`, {
+    method: "POST",
+  });
 }
 
-export async function resumeMission(missionId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/missions/${missionId}/resume`, { method: "POST" });
+export async function resumeMission(missionId: string) {
+  return request(`/missions/${missionId}/resume`, {
+    method: "POST",
+  });
 }
 
 /* =========================================================
-USAGE LOGS
+USAGE LOGS (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
 ========================================================= */
 
-export async function getDashboardUsageLogs(q?: string, signal?: AbortSignal): Promise<any> {
+export async function getDashboardUsageLogs(q?: string) {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
 
   const queryString = queryParams.toString();
   const endpoint = `/usage/feed${queryString ? `?${queryString}` : ""}`;
-
-  return await request<any>(endpoint, { signal });
+  const response = await request(endpoint);
+  return response?.logs || response?.data || response || [];
 }
 
 /* =========================================================
-AGENT RUNTIME
+AGENT RUNTIME (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
 ========================================================= */
 
-export async function createAgent(data: { name: string; system_prompt?: string; model?: string; }): Promise<any> {
+export async function createAgent(data: { name: string; system_prompt?: string; model?: string; }) {
   return request("/agents/", {
     method: "POST",
     body: data,
   });
 }
 
-export async function getAgent(agentId: string): Promise<AgentResponse> {
-  const response = await request<any>(`/dashboard/agent/${agentId}`);
+export async function getAgent(agentId: string) {
+  const response = await request(`/dashboard/agent/${agentId}`);
   return response?.data || response;
 }
 
-export async function getAgentTasks(agentId: string, q?: string, status?: string, signal?: AbortSignal): Promise<AgentTask[]> {
+export async function getAgentTasks(agentId: string, q?: string, status?: string) {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
   if (status) queryParams.append("status", status);
 
   const queryString = queryParams.toString();
   const endpoint = `/agent/${agentId}${queryString ? `?${queryString}` : ""}`;
-
-  const response = await request<any>(endpoint, { signal });
+  const response = await request(endpoint);
   return response?.tasks || response?.data || response || [];
 }
 
-export async function regenerateAgentKey(agentId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/agents/regenerate-key/${agentId}`, { method: "POST" });
+export async function regenerateAgentKey(agentId: string) {
+  return request(`/agents/regenerate-key/${agentId}`, {
+    method: "POST",
+  });
 }
 
 export async function updateAgentSettings(
   agentId: string,
   payload: { max_steps?: number; max_retries?: number; max_cost?: number; max_repeated_tasks?: number; }
-): Promise<ActionResponse> {
-  return request<ActionResponse>(`/agents/${agentId}`, {
+) {
+  return request(`/agents/${agentId}`, {
     method: "PUT",
     body: payload,
   });
 }
 
-export async function pauseAgentMission(agentId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/mission-control/pause/${agentId}`, { method: "POST" });
+export async function pauseAgentMission(agentId: string) {
+  return request(`/mission-control/pause/${agentId}`, {
+    method: "POST",
+  });
 }
 
-export async function resumeAgentMission(agentId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/mission-control/resume/${agentId}`, { method: "POST" });
+export async function resumeAgentMission(agentId: string) {
+  return request(`/mission-control/resume/${agentId}`, {
+    method: "POST",
+  });
 }
 
-export async function killAgentMission(agentId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/mission-control/kill/${agentId}`, { method: "POST" });
+export async function killAgentMission(agentId: string) {
+  return request(`/mission-control/kill/${agentId}`, {
+    method: "POST",
+  });
 }
 
-export async function stopAllAgents(): Promise<ActionResponse> {
-  return request<ActionResponse>("/agents/kill", { method: "POST" });
+export async function stopAllAgents() {
+  return request("/agents/kill", {
+    method: "POST",
+  });
 }
 
-export async function resumeAllAgents(): Promise<ActionResponse> {
-  return request<ActionResponse>("/agents/resume", { method: "POST" });
+export async function resumeAllAgents() {
+  return request("/agents/resume", {
+    method: "POST",
+  });
 }
 
 /* =========================================================
 STEPS
 ========================================================= */
 
-export async function executeStep(data: unknown): Promise<any> {
+export async function executeStep(data: any) {
   return request("/steps/execute", {
     method: "POST",
     body: data,
   });
 }
 
-export async function getStepStatus(stepId: string): Promise<any> {
-  const response = await request<any>(`/steps/${stepId}`);
+export async function getStepStatus(stepId: string) {
+  const response = await request(`/steps/${stepId}`);
   return response?.data || response;
 }
 
-export async function retryStep(stepId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/steps/retry/${stepId}`, { method: "POST" });
+export async function retryStep(stepId: string) {
+  return request(`/steps/retry/${stepId}`, {
+    method: "POST",
+  });
 }
 
-export async function getStepLogs(stepId: string): Promise<any[]> {
-  const response = await request<any>(`/steps/${stepId}/logs`);
+export async function getStepLogs(stepId: string) {
+  const response = await request(`/steps/${stepId}/logs`);
   return response?.logs || response?.data || response || [];
 }
 
@@ -500,39 +400,41 @@ export async function getStepLogs(stepId: string): Promise<any[]> {
 WORKSPACE
 ========================================================= */
 
-export async function createWorkspaceMember(data: { email: string; role: string; }): Promise<ActionResponse> {
-  return request<ActionResponse>("/workspace/add-member", {
+export async function createWorkspaceMember(data: { email: string; role: string; }) {
+  return request("/workspace/add-member", {
     method: "POST",
     body: data,
   });
 }
 
-export async function updateWorkspaceMemberRole(email: string, role: string): Promise<ActionResponse> {
-  return request<ActionResponse>("/workspace/members/role", {
+export async function updateWorkspaceMemberRole(email: string, role: string) {
+  return request("/workspace/members/role", {
     method: "PATCH",
     body: { email, role },
   });
 }
 
-export async function getWorkspaceMembers(): Promise<any[]> {
-  const response = await request<any>("/workspace/members");
+export async function getWorkspaceMembers() {
+  const response = await request("/workspace/members");
   return response?.members || response?.data || response || [];
 }
 
-export async function deleteWorkspaceMember(userId: string): Promise<ActionResponse> {
-  return request<ActionResponse>(`/workspace/members/${userId}`, { method: "DELETE" });
+export async function deleteWorkspaceMember(userId: string) {
+  return request(`/workspace/members/${userId}`, {
+    method: "DELETE",
+  });
 }
 
 /* =========================================================
 MCP
 ========================================================= */
 
-export async function getMcpTools(): Promise<any[]> {
-  const response = await request<any>("/mcp/tools");
+export async function getMcpTools() {
+  const response = await request("/mcp/tools");
   return response?.tools || response?.data || response || [];
 }
 
-export async function executeMcp(data: unknown): Promise<any> {
+export async function executeMcp(data: any) {
   return request("/mcp/execute", {
     method: "POST",
     body: data,
@@ -540,85 +442,59 @@ export async function executeMcp(data: unknown): Promise<any> {
 }
 
 /* =========================================================
-LIVE WEBSOCKET (ONE-TIME HANDSHAKE TICKETS) 🛡️
-// ========================================================= */
+LIVE WEBSOCKET
+========================================================= */
 
 export function createDashboardSocket(
   onMessage: (data: any) => void,
   onOpen?: () => void,
   onClose?: () => void
-): { close: () => void } {
+) {
   const WS_URL = API_URL.replace("http://", "ws://").replace("https://", "wss://");
   const workspaceId = localStorage.getItem("workspace_id");
 
-  let isManuallyClosed = false;
-  let socketInstance: WebSocket | null = null;
+  const socket = new WebSocket(`${WS_URL}/ws/live?workspace_id=${workspaceId}`);
 
-  activeSocketOnMessage = onMessage;
-  activeSocketOnOpen = onOpen;
-  activeSocketOnClose = onClose;
+  socket.onopen = () => {
+    console.log("WebSocket connected");
+    if (onOpen) onOpen();
+  };
 
-  async function establishSecureConnection() {
-    if (isManuallyClosed) return;
-
+  socket.onmessage = (event) => {
     try {
-      const authData = await request<TicketResponse>("/auth/ws-ticket", { method: "POST" });
-      
-      if (!authData?.ticket) {
-        throw new Error("Unable to provision secure network streaming ticket parameters.");
-      }
-
-      const socket = new WebSocket(
-        `${WS_URL}/ws/live?workspace_id=${workspaceId}&ticket=${authData.ticket}`
-      );
-
-      socket.onopen = () => {
-        console.log("WebSocket connected securely via short-lived single-use ticket.");
-        if (onOpen) onOpen();
-      };
-
-      socket.onmessage = (event) => {
-        try {
-          const parsed = JSON.parse(event.data);
-          onMessage(parsed);
-        } catch (err) {
-          console.error("Streaming packet parsing anomaly detected:", err);
-        }
-      };
-
-      socket.onerror = (err) => {
-        console.error("Secure data stream validation error:", err);
-      };
-
-      socket.onclose = () => {
-        if (!isManuallyClosed && activeSocketInstance === socket) {
-          console.log("Ticket expired or link severed. Re-shaking handshake pipelines...");
-          setTimeout(() => establishSecureConnection(), 3000); 
-        }
-        if (onClose && activeSocketInstance === socket) onClose();
-      };
-
-      socketInstance = socket;
-      activeSocketInstance = socket;
-
+      const parsed = JSON.parse(event.data);
+      onMessage(parsed);
     } catch (err) {
-      console.error("Critical secure socket establishment lifecycle failure:", err);
-      setTimeout(() => establishSecureConnection(), 5000);
-    }
-  }
-
-  establishSecureConnection();
-
-  return {
-    close: () => {
-      isManuallyClosed = true;
-      if (socketInstance) {
-        socketInstance.onclose = null;
-        socketInstance.close();
-      }
-      if (activeSocketInstance === socketInstance) {
-        activeSocketInstance = null;
-      }
+      console.error("WebSocket parse error", err);
     }
   };
+  socket.onerror = (err) => {
+    console.error("WebSocket error", err);
+  };
+  socket.onclose = () => {
+    console.log("WebSocket disconnected");
+    if (onClose) onClose();
+  };
+
+  return socket;
+}
+
+/* =========================================================
+LOGOUT
+========================================================= */
+
+export function logout() {
+  if (typeof window !== "undefined") {
+    // Fire background call to revoke session cookies cleanly on your FastAPI backend
+    fetch(`${API_URL}/auth/logout`, { method: "POST" }).catch((err) =>
+      console.error("Session cleanup request skipped:", err)
+    );
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("workspace_id");
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("workspaces");
+    sessionStorage.removeItem("authenticated");
+    window.location.href = "/login";
+  }
 }
