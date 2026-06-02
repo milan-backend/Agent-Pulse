@@ -22,15 +22,9 @@ export default function UsageLogsPage() {
         (a: any, b: any) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime()
       );
 
-      // Map over internal items to convert timestamps safely using browser locale bindings
-      const localTimeLogs = normalizedLogs.map((log: any) => ({
-        ...log,
-        created_at: log.created_at 
-          ? new Date(log.created_at + "Z").toLocaleString(undefined, { hour12: true })
-          : "N/A"
-      }));
-
-      setLogs(localTimeLogs);
+      // FIX: We keep the raw logs exactly as they are so child components like <LiveFeed /> 
+      // can safely parse log.created_at themselves without getting an already-formatted string.
+      setLogs(normalizedLogs);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to load usage logs");
@@ -39,13 +33,14 @@ export default function UsageLogsPage() {
     }
   }
 
+  // Poll intervals loop tracking engine execution signatures
   useEffect(() => {
     loadLogs();
     const interval = setInterval(() => {
       loadLogs();
     }, 10000);
     return () => clearInterval(interval);
-  }, [searchQuery]);
+  }, [searchQuery]); // Re-polls and catches shifts immediately on typing loop triggers
 
   const totalCost = logs.reduce((total, log) => total + Number(log?.cost ?? 0), 0);
   const totalTokens = logs.reduce((total, log) => {
@@ -86,7 +81,7 @@ export default function UsageLogsPage() {
 
   return (
     <div className="space-y-8">
-      {/* HERO PANEL CARD */}
+      {/* HERO HERO PANEL CARD */}
       <div className="rounded-[32px] border border-cyan-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-8 overflow-hidden relative">
         <div className="absolute top-0 right-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
         <div className="relative z-10">
@@ -102,7 +97,7 @@ export default function UsageLogsPage() {
         </div>
       </div>
 
-      {/* METRICS STRIP CONTAINER */}
+      {/* METRICS METRICS STRIP CONTAINER */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1.2fr] gap-6">
         {cards.map((card) => {
           const Icon = card.icon;
@@ -132,6 +127,7 @@ export default function UsageLogsPage() {
           </div>
         </div>
 
+        {/* INLINE ROW CONTAINER LAYER INTEGRATION HOOK */}
         <div className="flex items-center gap-4 w-full xl:w-auto flex-wrap sm:flex-nowrap">
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -140,7 +136,7 @@ export default function UsageLogsPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search Event, Agent ID, Step ID..."
-              className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-11 pr-4 py-2.5 text-xs focus:outline-none focus:border-cyan-400 transition-colors placeholder-slate-500"
+              className="w-full bg-black/40 border border-cyan-500/20 rounded-xl pl-11 pr-4 py-2.5 text-xs focus:outline-none focus:border-cyan-400 transition-colors placeholder-slate-500 text-white"
             />
           </div>
           <div className="flex items-center gap-3 rounded-full border border-green-500/20 bg-green-500/10 px-5 py-2.5 shrink-0 mx-auto sm:mx-0">
@@ -155,3 +151,4 @@ export default function UsageLogsPage() {
     </div>
   );
 }
+
