@@ -19,29 +19,25 @@ export default function LiveFeed({
 }: LiveFeedProps) {
 
   // =========================
-  // FORMAT TIME
+  // FORMAT TIME (UPDATED FOR GLOBAL USER COUNTRY TIMEOFFSETS)
   // =========================
+  const formatTime = (timestamp: string) => {
+    if (!timestamp) return "Unknown";
 
-  const formatTime = (
-    timestamp: string
-  ) => {
-
-    if (!timestamp)
-      return "Unknown";
-
-    return new Date(
-      timestamp
-    ).toLocaleString();
+    // Ensures JavaScript evaluates the timestamp as true UTC before shifting it to local user time
+    const safeUtcString = timestamp.endsWith("Z") ? timestamp : `${timestamp}Z`;
+    
+    return new Date(safeUtcString).toLocaleString(undefined, {
+      hour12: true,
+    });
   };
 
   // =========================
   // FORMAT COST
   // =========================
-
   const formatCost = (
     cost: number
   ) => {
-
     if (!cost)
       return "$0.0000";
 
@@ -53,11 +49,8 @@ export default function LiveFeed({
   // =========================
   // EMPTY STATE
   // =========================
-
   if (!logs?.length) {
-
     return (
-
       <div
         className="
           rounded-[32px]
@@ -68,7 +61,6 @@ export default function LiveFeed({
           text-center
         "
       >
-
         <div
           className="
             w-20
@@ -83,14 +75,12 @@ export default function LiveFeed({
             justify-center
           "
         >
-
           <Activity
             className="
               text-cyan-300
             "
             size={34}
           />
-
         </div>
 
         <h2
@@ -112,7 +102,6 @@ export default function LiveFeed({
           Runtime execution events
           will appear here.
         </p>
-
       </div>
     );
   }
@@ -120,9 +109,7 @@ export default function LiveFeed({
   // =========================
   // PAGE
   // =========================
-
   return (
-
     <div
       className="
         rounded-[32px]
@@ -132,9 +119,7 @@ export default function LiveFeed({
         p-8
       "
     >
-
       {/* HEADER */}
-
       <div
         className="
           flex
@@ -145,9 +130,7 @@ export default function LiveFeed({
           mb-8
         "
       >
-
         <div>
-
           <h2
             className="
               text-5xl
@@ -167,11 +150,9 @@ export default function LiveFeed({
             Real-time usage telemetry
             and execution logs.
           </p>
-
         </div>
 
         {/* LIVE BADGE */}
-
         <div
           className="
             flex
@@ -185,7 +166,6 @@ export default function LiveFeed({
             py-3
           "
         >
-
           <div
             className="
               h-2
@@ -205,94 +185,45 @@ export default function LiveFeed({
           >
             LIVE EVENTS
           </span>
-
         </div>
       </div>
 
-      {/* LOGS */}
-
+      {/* LOGS MAPPER CONTAINER */}
       <div className="space-y-6">
-
-        {logs.map(
-          (
-            log,
-            index
-          ) => {
-
+        {logs.map((log, index) => {
             // =========================
             // STATUS LOGIC
             // =========================
+            const eventType = (log?.event_type || log?.type || "").toLowerCase();
+            const isCompleted = eventType === "execution_completed";
+            const isFailed = eventType === "execution_failed";
 
-            const eventType =
-              (
-                log?.event_type ||
-                log?.type ||
-                ""
-              ).toLowerCase();
+            const badgeText = isCompleted
+              ? "COMPLETED"
+              : isFailed
+              ? "FAILED"
+              : "RUNNING";
 
-            const isCompleted =
-              eventType ===
-              "execution_completed";
+            const title = isCompleted
+              ? "Execution Completed"
+              : isFailed
+              ? "Execution Failed"
+              : "Execution Started";
 
-            const isFailed =
-              eventType ===
-              "execution_failed";
+            const badgeColor = isCompleted
+              ? `bg-green-500/10 border-green-500/20 text-green-300`
+              : isFailed
+              ? `bg-red-500/10 border-red-500/20 text-red-300`
+              : `bg-cyan-500/10 border-cyan-500/20 text-cyan-300`;
 
-            const badgeText =
-              isCompleted
-                ? "COMPLETED"
-                : isFailed
-                ? "FAILED"
-                : "RUNNING";
+            const StatusIcon = isCompleted ? CheckCircle2 : isFailed ? AlertTriangle : Activity;
 
-            const title =
-              isCompleted
-                ? "Execution Completed"
-                : isFailed
-                ? "Execution Failed"
-                : "Execution Started";
-
-            const badgeColor =
-              isCompleted
-                ? `
-                  bg-green-500/10
-                  border-green-500/20
-                  text-green-300
-                `
-                : isFailed
-                ? `
-                  bg-red-500/10
-                  border-red-500/20
-                  text-red-300
-                `
-                : `
-                  bg-cyan-500/10
-                  border-cyan-500/20
-                  text-cyan-300
-                `;
-
-            const StatusIcon =
-              isCompleted
-                ? CheckCircle2
-                : isFailed
-                ? AlertTriangle
-                : Activity;
-
-            const totalTokens =
-              Number(
-                log?.total_tokens ??
-                (
-                  Number(
-                    log?.prompt_tokens ?? 0
-                  ) +
-                  Number(
-                    log?.completion_tokens ?? 0
-                  )
-                )
-              );
+            const totalTokens = Number(
+              log?.total_tokens ??
+              (Number(log?.prompt_tokens ?? 0) + Number(log?.completion_tokens ?? 0))
+            );
 
             return (
-
               <div
                 key={index}
                 className="
@@ -306,9 +237,7 @@ export default function LiveFeed({
                   duration-300
                 "
               >
-
-                {/* TOP */}
-
+                {/* TOP HEADER ELEMENT INSIDE CARD */}
                 <div
                   className="
                     flex
@@ -318,9 +247,6 @@ export default function LiveFeed({
                     gap-4
                   "
                 >
-
-                  {/* LEFT */}
-
                   <div
                     className="
                       flex
@@ -329,9 +255,7 @@ export default function LiveFeed({
                       flex-wrap
                     "
                   >
-
-                    {/* STATUS */}
-
+                    {/* STATUS BADGE CONTAINER */}
                     <div
                       className={`
                         px-4
@@ -346,17 +270,11 @@ export default function LiveFeed({
                         ${badgeColor}
                       `}
                     >
-
-                      <StatusIcon
-                        size={16}
-                      />
-
+                      <StatusIcon size={16} />
                       {badgeText}
-
                     </div>
 
-                    {/* TIME */}
-
+                    {/* TIME LABELS */}
                     <div
                       className="
                         flex
@@ -365,26 +283,12 @@ export default function LiveFeed({
                         text-slate-300
                       "
                     >
-
-                      <Clock3
-                        size={16}
-                      />
-
-                      <span
-                        className="
-                          text-sm
-                          font-medium
-                        "
-                      >
-                        {formatTime(
-                          log?.created_at
-                        )}
+                      <Clock3 size={16} />
+                      <span className="text-sm font-medium">
+                        {formatTime(log?.created_at)}
                       </span>
-
                     </div>
                   </div>
-
-                  {/* RIGHT ICON */}
 
                   <div
                     className="
@@ -400,19 +304,16 @@ export default function LiveFeed({
                       shrink-0
                     "
                   >
-
                     <Activity
                       className="
                         text-cyan-300
                       "
                       size={26}
                     />
-
                   </div>
                 </div>
 
                 {/* TITLE */}
-
                 <h3
                   className="
                     text-3xl
@@ -423,8 +324,7 @@ export default function LiveFeed({
                   {title}
                 </h3>
 
-                {/* IDS */}
-
+                {/* IDENTIFICATION BLOCK DETAILS */}
                 <div
                   className="
                     grid
@@ -434,9 +334,7 @@ export default function LiveFeed({
                     mt-7
                   "
                 >
-
-                  {/* AGENT ID */}
-
+                  {/* AGENT ID CARD */}
                   <div
                     className="
                       rounded-2xl
@@ -446,7 +344,6 @@ export default function LiveFeed({
                       p-5
                     "
                   >
-
                     <p
                       className="
                         text-xs
@@ -458,7 +355,6 @@ export default function LiveFeed({
                     >
                       Agent ID
                     </p>
-
                     <p
                       className="
                         mt-3
@@ -469,11 +365,9 @@ export default function LiveFeed({
                     >
                       {log?.agent_id || "N/A"}
                     </p>
-
                   </div>
 
-                  {/* STEP ID */}
-
+                  {/* STEP ID CARD */}
                   <div
                     className="
                       rounded-2xl
@@ -483,7 +377,6 @@ export default function LiveFeed({
                       p-5
                     "
                   >
-
                     <p
                       className="
                         text-xs
@@ -495,7 +388,6 @@ export default function LiveFeed({
                     >
                       Step ID
                     </p>
-
                     <p
                       className="
                         mt-3
@@ -506,12 +398,10 @@ export default function LiveFeed({
                     >
                       {log?.step_id || "N/A"}
                     </p>
-
                   </div>
                 </div>
 
-                {/* METRICS */}
-
+                {/* NUMERIC SYSTEM TELEMETRY STRIP */}
                 <div
                   className="
                     grid
@@ -521,230 +411,48 @@ export default function LiveFeed({
                     mt-7
                   "
                 >
-
-                  {/* PROMPT */}
-
-                  <div
-                    className="
-                      rounded-2xl
-                      border
-                      border-cyan-500/20
-                      bg-cyan-500/10
-                      p-4
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-3
-                      "
-                    >
-
-                      <p
-                        className="
-                          text-sm
-                          font-bold
-                          text-cyan-200
-                        "
-                      >
-                        PROMPT
-                      </p>
-
-                      <Cpu
-                        size={18}
-                        className="
-                          text-cyan-300
-                          shrink-0
-                        "
-                      />
-
+                  {/* PROMPT METRIC CARD */}
+                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-cyan-200">PROMPT</p>
+                      <Cpu size={18} className="text-cyan-300 shrink-0" />
                     </div>
-
-                    <p
-                      className="
-                        mt-3
-                        text-2xl
-                        font-black
-                        text-cyan-100
-                      "
-                    >
-                      {Number(
-                        log?.prompt_tokens ?? 0
-                      ).toLocaleString()}
+                    <p className="mt-3 text-2xl font-black text-cyan-100">
+                      {Number(log?.prompt_tokens ?? 0).toLocaleString()}
                     </p>
-
                   </div>
 
-                  {/* COMPLETION */}
-
-                  <div
-                    className="
-                      rounded-2xl
-                      border
-                      border-green-500/20
-                      bg-green-500/10
-                      p-4
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-3
-                      "
-                    >
-
-                      <p
-                        className="
-                          text-sm
-                          font-bold
-                          text-green-200
-                        "
-                      >
-                        COMPLETION
-                      </p>
-
-                      <Cpu
-                        size={18}
-                        className="
-                          text-green-300
-                          shrink-0
-                        "
-                      />
-
+                  {/* COMPLETION METRIC CARD */}
+                  <div className="rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-green-200">COMPLETION</p>
+                      <Cpu size={18} className="text-green-300 shrink-0" />
                     </div>
-
-                    <p
-                      className="
-                        mt-3
-                        text-2xl
-                        font-black
-                        text-green-100
-                      "
-                    >
-                      {Number(
-                        log?.completion_tokens ?? 0
-                      ).toLocaleString()}
+                    <p className="mt-3 text-2xl font-black text-green-100">
+                      {Number(log?.completion_tokens ?? 0).toLocaleString()}
                     </p>
-
                   </div>
 
-                  {/* TOTAL */}
-
-                  <div
-                    className="
-                      rounded-2xl
-                      border
-                      border-yellow-500/20
-                      bg-yellow-500/10
-                      p-4
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-3
-                      "
-                    >
-
-                      <p
-                        className="
-                          text-sm
-                          font-bold
-                          text-yellow-200
-                        "
-                      >
-                        TOTAL
-                      </p>
-
-                      <Zap
-                        size={18}
-                        className="
-                          text-yellow-300
-                          shrink-0
-                        "
-                      />
-
+                  {/* TOTAL SUM TOKENS VALUE CARD */}
+                  <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/10 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-yellow-200">TOTAL</p>
+                      <Zap size={18} className="text-yellow-300 shrink-0" />
                     </div>
-
-                    <p
-                      className="
-                        mt-3
-                        text-2xl
-                        font-black
-                        text-yellow-100
-                      "
-                    >
+                    <p className="mt-3 text-2xl font-black text-yellow-100">
                       {totalTokens.toLocaleString()}
                     </p>
-
                   </div>
 
-                  {/* COST */}
-
-                  <div
-                    className="
-                      rounded-2xl
-                      border
-                      border-purple-500/20
-                      bg-purple-500/10
-                      p-4
-                    "
-                  >
-
-                    <div
-                      className="
-                        flex
-                        items-center
-                        justify-between
-                        gap-3
-                      "
-                    >
-
-                      <p
-                        className="
-                          text-sm
-                          font-bold
-                          text-purple-200
-                        "
-                      >
-                        COST
-                      </p>
-
-                      <Coins
-                        size={18}
-                        className="
-                          text-purple-300
-                          shrink-0
-                        "
-                      />
-
+                  {/* COMPUTED RUNTIME REVENUE CHARGES CARD */}
+                  <div className="rounded-2xl border border-purple-500/20 bg-purple-500/10 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-bold text-purple-200">COST</p>
+                      <Coins size={18} className="text-purple-300 shrink-0" />
                     </div>
-
-                    <p
-                      className="
-                        mt-3
-                        text-2xl
-                        font-black
-                        text-purple-100
-                        whitespace-nowrap
-                      "
-                    >
-                      {formatCost(
-                        Number(
-                          log?.cost ?? 0
-                        )
-                      )}
+                    <p className="mt-3 text-2xl font-black text-purple-100 whitespace-nowrap">
+                      {formatCost(Number(log?.cost ?? 0))}
                     </p>
-
                   </div>
                 </div>
               </div>
@@ -755,4 +463,3 @@ export default function LiveFeed({
     </div>
   );
 }
-
