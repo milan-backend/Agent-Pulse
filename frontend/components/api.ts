@@ -2,7 +2,7 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 type RequestOptions = {
   method?: string;
-  body?: any;
+  body?: unknown; // Upgraded from any for better type safety
 };
 
 function authHeaders() {
@@ -22,7 +22,7 @@ function authHeaders() {
   };
 }
 
-// Global flag to avoid multiple overlapping token refresh requests
+// Global flags to manage unified token refresh states without deadlock
 let isRefreshing = false;
 let refreshSubscribers: (() => void)[] = [];
 
@@ -40,7 +40,7 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
 
   let response = await executeFetch();
 
-  // INTERCEPTOR: Automatically handle 401 Unauthorized errors for token rotation
+  // INTERCEPTOR: Handle 401 Unauthorized errors and safely execute token rotation
   if (response.status === 401 && endpoint !== "/auth/login" && endpoint !== "/auth/refresh") {
     if (typeof window !== "undefined") {
       console.warn("Access token expired, initializing automatic refresh rotation...");
@@ -49,9 +49,10 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
         isRefreshing = true;
 
         try {
-          // Trigger the HTTP-Only secure rotation endpoint
+          // Trigger the HTTP-Only secure rotation endpoint explicitly passing credentials
           const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
             method: "POST",
+            credentials: "include",
             headers: { "Content-Type": "application/json" }
           });
 
@@ -60,8 +61,20 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
             if (data.access_token) {
               localStorage.setItem("token", data.access_token);
             }
-            isRefreshing = false;
+            
+            // 1. Wake up and execute all parallel queued subscribers first
             onTokenRefreshed();
+            isRefreshing = false;
+
+            // 2. Request A immediately retries itself right here
+            const retryResponse = await executeFetch();
+            
+            if (!retryResponse.ok) {
+              throw new Error(`Retry request failed with status ${retryResponse.status}`);
+            }
+
+            const retryText = await retryResponse.text();
+            return retryText ? JSON.parse(retryText) : {};
           } else {
             throw new Error("Refresh token expired or invalid");
           }
@@ -74,12 +87,22 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
         }
       }
 
-      // Queue up overlapping parallel requests until token refresh completes
-      return new Promise((resolve) => {
+      // Parallel Request Queue: Handle overlapping requests cleanly while Request A refreshes
+      return new Promise((resolve, reject) => {
         refreshSubscribers.push(async () => {
-          const retryResponse = await executeFetch();
-          const text = await retryResponse.text();
-          resolve(text ? JSON.parse(text) : {});
+          try {
+            const retryResponse = await executeFetch();
+            
+            if (!retryResponse.ok) {
+              reject(new Error(`Queued retry request failed with status ${retryResponse.status}`));
+              return;
+            }
+
+            const text = await retryResponse.text();
+            resolve(text ? JSON.parse(text) : {});
+          } catch (retryErr) {
+            reject(retryErr);
+          }
         });
       });
     }
@@ -373,7 +396,7 @@ export async function resumeAllAgents() {
 STEPS
 ========================================================= */
 
-export async function executeStep(data: any) {
+export async function executeStep(data: unknown) {
   return request("/steps/execute", {
     method: "POST",
     body: data,
@@ -434,7 +457,7 @@ export async function getMcpTools() {
   return response?.tools || response?.data || response || [];
 }
 
-export async function executeMcp(data: any) {
+export async function executeMcp(data: unknown) {
   return request("/mcp/execute", {
     method: "POST",
     body: data,
@@ -453,30 +476,60 @@ export function createDashboardSocket(
   const WS_URL = API_URL.replace("http://", "ws://").replace("https://", "wss://");
   const workspaceId = localStorage.getItem("workspace_id");
 
-  const socket = new WebSocket(`${WS_URL}/ws/live?workspace_id=${workspaceId}`);
-
-  socket.onopen = () => {
-    console.log("WebSocket connected");
-    if (onOpen) onOpen();
-  };
-
-  socket.onmessage = (event) => {
-    try {
-      const parsed = JSON.parse(event.data);
-      onMessage(parsed);
-    } catch (err) {
-      console.error("WebSocket parse error", err);
+  const socketContainer = {
+    ws: null as WebSocket | null,
+    close: function() {
+      if (this.ws) this.ws.close();
     }
   };
-  socket.onerror = (err) => {
-    console.error("WebSocket error", err);
-  };
-  socket.onclose = () => {
-    console.log("WebSocket disconnected");
-    if (onClose) onClose();
-  };
 
-  return socket;
+  (async () => {
+    try {
+      const ticketResponse = await fetch(`${API_URL}/auth/ws-ticket`, {
+        method: "POST",
+        headers: authHeaders(),
+      });
+
+      let ticketQuery = "";
+      if (ticketResponse.ok) {
+        const ticketData = await ticketResponse.json();
+        if (ticketData.ticket) {
+          ticketQuery = `&ticket=${ticketData.ticket}`;
+        }
+      }
+
+      const socket = new WebSocket(`${WS_URL}/ws/live?workspace_id=${workspaceId}${ticketQuery}`);
+      socketContainer.ws = socket;
+
+      socket.onopen = () => {
+        console.log("WebSocket connected securely to live runtime");
+        if (onOpen) onOpen();
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          onMessage(parsed);
+        } catch (err) {
+          console.error("WebSocket parse error", err);
+        }
+      };
+
+      socket.onerror = (err) => {
+        console.error("WebSocket error", err);
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket disconnected");
+        if (onClose) onClose();
+      };
+
+    } catch (error) {
+      console.error("Failed to initialize secure live WebSocket connection:", error);
+    }
+  })();
+
+  return socketContainer;
 }
 
 /* =========================================================
@@ -485,8 +538,12 @@ LOGOUT
 
 export function logout() {
   if (typeof window !== "undefined") {
-    fetch(`${API_URL}/auth/logout`, { method: "POST" }).catch((err) =>
-      console.error("Session cleanup request skipped:", err)
+    // Included credentials option to clear HTTP-Only tracking cookies on your live FastAPI server
+    fetch(`${API_URL}/auth/logout`, { 
+      method: "POST",
+      credentials: "include"
+    }).catch((err) =>
+      console.error("Session cookie clearance request skipped or unauthorized:", err)
     );
 
     localStorage.removeItem("token");
