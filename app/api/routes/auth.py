@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, Cookie
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 
@@ -18,7 +18,8 @@ from app.services.user_auth_service import (
     verify_user_email,
     refresh_access_token,
     logout_user,
-    check_rate_limit  # Imported the rate limit verification logic helper
+    issue_websocket_ticket,
+    check_rate_limit
 )
 
 from app.api.deps_user import get_current_user
@@ -28,61 +29,66 @@ from app.core.security import verify_password
 router = APIRouter()
 
 # ============================================
-# SIGNUP (RATE LIMITED: 3 REQUESTS / MINUTE)
+# SIGNUP ROUTE
 # ============================================
-
 @router.post("/signup")
 def signup(
     request: SignupRequest,
-    fastapi_req: Request,  # Added to extract client IP strings
+    fastapi_req: Request,
     db: Session = Depends(get_db)
 ):
     client_ip = fastapi_req.client.host or "unknown"
     check_rate_limit(client_ip=client_ip, limit_type="signup", max_requests=3, window_minutes=1)
-    
     return signup_user(db=db, request=request)
 
 # ============================================
-# LOGIN (RATE LIMITED: 5 REQUESTS / MINUTE)
+# LOGIN ROUTE (HTTPONLY SEEDING INJECTED)
 # ============================================
-
 @router.post("/login")
 def login(
     request: LoginRequest,
-    fastapi_req: Request,  # Added to extract client IP strings
+    fastapi_req: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     client_ip = fastapi_req.client.host or "unknown"
     check_rate_limit(client_ip=client_ip, limit_type="login", max_requests=5, window_minutes=1)
-    
-    return login_user(db=db, request=request)
+    return login_user(db=db, request=request, response=response)
 
 # ============================================
-# REFRESH TOKEN ROTATION HANDSHAKE
+# ROTATED REFRESH ACCESS CONVERSION
 # ============================================
-
 @router.post("/refresh")
 def refresh(
-    refresh_token: str,
+    response: Response,
+    refresh_token: str = Cookie(None), # Automatically grabs token string out of http headers cookie container
     db: Session = Depends(get_db)
 ):
-    return refresh_access_token(db=db, refresh_token=refresh_token)
+    return refresh_access_token(db=db, refresh_token=refresh_token, response=response)
 
 # ============================================
-# LOGOUT / SESSION REVOCATION
+# SECURE ONE-TIME WEBSOCKET TICKET HANDSHAKE ROUTE
 # ============================================
+@router.post("/ws-ticket")
+def get_websocket_ticket(current_user: User = Depends(get_current_user)):
+    """ Endpoint that issues a safe, short-lived ticket to securely connect to web sockets without exposing raw JWTs """
+    ticket = issue_websocket_ticket(user_id=current_user.id)
+    return {"ticket": ticket}
 
+# ============================================
+# SECURE SESSION LOGOUT
+# ============================================
 @router.post("/logout")
 def logout(
-    refresh_token: str,
+    response: Response,
+    refresh_token: str = Cookie(None),
     db: Session = Depends(get_db)
 ):
-    return logout_user(db=db, refresh_token=refresh_token)
+    return logout_user(db=db, refresh_token=refresh_token, response=response)
 
 # ============================================
 # VERIFY EMAIL
 # ============================================
-
 @router.get("/verify-email")
 def verify_email(
     token: str,
@@ -93,7 +99,6 @@ def verify_email(
 # ============================================
 # FORGOT PASSWORD
 # ============================================
-
 @router.post("/forgot-password")
 def forgot_password(
     request: ForgetPasswordRequest,
@@ -104,7 +109,6 @@ def forgot_password(
 # ============================================
 # RESET PASSWORD
 # ============================================
-
 @router.post("/reset-password")
 def reset_user_password(
     request: ResetPasswordRequest,
@@ -113,9 +117,8 @@ def reset_user_password(
     return reset_password(db=db, request=request)
 
 # ============================================
-# CURRENT USER
+# CURRENT USER INFO
 # ============================================
-
 @router.get("/me")
 def me(
     current_user: User = Depends(get_current_user)
@@ -131,24 +134,16 @@ def me(
 # ============================================
 # DEACTIVATE ACCOUNT
 # ============================================
-
 @router.delete("/deactivate-account")
 def deactivate_account(
     request: DeactivateAccountRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    # VERIFY PASSWORD AGAIN
     valid = verify_password(request.password, current_user.password_hash)
-
     if not valid:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid password"
-        )
+        raise HTTPException(status_code=401, detail="Invalid password")
 
-    # SOFT DELETE ACCOUNT
     current_user.is_active = False
     db.commit()
-
     return {"message": "Account deactivated successfully"}

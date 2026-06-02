@@ -1,7 +1,7 @@
 import os
 import secrets
 from datetime import datetime, timedelta
-from fastapi import HTTPException
+from fastapi import HTTPException, Response
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,7 @@ from app.models.workspace import Workspace
 from app.models.plan import Plan
 from app.models.workspace_subscription import WorkspaceSubscription
 from app.models.workspace_member import WorkspaceMember
-from app.models.refresh_token import RefreshToken  # Our new table model link
+from app.models.refresh_token import RefreshToken
 
 from app.services.email_service import (
     send_verification_email,
@@ -25,10 +25,12 @@ from app.core.security import (
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
+# Dynamic global cache container memory allocation for secure short-lived WebSocket tokens
+WEBSOCKET_TICKET_STORE = {}
+
 # ============================================
 # IN-MEMORY RATE LIMITING SYSTEM BLOCK
 # ============================================
-# Tracks timestamp histories per client IP address without needing a separate Redis instance
 RATE_LIMIT_STORAGE = {}
 
 def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_minutes: int):
@@ -40,7 +42,6 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
     if tracking_key not in RATE_LIMIT_STORAGE:
         RATE_LIMIT_STORAGE[tracking_key] = []
         
-    # Clean up timestamp footprints older than our rolling limit window boundary
     RATE_LIMIT_STORAGE[tracking_key] = [
         ts for ts in RATE_LIMIT_STORAGE[tracking_key] if ts > window_start
     ]
@@ -51,17 +52,26 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
             detail=f"Too many requests. Rate limit exceeded for {limit_type}. Try again later."
         )
         
-    # Commit the current execution request timestamp to memory array
     RATE_LIMIT_STORAGE[tracking_key].append(now)
+
+# ============================================
+# COOKIE MANAGEMENT HELPER
+# ============================================
+def set_secure_refresh_cookie(response: Response, token_string: str):
+    response.set_cookie(
+        key="refresh_token",
+        value=token_string,
+        httponly=True,
+        secure=True,        # Requires HTTPS production domain layer paths
+        samesite="lax",     # Cross-Site Request Forgery (CSRF) protection boundary
+        max_age=604800,     # 7 Days in seconds execution lifespan
+        path="/auth"        # Restricted access mapping to protect non-auth footprints
+    )
 
 # ============================================
 # SIGNUP LAYER
 # ============================================
-
-def signup_user(
-    db: Session,
-    request
-):
+def signup_user(db: Session, request):
     existing = (
         db.query(User)
         .filter(User.email == request.email)
@@ -75,7 +85,6 @@ def signup_user(
                 detail="Email already exists"
             )
 
-        # RESEND VERIFICATION EMAIL
         send_verification_email(
             to_email=existing.email,
             token=existing.email_verification_token
@@ -85,7 +94,6 @@ def signup_user(
     verification_token = secrets.token_urlsafe(32)
     verification_expiry = datetime.utcnow() + timedelta(hours=24)
 
-    # CREATE USER
     user = User(
         name=request.name,
         email=request.email,
@@ -99,7 +107,6 @@ def signup_user(
     db.add(user)
     db.flush()
 
-    # CREATE WORKSPACE
     workspace = Workspace(
         name=f"{request.name}'s Workspace",
         slug=f"{request.name.lower().replace(' ','-')}-{secrets.token_hex(3)}",
@@ -110,7 +117,6 @@ def signup_user(
     db.add(workspace)
     db.flush()
 
-    # CREATE MEMBERSHIP
     membership = WorkspaceMember(
         workspace_id=workspace.id,
         user_id=user.id,
@@ -118,7 +124,6 @@ def signup_user(
     )
     db.add(membership)
 
-    # FIND FREE PLAN
     free_plan = (
         db.query(Plan)
         .filter(Plan.name == "free")
@@ -131,7 +136,6 @@ def signup_user(
             detail="Free plan missing"
         )
 
-    # CREATE SUBSCRIPTION
     subscription = WorkspaceSubscription(
         workspace_id=workspace.id,
         plan_id=free_plan.id,
@@ -143,7 +147,6 @@ def signup_user(
     db.refresh(user)
     db.refresh(workspace)
 
-    # SEND VERIFICATION EMAIL
     send_verification_email(
         to_email=user.email,
         token=verification_token
@@ -157,44 +160,23 @@ def signup_user(
     }
 
 # ============================================
-# LOGIN LAYER (SECURED WITH SHORT LIVED ACCESS & DB REFRESH TOKENS)
+# LOGIN LAYER
 # ============================================
-
-def login_user(
-    db: Session,
-    request
-):
+def login_user(db: Session, request, response: Response):
     user = (
         db.query(User)
         .filter(User.email == request.email)
         .first()
     )
 
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+    if not user or not verify_password(request.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=403,
-            detail="Account deactivated"
-        )
+        raise HTTPException(status_code=403, detail="Account deactivated")
 
     if not user.is_verified:
-        raise HTTPException(
-            status_code=403,
-            detail="Email not verified"
-        )
-
-    valid = verify_password(request.password, user.password_hash)
-
-    if not valid:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=403, detail="Email not verified")
 
     memberships = (
         db.query(WorkspaceMember)
@@ -203,10 +185,7 @@ def login_user(
     )
 
     if not memberships:
-        raise HTTPException(
-            status_code=403,
-            detail="No workspace membership found"
-        )
+        raise HTTPException(status_code=403, detail="No workspace membership found")
 
     workspace_list = []
     for member in memberships:
@@ -224,18 +203,15 @@ def login_user(
 
     default_membership = memberships[0]
 
-    # 1. Short-lived Access Token Payload (15 Minutes)
     access_payload = {
         "sub": str(user.id),
         "exp": datetime.utcnow() + timedelta(minutes=15)
     }
-    token = jwt.encode(access_payload, SECRET_KEY, algorithm=ALGORITHM)
+    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm=ALGORITHM)
 
-    # 2. Long-lived Refresh Token Storage Setup (7 Days)
     refresh_token_string = secrets.token_urlsafe(64)
     refresh_expiry = datetime.utcnow() + timedelta(days=7)
 
-    # Commit refresh row record to Render PostgreSQL database
     db_refresh_token = RefreshToken(
         user_id=user.id,
         token_id=refresh_token_string,
@@ -244,24 +220,99 @@ def login_user(
     db.add(db_refresh_token)
     db.commit()
 
+    set_secure_refresh_cookie(response, refresh_token_string)
+
     return {
-        "access_token": token,
-        "refresh_token": refresh_token_string,
+        "access_token": access_token,
         "token_type": "bearer",
         "user_id": str(user.id),
         "workspace_id": str(default_membership.workspace_id),
         "role": default_membership.role,
-        "workspaces": workspace_list
+        "workspaces": workspace_list,
+        "message": "Authentication successful"
     }
+
+# ============================================
+# REFRESH TOKEN ROTATION (RTR) 🛡️
+# ============================================
+def refresh_access_token(db: Session, refresh_token: str, response: Response):
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Refresh token cookie missing")
+
+    token_record = (
+        db.query(RefreshToken)
+        .filter(RefreshToken.token_id == refresh_token)
+        .first()
+    )
+
+    if not token_record:
+        raise HTTPException(status_code=401, detail="Refresh token invalid or missing")
+
+    if token_record.revoked:
+        db.query(RefreshToken).filter(RefreshToken.user_id == token_record.user_id).update({"revoked": True})
+        db.commit()
+        raise HTTPException(status_code=401, detail="Security Warning: Token reuse detected. Session revoked.")
+
+    if token_record.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="Refresh token expired")
+
+    token_record.revoked = True
+    db.flush()
+
+    new_refresh_string = secrets.token_urlsafe(64)
+    new_refresh_expiry = datetime.utcnow() + timedelta(days=7)
+
+    new_db_token = RefreshToken(
+        user_id=token_record.user_id,
+        token_id=new_refresh_string,
+        expires_at=new_refresh_expiry
+    )
+    db.add(new_db_token)
+    db.commit()
+
+    set_secure_refresh_cookie(response, new_refresh_string)
+
+    new_access_payload = {
+        "sub": str(token_record.user_id),
+        "exp": datetime.utcnow() + timedelta(minutes=15)
+    }
+    return {
+        "access_token": jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM),
+        "token_type": "bearer"
+    }
+
+# ============================================
+# SECURE WEBSOCKET ONE-TIME TICKET ENGINE
+# ============================================
+def issue_websocket_ticket(user_id: str) -> str:
+    ticket = secrets.token_urlsafe(32)
+    WEBSOCKET_TICKET_STORE[ticket] = {
+        "user_id": str(user_id),
+        "expires_at": datetime.utcnow() + timedelta(seconds=10)
+    }
+    return ticket
+
+# ============================================
+# LOGOUT SYSTEM
+# ============================================
+def logout_user(db: Session, refresh_token: str, response: Response):
+    if refresh_token:
+        token_record = (
+            db.query(RefreshToken)
+            .filter(RefreshToken.token_id == refresh_token)
+            .first()
+        )
+        if token_record:
+            token_record.revoked = True
+            db.commit()
+
+    response.delete_cookie(key="refresh_token", path="/auth")
+    return {"message": "Logged out successfully"}
 
 # ============================================
 # VERIFY EMAIL
 # ============================================
-
-def verify_user_email(
-    db: Session,
-    token: str
-):
+def verify_user_email(db: Session, token: str):
     user = (
         db.query(User)
         .filter(User.email_verification_token == token)
@@ -269,16 +320,10 @@ def verify_user_email(
     )
 
     if not user:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid token"
-        )
+        raise HTTPException(status_code=400, detail="Invalid token")
 
     if user.email_verification_expiry < datetime.utcnow():
-        raise HTTPException(
-            status_code=400,
-            detail="Verification token expired"
-        )
+        raise HTTPException(status_code=400, detail="Verification token expired")
 
     user.is_verified = True
     user.email_verification_token = None
@@ -288,13 +333,9 @@ def verify_user_email(
     return {"message": "Email verified successfully"}
 
 # ============================================
-# REQUEST PASSWORD RESET
+# REQUEST PASSWORD RESET (FORGOT PASSWORD)
 # ============================================
-
-def request_password_reset(
-    db: Session,
-    request
-):
+def request_password_reset(db: Session, request):
     user = (
         db.query(User)
         .filter(User.email == request.email)
@@ -312,17 +353,12 @@ def request_password_reset(
     db.commit()
 
     send_reset_password_email(to_email=user.email, token=token)
-
     return {"message": "If the account exists, a password reset link has been sent"}
 
 # ============================================
 # RESET PASSWORD
 # ============================================
-
-def reset_password(
-    db: Session,
-    request
-):
+def reset_password(db: Session, request):
     user = (
         db.query(User)
         .filter(User.reset_password_token == request.token)
@@ -330,22 +366,10 @@ def reset_password(
     )
 
     if not user:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid reset token"
-        )
+        raise HTTPException(status_code=400, detail="Invalid reset token")
 
-    if not user.reset_password_expires:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid reset token"
-        )
-
-    if user.reset_password_expires < datetime.utcnow():
-        raise HTTPException(
-            status_code=400,
-            detail="Reset token expired"
-        )
+    if not user.reset_password_expires or user.reset_password_expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Reset token expired or invalid")
 
     user.password_hash = hash_password(request.new_password)
     user.reset_password_token = None
@@ -355,79 +379,16 @@ def reset_password(
     return {"message": "Password reset successful"}
 
 # ============================================
-# REFRESH ACCESS TOKEN HANDSHAKE
-# ============================================
-
-def refresh_access_token(
-    db: Session,
-    refresh_token: str
-):
-    token_record = (
-        db.query(RefreshToken)
-        .filter(RefreshToken.token_id == refresh_token)
-        .first()
-    )
-
-    if not token_record:
-        raise HTTPException(status_code=401, detail="Refresh token invalid or missing")
-    if token_record.revoked:
-        raise HTTPException(status_code=401, detail="Refresh token has been revoked")
-    if token_record.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=401, detail="Refresh token expired")
-
-    # Generate a brand new access token valid for another rolling 15 minutes
-    new_access_payload = {
-        "sub": str(token_record.user_id),
-        "exp": datetime.utcnow() + timedelta(minutes=15)
-    }
-    new_access_token = jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM)
-
-    return {
-        "access_token": new_access_token,
-        "token_type": "bearer"
-    }
-
-# ============================================
-# LOGOUT SYSTEM
-# ============================================
-
-def logout_user(
-    db: Session,
-    refresh_token: str
-):
-    token_record = (
-        db.query(RefreshToken)
-        .filter(RefreshToken.token_id == refresh_token)
-        .first()
-    )
-
-    if token_record:
-        token_record.revoked = True
-        db.commit()
-
-    return {"message": "Logged out successfully"}
-
-# ============================================
 # AUTHENTICATE USER
 # ============================================
-
-def authenticate_user(
-    db: Session,
-    token: str
-):
+def authenticate_user(db: Session, token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
         if not user_id:
-            raise HTTPException(
-                status_code=401,
-                detail="Invalid token"
-            )
+            raise HTTPException(status_code=401, detail="Invalid token")
     except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token"
-        )
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     user = (
         db.query(User)
@@ -435,16 +396,7 @@ def authenticate_user(
         .first()
     )
 
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="User not found"
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=403,
-            detail="Account deactivated"
-        )
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User unauthorized or deactivated")
 
     return user

@@ -21,6 +21,7 @@ from app.api.routes import tasks
 from app.api.routes.stripe_billing import router as stripe_billing_router
 from app.api.routes.stripe_webhook import router as stripe_webhook_router
 
+import os
 from fastapi.middleware.cors import CORSMiddleware
 
 
@@ -36,9 +37,17 @@ def create_tables():
 def root():
     return {"message": "DAG Backend Running "}
 
+frontend_url_env = os.getenv("FRONTEND_URL")
+
+if not frontend_url_env:
+    allowed_origins_list = []
+
+else:
+    allowed_origins_list = [url.strip() for url in frontend_url_env.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # for development (later restrict)
+    allow_origins=allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
