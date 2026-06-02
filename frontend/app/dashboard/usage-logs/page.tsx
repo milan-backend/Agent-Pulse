@@ -13,7 +13,6 @@ export default function UsageLogsPage() {
 
   async function loadLogs() {
     try {
-      // Passes query terms down into endpoint trigger params profile arrays
       const response = await getDashboardUsageLogs(searchQuery);
       const normalizedLogs = (
         Array.isArray(response)
@@ -23,7 +22,15 @@ export default function UsageLogsPage() {
         (a: any, b: any) => new Date(b?.created_at || 0).getTime() - new Date(a?.created_at || 0).getTime()
       );
 
-      setLogs(normalizedLogs);
+      // Map over internal items to convert timestamps safely using browser locale bindings
+      const localTimeLogs = normalizedLogs.map((log: any) => ({
+        ...log,
+        created_at: log.created_at 
+          ? new Date(log.created_at + "Z").toLocaleString(undefined, { hour12: true })
+          : "N/A"
+      }));
+
+      setLogs(localTimeLogs);
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Failed to load usage logs");
@@ -32,14 +39,13 @@ export default function UsageLogsPage() {
     }
   }
 
-  // Poll intervals loop tracking engine execution signatures
   useEffect(() => {
     loadLogs();
     const interval = setInterval(() => {
       loadLogs();
     }, 10000);
     return () => clearInterval(interval);
-  }, [searchQuery]); // Re-polls and catches shifts immediately on typing loop triggers
+  }, [searchQuery]);
 
   const totalCost = logs.reduce((total, log) => total + Number(log?.cost ?? 0), 0);
   const totalTokens = logs.reduce((total, log) => {
@@ -80,7 +86,7 @@ export default function UsageLogsPage() {
 
   return (
     <div className="space-y-8">
-      {/* HERO HERO PANEL CARD */}
+      {/* HERO PANEL CARD */}
       <div className="rounded-[32px] border border-cyan-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-8 overflow-hidden relative">
         <div className="absolute top-0 right-0 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
         <div className="relative z-10">
@@ -96,7 +102,7 @@ export default function UsageLogsPage() {
         </div>
       </div>
 
-      {/* METRICS METRICS STRIP CONTAINER */}
+      {/* METRICS STRIP CONTAINER */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1.2fr] gap-6">
         {cards.map((card) => {
           const Icon = card.icon;
@@ -126,7 +132,6 @@ export default function UsageLogsPage() {
           </div>
         </div>
 
-        {/* INLINE ROW CONTAINER LAYER INTEGRATION HOOK */}
         <div className="flex items-center gap-4 w-full xl:w-auto flex-wrap sm:flex-nowrap">
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />

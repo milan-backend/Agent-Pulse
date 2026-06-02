@@ -47,22 +47,21 @@ export default function CacheChart({
       usage?.cache_misses || 0
     )
 
-  const hasData =
-    cacheHit > 0 ||
-    totalMisses > 0
-
   // =========================
-  // CHART DATA
+  // CHART DATA (UPDATED WITH EXPLICIT COLOR KEYS)
   // =========================
 
   const data = [
     {
-      name: "Hit",
+      name: "Hit Rate",
       value: cacheHit,
+      color: "#22d3ee", // Vibrant Cyan for Hits
     },
     {
-      name: "Miss",
+      name: "Miss Rate",
       value: cacheMiss,
+      // If there are misses, show a visible red section instead of a dark hidden background color!
+      color: cacheMiss > 0 ? "#ef4444" : "#172033", 
     },
   ];
 
@@ -176,7 +175,7 @@ export default function CacheChart({
         "
       >
 
-        {/* CHART */}
+        {/* CHART SECTION */}
 
         <div className="h-[320px]">
 
@@ -193,15 +192,24 @@ export default function CacheChart({
                 outerRadius={120}
                 dataKey="value"
                 stroke="none"
+                // Rotate by -90 to start loading cleanly from the top center
+                startAngle={90}
+                endAngle={-270}
               >
-
-                <Cell fill="#22d3ee" />
-
-                <Cell fill="#172033" />
+                {/* Dynamically reads and assigns the color parameter mapping directly from data array objects */}
+                {data.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
 
               </Pie>
 
               <Tooltip
+                contentStyle={{
+                  backgroundColor: "#071120",
+                  borderColor: "rgba(34, 211, 238, 0.2)",
+                  borderRadius: "16px",
+                  color: "#fff"
+                }}
                 formatter={(value) => [
                   `${value}%`,
                   "Rate",

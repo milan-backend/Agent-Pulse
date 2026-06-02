@@ -199,7 +199,7 @@ export default function MissionsPage() {
         </div>
       </div>
 
-      {/* MISSIONS MAP COMPONENT RENDERING BLOCK */}
+      {/* MISSIONS LIST MAP RENDERING BLOCK */}
       <div className="space-y-8">
         {missions.length === 0 ? (
           <div className="text-center py-12 rounded-3xl border border-cyan-500/10 bg-[#091121] text-slate-400 font-medium">
@@ -236,7 +236,10 @@ export default function MissionsPage() {
                 <div className="rounded-2xl bg-black/30 p-5">
                   <p className="text-slate-400">Created At</p>
                   <h2 className="mt-2 text-sm font-bold text-cyan-300">
-                    {mission.created_at ? new Date(mission.created_at).toLocaleString() : "N/A"}
+                    {mission.created_at 
+                      ? new Date(mission.created_at + "Z").toLocaleString(undefined, { hour12: true }) 
+                      : "N/A"
+                    }
                   </h2>
                 </div>
               </div>

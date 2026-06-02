@@ -116,7 +116,7 @@ export default function AgentTasksPage() {
         </div>
       </div>
 
-      {/* FILTER CONTROL WRAPPER STRIP CONTAINER PANEL */}
+      {/* FILTER CONTROL BAR CONTAINER */}
       <div className="flex flex-col md:flex-row items-center gap-4 bg-[#08111f] border border-cyan-500/10 p-4 rounded-3xl mt-10">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" size={18} />
@@ -153,7 +153,7 @@ export default function AgentTasksPage() {
         </div>
       </div>
 
-      {/* CONDITIONAL COMPONENT TREE DISPLAY LOOPS */}
+      {/* TASKS MATRIX LIST */}
       {loading ? (
         <div className="mt-6 rounded-3xl border border-cyan-500/10 bg-[#08111f] p-10 text-zinc-400">
           Loading tasks...
@@ -214,10 +214,26 @@ export default function AgentTasksPage() {
                 </div>
               )}
 
+              {/* DYNAMIC BROWSER USER TIMESTAMPS GENERATION GRID */}
               <div className="mt-8 grid gap-5 md:grid-cols-3">
-                <InfoCard title="Started At" value={task.started_at ? new Date(task.started_at).toLocaleString() : "N/A"} />
-                <InfoCard title="Created At" value={task.created_at ? new Date(task.created_at).toLocaleString() : "N/A"} />
-                <InfoCard title="Updated At" value={task.updated_at ? new Date(task.updated_at).toLocaleString() : "N/A"} />
+                <InfoCard 
+                  title="Started At" 
+                  value={task.started_at && task.started_at !== "None" 
+                    ? new Date(task.started_at + "Z").toLocaleString(undefined, { hour12: true }) 
+                    : "N/A"} 
+                />
+                <InfoCard 
+                  title="Created At" 
+                  value={task.created_at && task.created_at !== "None" 
+                    ? new Date(task.created_at + "Z").toLocaleString(undefined, { hour12: true }) 
+                    : "N/A"} 
+                />
+                <InfoCard 
+                  title="Updated At" 
+                  value={task.updated_at && task.updated_at !== "None" 
+                    ? new Date(task.updated_at + "Z").toLocaleString(undefined, { hour12: true }) 
+                    : "N/A"} 
+                />
               </div>
             </div>
           ))}
