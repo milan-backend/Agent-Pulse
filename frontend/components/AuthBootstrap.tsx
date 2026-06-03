@@ -11,36 +11,37 @@ export default function AuthBootstrap() {
   useEffect(() => {
     if (pathname !== "/") return;
 
-    // Check if the user intentionally logged out during this browser session
-    const hasLoggedOut = sessionStorage.getItem("logged_out") === "true";
-    if (hasLoggedOut) {
-      // If they logged out, do absolutely nothing. Let them see the landing page peacefully!
+    // 1. If a valid token is present in local storage, they are logged in! 
+    // Send them directly to the dashboard immediately.
+    const token = localStorage.getItem("token");
+    if (token) {
+      router.replace("/dashboard");
       return;
     }
 
-    // Otherwise, check for an active persistent cookie session seamlessly
+    // 2. If no token is in storage (e.g., they closed the tab or cleared memory),
+    // check the backend to see if a valid persistent session cookie exists.
     fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include", // Essential for bringing along your secure HTTP-Only cookie
+      credentials: "include", // Safely forwards your HttpOnly token cookie to Render
     })
       .then((res) => {
         if (res.ok) return res.json();
-        throw new Error("No active persistent session found.");
+        throw new Error("No secure cookie session found.");
       })
       .then((data) => {
         if (data?.access_token) {
-          // Store the fresh token exactly where your api.ts file intercepts it
+          // Store it where your api.ts file expects it
           localStorage.setItem("token", data.access_token);
-          
-          // Route them straight into their active dashboard workspace safely
           router.replace("/dashboard");
         }
       })
       .catch(() => {
-        // Safe fallback: if no cookie exists, stay silently on the landing page
+        // Safe Catch: If no cookie exists, do absolutely nothing!
+        // The user cleanly stays on your landing page without any loops or redirects.
       });
   }, [pathname, router]);
 

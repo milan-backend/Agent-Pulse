@@ -546,8 +546,6 @@ export function logout() {
       console.error("Session cookie clearance request skipped or unauthorized:", err)
     );
 
-    sessionStorage.setItem("logged_out", "true");
-
     localStorage.removeItem("token");
     localStorage.removeItem("workspace_id");
     localStorage.removeItem("user_id");
