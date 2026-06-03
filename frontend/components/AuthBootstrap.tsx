@@ -2,11 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-
-// Importing the request function or custom route calls isn't even needed! 
-// Since your api.ts already has a built-in auto-refresh token interceptor loop,
-// we just need to hit a protected endpoint like getCurrentUser to trigger a refresh.
-import { getCurrentUser } from "./api"; 
+import { API_URL } from "./api"; // Importing your centralized backend URL variable
 
 export default function AuthBootstrap() {
   const router = useRouter();
@@ -15,17 +11,31 @@ export default function AuthBootstrap() {
   useEffect(() => {
     if (pathname !== "/") return;
 
-    // Call your existing auth verification function. 
-    // If a secure cookie exists, your api.ts interceptor handles everything seamlessly!
-    getCurrentUser()
-      .then((user) => {
-        if (user) {
-          // If the handshake is successful, send them straight into the dashboard
+    // We use a clean fetch call pointing directly to your API_URL
+    // This completely bypasses the api.ts request interceptor, preventing the logout() trigger
+    fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include", // Securely passes your HttpOnly token cookies
+    })
+      .then((res) => {
+        if (res.ok) return res.json();
+        throw new Error("No active session");
+      })
+      .then((data) => {
+        if (data?.access_token) {
+          // Store the fresh token exactly where your api.ts looks for it
+          localStorage.setItem("token", data.access_token);
+          
+          // Smoothly route them inside
           router.replace("/dashboard");
         }
       })
       .catch(() => {
-        // Silently swallow errors if no cookie exists, leaving them on the landing page safely
+        // If they don't have a cookie, it catches silently here!
+        // No logout() gets fired, so they safely stay on your beautiful landing page.
       });
   }, [pathname, router]);
 
