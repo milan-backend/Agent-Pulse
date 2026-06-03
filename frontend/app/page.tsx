@@ -1,5 +1,8 @@
 import React from "react";
 
+// Importing your new standalone session guard component
+import AuthBootstrap from "@/components/AuthBootstrap";
+
 import MatrixBg from "@/components/MatrixBg";
 import Navbar from "@/components/Navbar";
 import Hero from "@/components/Hero";
@@ -13,6 +16,9 @@ import Footer from "@/components/Footer";
 export default function AgentPulseLandingPage() {
   return (
     <div className="min-h-screen bg-black text-slate-100 font-sans selection:bg-cyan-500/30 relative overflow-x-hidden">
+      {/* Background session script runner */}
+      <AuthBootstrap />
+
       {/* 1. Matrix Animation & Background Glows Context Layer */}
       <MatrixBg />
 
