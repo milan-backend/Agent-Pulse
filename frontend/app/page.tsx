@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios"; // Using standard axios directly
+import axios from "axios"; 
 
 import MatrixBg from "@/components/MatrixBg";
 import Navbar from "@/components/Navbar";
@@ -19,24 +19,21 @@ export default function AgentPulseLandingPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Calling your backend token rotation route directly
+    // Making a clean, direct network call to your deployed backend
     axios.post(
       "https://agentpulse-backend.onrender.com/auth/refresh",
       {},
-      { withCredentials: true } // Crucial: Tells the browser to safely pass your secure cookies
+      { withCredentials: true } // Tells the browser to pass your secure cookie securely
     )
     .then((response: any) => {
       if (response.data && response.data.access_token) {
-        // Save the fresh short-lived token to memory
         localStorage.setItem("access_token", response.data.access_token);
-        // Redirect straight into your dashboard layout cockpit
         router.push("/dashboard");
       } else {
         setIsLoading(false);
       }
     })
     .catch(() => {
-      // If no active session cookie exists, stop loading and show the landing screen text smoothly
       setIsLoading(false);
     });
   }, [router]);
