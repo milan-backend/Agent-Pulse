@@ -2,35 +2,30 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import axios from "axios";
+
+// Importing the request function or custom route calls isn't even needed! 
+// Since your api.ts already has a built-in auto-refresh token interceptor loop,
+// we just need to hit a protected endpoint like getCurrentUser to trigger a refresh.
+import { getCurrentUser } from "./api"; 
 
 export default function AuthBootstrap() {
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // Only run the token check if the user is explicitly sitting on the landing root page
     if (pathname !== "/") return;
 
-    axios
-      .post(
-        "https://agentpulse-backend.onrender.com/auth/refresh",
-        {},
-        {
-          withCredentials: true, // Crucial: Ensures cookies travel safely to Render
-        }
-      )
-      .then((response: any) => {
-        if (response.data?.access_token) {
-          // Store the short-lived token in local runtime memory
-          localStorage.setItem("access_token", response.data.access_token);
-          
-          // Using router.replace prevents the user from clicking the browser "Back" button into an infinite loop
+    // Call your existing auth verification function. 
+    // If a secure cookie exists, your api.ts interceptor handles everything seamlessly!
+    getCurrentUser()
+      .then((user) => {
+        if (user) {
+          // If the handshake is successful, send them straight into the dashboard
           router.replace("/dashboard");
         }
       })
       .catch(() => {
-        // Silently catch errors if no active session cookie exists (user stays on landing page)
+        // Silently swallow errors if no cookie exists, leaving them on the landing page safely
       });
   }, [pathname, router]);
 
