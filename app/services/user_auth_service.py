@@ -58,6 +58,9 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
 # COOKIE MANAGEMENT HELPER
 # ============================================
 def set_secure_refresh_cookie(response: Response, token_string: str):
+
+    expire_time = datetime.utcnow() + timedelta(days=7)
+
     response.set_cookie(
         key="refresh_token",
         value=token_string,
@@ -65,6 +68,7 @@ def set_secure_refresh_cookie(response: Response, token_string: str):
         secure=True,        # Requires HTTPS production domain layer paths
         samesite="lax",     # Cross-Site Request Forgery (CSRF) protection boundary
         max_age=604800,     # 7 Days in seconds execution lifespan
+        expires=expire_time, # Explicitly forces browser to persist cookie when closed
         path="/"            # Global path availability across your whole custom api domain
     )
 
