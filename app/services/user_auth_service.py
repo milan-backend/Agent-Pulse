@@ -12,6 +12,7 @@ from app.models.plan import Plan
 from app.models.workspace_subscription import WorkspaceSubscription
 from app.models.workspace_member import WorkspaceMember
 from app.models.refresh_token import RefreshToken
+from datetime import timezone
 
 from app.services.email_service import (
     send_verification_email,
@@ -59,7 +60,7 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
 # ============================================
 def set_secure_refresh_cookie(response: Response, token_string: str):
 
-    expire_time = datetime.utcnow() + timedelta(days=7)
+    expire_time = datetime.now(timezone.utc) + timedelta(days=7)
 
     response.set_cookie(
         key="refresh_token",
