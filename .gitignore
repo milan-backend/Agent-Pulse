@@ -103,3 +103,4 @@ check_steps.py
 retry_step_add.py
 view_column.py
 check_tokens.py
+run_migration.py

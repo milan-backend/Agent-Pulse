@@ -17,6 +17,7 @@ from app.api.routes.analytics import router as analytics_router
 from app.api.routes import missions
 from app.api.routes import usage
 from app.api.routes import tasks
+from app.api.routes import user_api_key
 
 from app.api.routes.stripe_billing import router as stripe_billing_router
 from app.api.routes.stripe_webhook import router as stripe_webhook_router
@@ -68,3 +69,4 @@ app.include_router(usage.router)
 app.include_router(tasks.router)
 app.include_router(stripe_billing_router, prefix="/billing", tags=["Billing"])
 app.include_router(stripe_webhook_router, prefix="/billing", tags=["Stripe Webhook"])
+app.include_router(user_api_key.router, prefix="/api-keys", tags=["API Keys"])

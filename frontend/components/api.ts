@@ -3,6 +3,7 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 type RequestOptions = {
   method?: string;
   body?: unknown; // Upgraded from any for better type safety
+  headers?: Record<string, string>; // Added support for page-level custom headers overrides
 };
 
 function authHeaders() {
@@ -32,11 +33,16 @@ function onTokenRefreshed() {
 }
 
 async function request(endpoint: string, options: RequestOptions = {}): Promise<any> {
-  const executeFetch = () => fetch(`${API_URL}${endpoint}`, {
-    method: options.method || "GET",
-    headers: authHeaders(),
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const executeFetch = () => {
+    // If explicit customHeaders are supplied, prioritize them over default automated storage lookups
+    const finalHeaders = options.headers !== undefined ? options.headers : authHeaders();
+
+    return fetch(`${API_URL}${endpoint}`, {
+      method: options.method || "GET",
+      headers: finalHeaders,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  };
 
   let response = await executeFetch();
 
@@ -126,6 +132,74 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
     return text;
   }
 }
+
+/* =========================================================
+BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS
+========================================================= */
+
+export const apiKeyApi = {
+  /**
+   * Safe metadata lookup to discover active key status.
+   * If workspaceId context is blank/null, fetches Personal Credentials without header leakage.
+   */
+  getKeyStatus: async (workspaceId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    return request("/api-keys/status", {
+      method: "GET",
+      headers,
+    });
+  },
+
+  /**
+   * Connect and live-verify an AI console token string.
+   */
+  connectKey: async (provider: string, apiKey: string, workspaceId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    return request("/api-keys/connect", {
+      method: "POST",
+      headers,
+      body: { provider, api_key: apiKey },
+    });
+  },
+
+  /**
+   * Completely erase configuration rows from backend storage tables.
+   */
+  disconnectKey: async (provider: string, workspaceId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    return request(`/api-keys/disconnect?provider=${encodeURIComponent(provider)}`, {
+      method: "DELETE",
+      headers,
+    });
+  }
+};
 
 /* =========================================================
 AUTH

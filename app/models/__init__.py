@@ -13,3 +13,4 @@ from app.models.plan import Plan
 from app.models.workspace_subscription import WorkspaceSubscription
 from app.models.workspace_usage_limit import WorkspaceUsageLimit
 from app.models.refresh_token import RefreshToken
+from app.models.user_api_key import UserAPIKey
