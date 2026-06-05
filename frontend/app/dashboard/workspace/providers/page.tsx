@@ -31,6 +31,58 @@ export default function WorkspaceProvidersPage() {
     gemini: "https://aistudio.google.com/"
   };
 
+  // Helper utility function to parse the status response matching your working backend data maps
+  function parseBackendStatus(response: any) {
+    if (!response) return { connected: false, last_updated: "", owner_context: "" };
+
+    // Scenario A: If your backend nests the status directly inside the "GEMINI_API_KEY" property key
+    if (response["GEMINI_API_KEY"]) {
+      return {
+        connected: !!response["GEMINI_API_KEY"].connected,
+        last_updated: response["GEMINI_API_KEY"].last_updated || "",
+        owner_context: response["GEMINI_API_KEY"].owner_context || ""
+      };
+    }
+
+    // Scenario B: If your backend responds with a raw array roster of providers
+    if (Array.isArray(response)) {
+      const match = response.find((item: any) => item.provider === "GEMINI_API_KEY" || item.key_name === "GEMINI_API_KEY");
+      if (match) {
+        return {
+          connected: !!match.connected,
+          last_updated: match.last_updated || "",
+          owner_context: match.owner_context || ""
+        };
+      }
+    }
+
+    // Scenario C: Fallback case if the response is flat
+    if (response.provider === "GEMINI_API_KEY") {
+      return {
+        connected: !!response.connected,
+        last_updated: response.last_updated || "",
+        owner_context: response.owner_context || ""
+      };
+    }
+
+    // Scenario D: Alternative direct map fallback logic
+    return {
+      connected: !!response.connected,
+      last_updated: response.last_updated || "",
+      owner_context: response.owner_context || ""
+    };
+  }
+
+  async function syncStatusMetrics(workspaceId: string) {
+    try {
+      const rawData = await apiKeyApi.getKeyStatus(workspaceId);
+      const cleanData = parseBackendStatus(rawData);
+      setWorkspaceKeyStatus(cleanData);
+    } catch (err) {
+      console.error("Failed syncing vault statuses:", err);
+    }
+  }
+
   useEffect(() => {
     async function initializeSecureContext() {
       try {
@@ -54,14 +106,11 @@ export default function WorkspaceProvidersPage() {
           const storedWorkspaceId = localStorage.getItem("workspace_id");
           if (storedWorkspaceId) {
             setActiveWorkspaceId(storedWorkspaceId);
-            
-            // Fetch status from backend using the correct workspace ID
-            const kData = await apiKeyApi.getKeyStatus(storedWorkspaceId);
-            setWorkspaceKeyStatus(kData);
+            await syncStatusMetrics(storedWorkspaceId);
           }
         }
       } catch (err) {
-        console.error("Failed loading keys:", err);
+        console.error("Error on initialization:", err);
       } finally {
         setLoading(false);
       }
@@ -77,17 +126,11 @@ export default function WorkspaceProvidersPage() {
     if (!activeWorkspaceId || !inputKey.trim()) return;
     try {
       setSubmittingKey(true);
-      
-      // FIX 1: We send "GEMINI_API_KEY" to backend instead of "gemini"
       await apiKeyApi.connectKey("GEMINI_API_KEY", inputKey.trim(), activeWorkspaceId);
-      
       toast.success("Shared Workspace API key updated and validated successfully!");
       setInputKey("");
       setShowInput(false);
-      
-      // Refresh status instantly
-      const kData = await apiKeyApi.getKeyStatus(activeWorkspaceId);
-      setWorkspaceKeyStatus(kData);
+      await syncStatusMetrics(activeWorkspaceId);
     } catch (err: any) {
       toast.error(err.message || "Failed to validate key with Google model list parameters.");
     } finally {
@@ -100,13 +143,9 @@ export default function WorkspaceProvidersPage() {
     if (!window.confirm("Disconnect this shared key integration?")) return;
     try {
       setSubmittingKey(true);
-      
-      // Send correct backend key variable name to erase configuration
       await apiKeyApi.disconnectKey("GEMINI_API_KEY", activeWorkspaceId);
-      
       toast.success("Workspace configuration decoupled cleanly.");
-      const kData = await apiKeyApi.getKeyStatus(activeWorkspaceId);
-      setWorkspaceKeyStatus(kData);
+      await syncStatusMetrics(activeWorkspaceId);
       setShowInput(false);
     } catch (err: any) {
       toast.error(err.message || "Failed to disconnect.");
@@ -159,9 +198,9 @@ export default function WorkspaceProvidersPage() {
                     <span className="text-zinc-500">NOT CONFIGURED</span>
                   )}
                 </div>
-                {workspaceKeyStatus.connected && (
+                {workspaceKeyStatus.connected && workspaceKeyStatus.last_updated && (
                   <div className="flex items-center gap-1 text-zinc-400">
-                    <Calendar size={12} className="text-zinc-600" /> Synced: <span className="text-zinc-300">{workspaceKeyStatus.last_updated || "Live"}</span>
+                    <Calendar size={12} className="text-zinc-600" /> Synced: <span className="text-zinc-300">{workspaceKeyStatus.last_updated}</span>
                   </div>
                 )}
               </div>
@@ -216,7 +255,7 @@ export default function WorkspaceProvidersPage() {
                 value={inputKey}
                 onChange={(e) => setInputKey(e.target.value)}
                 placeholder="Enter Google AI Studio key (AIzaSy...)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-mono font-sans"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-sans"
               />
               <button
                 type="button"
