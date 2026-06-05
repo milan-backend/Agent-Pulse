@@ -12,7 +12,10 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  Calendar
+  Calendar,
+  Settings,
+  ShieldCheck,
+  Mail
 } from "lucide-react";
 
 import {
@@ -27,7 +30,7 @@ import { toast } from "sonner";
 
 export default function WorkspacePage() {
   // ============================================
-  // MEMBERSHIP STATE
+  // EXISTING MEMBERSHIP STATE
   // ============================================
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -101,9 +104,12 @@ export default function WorkspacePage() {
     if (!wId) return;
     try {
       setLoadingMembers(true);
+      
+      // 1. Fetch organizational roster using existing endpoint
       const roster = await getWorkspaceMembers();
       setMembers(roster);
 
+      // 2. Discover logged in user's precise permission role context inside this workspace
       if (currentUserEmail) {
         const match = roster.find((m: any) => m.user_email === currentUserEmail);
         if (match && match.role) {
@@ -111,6 +117,7 @@ export default function WorkspacePage() {
         }
       }
 
+      // 3. Fetch shared workspace provider credential configuration rules via metadata status
       const kData = await apiKeyApi.getKeyStatus(wId);
       setWorkspaceKeyStatus(kData);
 
@@ -134,7 +141,7 @@ export default function WorkspacePage() {
         email: inviteEmail.trim(),
         role: inviteRole,
       });
-      toast.success("Team invitation dispatched successfully!");
+      toast.success("Team member invited successfully!");
       setInviteEmail("");
       if (activeWorkspaceId) fetchWorkspaceContextDetails(activeWorkspaceId);
     } catch (err: any) {
@@ -225,16 +232,16 @@ export default function WorkspacePage() {
               <Layers className="text-cyan-300" size={32} />
             </div>
             <div>
-              <h1 className="text-5xl font-black tracking-tight">Workspace Control</h1>
+              <h1 className="text-5xl font-black tracking-tight">Workspace Management</h1>
               <p className="mt-2 text-slate-400">
-                Configure group operational access parameters, role hierarchies, and shared api models.
+                Configure group operational access parameters, role hierarchies, and shared api configurations.
               </p>
             </div>
           </div>
 
           <div className="flex flex-col items-start md:items-end gap-1.5 font-mono text-xs">
             <span className="text-slate-500 text-[10px] tracking-wider uppercase">Your Access Clearance</span>
-            <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest uppercase border border-cyan-500/20 bg-[linear-gradient(180deg,#0e2238_0%,#071120_100%)] ${
+            <span className={`px-4 py-1.5 rounded-full text-xs font-black tracking-widest uppercase border border-cyan-500/20 bg-cyan-500/5 ${
               currentUserRole === "admin" ? "text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.1)]" :
               currentUserRole === "operator" ? "text-amber-400" : "text-slate-400"
             }`}>
@@ -252,38 +259,55 @@ export default function WorkspacePage() {
           <div className="flex items-center justify-between mb-2">
             <div>
               <h2 className="text-3xl font-black">Team Roster</h2>
-              <p className="text-slate-400 mt-2">Manage workspace members and roles.</p>
+              <p className="text-slate-400 mt-2">Add, update, and manage workspace members.</p>
             </div>
             <div className="h-14 w-14 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 flex items-center justify-center">
               <Users className="text-cyan-300" size={28} />
             </div>
           </div>
 
+          {/* ADD MEMBER FORM (LOCKED TO ADMIN / OPERATOR CLEARANCE) */}
           {currentUserRole !== "viewer" ? (
-            <form onSubmit={handleAddMember} className="p-4 rounded-2xl bg-slate-950/40 border border-slate-800/60 flex flex-col sm:flex-row gap-2 font-mono text-xs">
-              <input
-                type="email"
-                required
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="developer@agentpulse.ai"
-                className="flex-1 bg-slate-900/60 border border-slate-800 rounded-xl px-4 h-10 text-white outline-none focus:border-cyan-500/40"
-              />
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-                className="bg-slate-900 border border-slate-800 rounded-xl px-3 h-10 text-slate-300 outline-none focus:border-cyan-500/40"
-              >
-                <option value="viewer">Viewer</option>
-                <option value="operator">Operator</option>
-                <option value="admin">Admin</option>
-              </select>
+            <form onSubmit={handleAddMember} className="space-y-4 p-6 rounded-2xl bg-slate-950/40 border border-slate-800/60 font-sans text-xs">
+              <div className="text-sm font-bold text-slate-200 mb-2 flex items-center gap-2">
+                <UserPlus size={16} className="text-cyan-300" /> Invite New Member
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400">Email Address</label>
+                  <div className="relative flex items-center">
+                    <Mail className="absolute left-4 text-slate-500" size={16} />
+                    <input
+                      type="email"
+                      required
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      placeholder="developer@agentpulse.ai"
+                      className="w-full bg-slate-900/60 border border-slate-800 rounded-xl pl-11 pr-4 h-11 text-white outline-none focus:border-cyan-500/40 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-400">Role Clearance</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 h-11 text-slate-300 outline-none focus:border-cyan-500/40 font-mono"
+                  >
+                    <option value="viewer">Viewer (Read-only)</option>
+                    <option value="operator">Operator (Run Agents)</option>
+                    <option value="admin">Admin (Full Rights)</option>
+                  </select>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={submittingInvite || !inviteEmail.trim()}
-                className="px-4 h-10 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-300 rounded-xl font-sans font-bold flex items-center justify-center gap-1 transition-all disabled:opacity-40"
+                className="w-full h-11 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-300 rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-40"
               >
-                <UserPlus size={16} /> Invite
+                Send Workspace Invitation
               </button>
             </form>
           ) : (
@@ -292,7 +316,9 @@ export default function WorkspacePage() {
             </div>
           )}
 
+          {/* ACTIVE TEAM ROSTER LOOP */}
           <div className="space-y-3 font-mono text-xs">
+            <div className="text-slate-400 font-sans font-bold tracking-wider text-xs mb-1 uppercase">Active Members</div>
             {members.map((member: any) => (
               <div
                 key={member.id || member.user_id}
@@ -300,15 +326,18 @@ export default function WorkspacePage() {
               >
                 <div className="space-y-1">
                   <div className="text-slate-200 font-sans font-bold break-all">{member.user_email}</div>
-                  <div className="text-[10px] text-slate-500 uppercase tracking-widest">
-                    Role Clearance Level: <span className="text-cyan-400">{member.role}</span>
+                  <div className="text-[10px] text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <ShieldCheck size={12} className="text-slate-500" />
+                    Clearance Tier: <span className="text-cyan-400 font-bold">{member.role}</span>
                   </div>
                 </div>
 
+                {/* SHOW RECORD ERASURE ONLY TO WORKSPACE ADMINS */}
                 {isUserWorkspaceAdmin && member.user_email !== currentUserEmail && (
                   <button
                     onClick={() => handleRemoveMember(member.id || member.user_id)}
                     className="p-2 rounded-xl border border-red-500/10 bg-red-500/5 text-red-400 hover:bg-red-500/20 transition-all shrink-0"
+                    title="Revoke Permissions"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -399,6 +428,7 @@ export default function WorkspacePage() {
               </div>
             </div>
 
+            {/* EXPANDABLE KEY CONFIGURATION CONSOLE */}
             {showInput && isUserWorkspaceAdmin && (
               <form onSubmit={handleConnectWorkspaceKey} className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 font-mono text-xs">
                 <div className="text-slate-400 block font-sans">
