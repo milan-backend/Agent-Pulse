@@ -30,7 +30,7 @@ import { toast } from "sonner";
 
 export default function WorkspacePage() {
   // ============================================
-  // EXISTING MEMBERSHIP STATE
+  // EXISTING MEMBERSHIP STATE & INFRASTRUCTURE
   // ============================================
   const [members, setMembers] = useState<any[]>([]);
   const [loadingMembers, setLoadingMembers] = useState(true);
@@ -129,7 +129,7 @@ export default function WorkspacePage() {
   }
 
   // ============================================
-  // MEMBER MANAGEMENT ACTIONS
+  // EXISTING MEMBER MANAGEMENT ACTIONS
   // ============================================
   async function handleAddMember(e: React.FormEvent) {
     e.preventDefault();
@@ -254,7 +254,7 @@ export default function WorkspacePage() {
       {/* GRID LAYOUT SECTION */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
         
-        {/* MEMBERS ROSTER SYSTEM */}
+        {/* MEMBERS ROSTER SYSTEM (YOUR COMPLETE ORIGINAL INTERFACE) */}
         <div className="rounded-[32px] border border-cyan-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-8 space-y-6">
           <div className="flex items-center justify-between mb-2">
             <div>
@@ -266,7 +266,7 @@ export default function WorkspacePage() {
             </div>
           </div>
 
-          {/* ADD MEMBER FORM (LOCKED TO ADMIN / OPERATOR CLEARANCE) */}
+          {/* ADD MEMBER FORM (LOCKED TO ADMIN / OPERATOR CLEARANCE AS CONFIGURED) */}
           {currentUserRole !== "viewer" ? (
             <form onSubmit={handleAddMember} className="space-y-4 p-6 rounded-2xl bg-slate-950/40 border border-slate-800/60 font-sans text-xs">
               <div className="text-sm font-bold text-slate-200 mb-2 flex items-center gap-2">
