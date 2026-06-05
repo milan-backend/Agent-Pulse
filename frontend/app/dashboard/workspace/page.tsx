@@ -4,13 +4,12 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { 
   Users, 
-  Layers, 
   ShieldCheck, 
   KeyRound, 
   ArrowRight, 
-  Activity,
   Loader2,
-  Settings
+  Boxes,
+  Cpu
 } from "lucide-react";
 import { getWorkspaceMembers, apiKeyApi } from "@/components/api";
 
@@ -19,7 +18,6 @@ export default function WorkspaceOverviewPage() {
   const [membersCount, setMembersCount] = useState(0);
   const [adminCount, setAdminCount] = useState(0);
   const [keyStatus, setKeyStatus] = useState({ connected: false });
-  const [workspaceUID, setWorkspaceUID] = useState("");
 
   useEffect(() => {
     async function loadOverviewStats() {
@@ -34,88 +32,115 @@ export default function WorkspaceOverviewPage() {
         if (typeof window !== "undefined") {
           const storedWorkspaceId = localStorage.getItem("workspace_id");
           if (storedWorkspaceId) {
-            setWorkspaceUID(storedWorkspaceId.toUpperCase());
             const kData = await apiKeyApi.getKeyStatus(storedWorkspaceId);
             setKeyStatus(kData);
           }
         }
       } catch (err) {
         console.error(err);
-      } relative: 
-      setLoading(false);
+      } finally {
+        setLoading(false);
+      }
     }
     loadOverviewStats();
   }, []);
 
   if (loading) {
     return (
-      <div className="h-[50vh] w-full flex flex-col items-center justify-center gap-3 font-mono text-xs text-cyan-400 tracking-widest">
-        <Loader2 className="animate-spin" size={24} />
-        <span>COMPILING OVERVIEW METRICS...</span>
+      <div className="h-[40vh] w-full flex items-center justify-center gap-2 font-mono text-xs text-cyan-400">
+        <Loader2 className="animate-spin" size={20} />
+        <span>COMPILING GRID METRICS...</span>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6 px-2 animate-fadeIn">
+    <div className="w-full space-y-6 animate-fadeIn">
       
-      {/* HEADER SECTION ROW */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#090f1c]/60 border border-slate-800/80 p-6 rounded-2xl">
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Activity size={18} className="text-cyan-400" /> Workspace Overview
-          </h2>
-          <p className="text-xs text-zinc-400">
-            Node Registry: <span className="font-mono text-cyan-300 bg-slate-950 px-2 py-0.5 rounded border border-slate-900 text-[11px] font-bold">{workspaceUID?.substring(0, 12) || "AP-CORE"}</span>
-          </p>
+      {/* 2X2 LUXURIOUS INTEGRATION & telemetry GRID */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+        
+        {/* STAT 1 */}
+        <div className="p-8 rounded-2xl bg-[#090f1c]/40 border border-slate-800/80 flex items-center justify-between transition-colors hover:border-slate-800">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block font-bold">Active Workspace Roster</span>
+            <div className="text-4xl font-black text-white font-sans">{membersCount}</div>
+            <div className="text-xs text-zinc-400">Teammates Invited</div>
+          </div>
+          <div className="h-12 w-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400">
+            <Users size={22} />
+          </div>
         </div>
 
-        {/* COMPACT DASHBOARD INLINE STAT COUNTERS */}
-        <div className="flex items-center gap-3 font-mono text-[11px]">
-          <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-2">
-            <Users size={14} className="text-zinc-500" />
-            <span className="text-zinc-500">Roster:</span>
-            <span className="text-white font-bold">{membersCount}</span>
+        {/* STAT 2 */}
+        <div className="p-8 rounded-2xl bg-[#090f1c]/40 border border-slate-800/80 flex items-center justify-between transition-colors hover:border-slate-800">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block font-bold">Governance Administrators</span>
+            <div className="text-4xl font-black text-white font-sans">{adminCount}</div>
+            <div className="text-xs text-zinc-400">Root Account Managers</div>
           </div>
-          <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-2">
-            <KeyRound size={14} className={keyStatus.connected ? "text-green-400" : "text-zinc-600"} />
-            <span className="text-zinc-500">Vault status:</span>
-            <span className={keyStatus.connected ? "text-green-400 font-bold" : "text-zinc-500 font-bold"}>
-              {keyStatus.connected ? "CONNECTED" : "OFFLINE"}
-            </span>
+          <div className="h-12 w-12 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+            <ShieldCheck size={22} />
           </div>
         </div>
+
+        {/* STAT 3 */}
+        <div className="p-8 rounded-2xl bg-[#090f1c]/40 border border-slate-800/80 flex items-center justify-between transition-colors hover:border-slate-800">
+          <div className="space-y-1">
+            <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest block font-bold">Provider Connectivity</span>
+            <div className="pt-1.5 pb-1">
+              {keyStatus.connected ? (
+                <span className="text-green-400 font-mono font-bold bg-green-500/10 border border-green-500/20 px-3 py-1 rounded text-xs tracking-wider uppercase">CONNECTED</span>
+              ) : (
+                <span className="text-zinc-500 font-mono font-bold bg-zinc-900 border border-zinc-800 px-3 py-1 rounded text-xs tracking-wider uppercase">NOT CONNECTED</span>
+              )}
+            </div>
+            <div className="text-xs text-zinc-400 pt-0.5">Google Gemini Fallback Core</div>
+          </div>
+          <div className={`h-12 w-12 rounded-xl flex items-center justify-center border ${
+            keyStatus.connected 
+              ? "bg-green-500/10 border-green-500/20 text-green-400" 
+              : "bg-zinc-900 border-zinc-800 text-zinc-500"
+          }`}>
+            <KeyRound size={22} />
+          </div>
+        </div>
+
       </div>
 
-      {/* GRID HUB QUICK ROUTE CONTROLLERS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* FULL WIDTH QUICK NAV TUNNEL LAYOUT CARDS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
         
-        {/* LINK SECTION 1: TEAM MATRIX LINK */}
+        {/* NAV 1 */}
         <Link 
           href="/dashboard/workspace/members"
-          className="p-6 rounded-2xl border border-slate-800 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all group flex items-center justify-between gap-6"
+          className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-cyan-500/20 group flex items-center justify-between gap-6"
         >
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-white group-hover:text-cyan-400 transition-colors flex items-center gap-2">
-              <Users size={16} /> Team Members & Roster Clearances
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors flex items-center gap-2">
+              <Boxes size={18} className="text-cyan-400" /> Control Team Profiles & Clearances
             </h3>
-            <p className="text-xs text-zinc-400 font-sans max-w-md">Invite developers, evict accounts, and manage inline operational parameters.</p>
+            <p className="text-xs text-zinc-400 font-sans max-w-xl leading-relaxed">
+              Dispatch encrypted invitations, evict operational accounts dynamically, and evaluate inline permissions matrix tags natively.
+            </p>
           </div>
-          <ArrowRight size={16} className="text-zinc-600 group-hover:text-cyan-400 group-hover:translate-x-1 transition-all shrink-0" />
+          <ArrowRight size={18} className="text-zinc-600 group-hover:text-cyan-400 group-hover:translate-x-1.5 transition-all shrink-0" />
         </Link>
 
-        {/* LINK SECTION 2: API PROVIDERS LINK */}
+        {/* NAV 2 */}
         <Link 
           href="/dashboard/workspace/providers"
-          className="p-6 rounded-2xl border border-slate-800 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all group flex items-center justify-between gap-6"
+          className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-purple-500/20 group flex items-center justify-between gap-6"
         >
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-white group-hover:text-purple-400 transition-colors flex items-center gap-2">
-              <KeyRound size={16} /> Secure Provider Vault (BYOK)
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors flex items-center gap-2">
+              <Cpu size={18} className="text-purple-400" /> Configure API Provider Vault
             </h3>
-            <p className="text-xs text-zinc-400 font-sans max-w-md">Connect encryption key hashes to supply cross-workspace shared backup billing pipelines.</p>
+            <p className="text-xs text-zinc-400 font-sans max-w-xl leading-relaxed">
+              Inject multi-tenant infrastructure key tokens (BYOK) safely into background server parameters without data cross-leak hazards.
+            </p>
           </div>
-          <ArrowRight size={16} className="text-zinc-600 group-hover:text-purple-400 group-hover:translate-x-1 transition-all shrink-0" />
+          <ArrowRight size={18} className="text-zinc-600 group-hover:text-purple-400 group-hover:translate-x-1.5 transition-all shrink-0" />
         </Link>
 
       </div>
