@@ -133,7 +133,7 @@ def get_key_status(
     # Note: If your model class is named differently, update the reference to match your DB models!
     from app.models.user_api_key import UserAPIKey 
     
-    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike("gemini"))
+    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike("GEMINI_API_KEY"))
     if workspace_id:
         query = query.filter(UserAPIKey.workspace_id == workspace_id)
     else:
