@@ -54,12 +54,14 @@ export default function WorkspaceProvidersPage() {
           const storedWorkspaceId = localStorage.getItem("workspace_id");
           if (storedWorkspaceId) {
             setActiveWorkspaceId(storedWorkspaceId);
+            
+            // Fetch status from backend using the correct workspace ID
             const kData = await apiKeyApi.getKeyStatus(storedWorkspaceId);
             setWorkspaceKeyStatus(kData);
           }
         }
       } catch (err) {
-        console.error(err);
+        console.error("Failed loading keys:", err);
       } finally {
         setLoading(false);
       }
@@ -67,19 +69,27 @@ export default function WorkspaceProvidersPage() {
     initializeSecureContext();
   }, []);
 
+  // ============================================
+  // SECURE WORKSPACE BYOK CREDENTIAL ACTIONS
+  // ============================================
   async function handleConnectWorkspaceKey(e: React.FormEvent) {
     e.preventDefault();
     if (!activeWorkspaceId || !inputKey.trim()) return;
     try {
       setSubmittingKey(true);
-      await apiKeyApi.connectKey("gemini", inputKey.trim(), activeWorkspaceId);
-      toast.success("Shared Workspace API key updated");
+      
+      // FIX 1: We send "GEMINI_API_KEY" to backend instead of "gemini"
+      await apiKeyApi.connectKey("GEMINI_API_KEY", inputKey.trim(), activeWorkspaceId);
+      
+      toast.success("Shared Workspace API key updated and validated successfully!");
       setInputKey("");
       setShowInput(false);
+      
+      // Refresh status instantly
       const kData = await apiKeyApi.getKeyStatus(activeWorkspaceId);
       setWorkspaceKeyStatus(kData);
     } catch (err: any) {
-      toast.error(err.message || "Failed to save key.");
+      toast.error(err.message || "Failed to validate key with Google model list parameters.");
     } finally {
       setSubmittingKey(false);
     }
@@ -90,8 +100,11 @@ export default function WorkspaceProvidersPage() {
     if (!window.confirm("Disconnect this shared key integration?")) return;
     try {
       setSubmittingKey(true);
-      await apiKeyApi.disconnectKey("gemini", activeWorkspaceId);
-      toast.success("Workspace key removed");
+      
+      // Send correct backend key variable name to erase configuration
+      await apiKeyApi.disconnectKey("GEMINI_API_KEY", activeWorkspaceId);
+      
+      toast.success("Workspace configuration decoupled cleanly.");
       const kData = await apiKeyApi.getKeyStatus(activeWorkspaceId);
       setWorkspaceKeyStatus(kData);
       setShowInput(false);
@@ -117,25 +130,15 @@ export default function WorkspaceProvidersPage() {
         <LockKeyhole size={40} className="text-red-400 mx-auto animate-pulse" />
         <h3 className="text-lg font-bold text-white uppercase tracking-tight">Access Prohibited</h3>
         <p className="text-zinc-400 text-xs font-sans leading-relaxed">
-          Your current clearance credentials ({userRole}) lack administrative rights. Secure cluster fallback configurations are restricted strictly to Workspace Administrators.
+          Secure cluster fallback configurations are restricted strictly to Workspace Administrators.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 px-2 animate-fadeIn">
+    <div className="w-full space-y-8 animate-fadeIn">
       
-      {/* HEADER CONTROL ROW */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-[#090f1c]/60 border border-slate-800/80 p-6 rounded-2xl">
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Cpu size={20} className="text-cyan-400" /> API Providers Infrastructure
-          </h2>
-          <p className="text-xs text-zinc-400">Configure core workspace model keys that power your background agent pipelines automatically.</p>
-        </div>
-      </div>
-
       {/* HORIZONTAL PROVIDER DATA CELL CARD */}
       <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
@@ -204,7 +207,7 @@ export default function WorkspaceProvidersPage() {
           </div>
         </div>
 
-        {/* INPUT INPUT BOX INJECTED ON SEPARATE BOTTOM SLIDE BAR SLIDER ROWS */}
+        {/* INPUT COMPONENT SLIDER ROW */}
         {showInput && (
           <form onSubmit={handleConnectWorkspaceKey} className="p-6 bg-black/40 border-t border-slate-800/60 flex flex-col sm:flex-row gap-3 font-mono text-xs animate-fadeIn">
             <div className="relative flex-1 flex items-center">
@@ -212,8 +215,8 @@ export default function WorkspaceProvidersPage() {
                 type={hideTokenInput ? "password" : "text"}
                 value={inputKey}
                 onChange={(e) => setInputKey(e.target.value)}
-                placeholder="Enter Google AI Studio token key string (AIzaSy...)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-mono"
+                placeholder="Enter Google AI Studio key (AIzaSy...)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-mono font-sans"
               />
               <button
                 type="button"
@@ -238,7 +241,7 @@ export default function WorkspaceProvidersPage() {
                   setShowInput(false);
                   setInputKey("");
                 }}
-                className="bg-transparent border border-slate-800 text-zinc-400 px-4 h-11 rounded-xl hover:bg-slate-900 transition-colors"
+                className="bg-transparent border border-slate-800 text-zinc-400 px-4 h-11 rounded-xl hover:bg-zinc-900 transition-colors"
               >
                 Cancel
               </button>
