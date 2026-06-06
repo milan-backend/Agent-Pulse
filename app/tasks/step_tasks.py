@@ -6,6 +6,7 @@ from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
 from app.models.agent_policy import AgentPolicy
+from app.models.user_api_key import UserAPIKey  # Imported safely for workspace key lookups
 
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
@@ -144,9 +145,30 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # DYNAMIC RESOLUTION: Read model assignment straight from Agent parameters setup
-            # Falls back cleanly to gemini configuration if no attribute exists yet
-            active_model_target = getattr(agent, "model_name", "gemini-2.5-flash-lite") or "gemini-2.5-flash-lite"
+            # --- DYNAMIC RESOLUTION FIX ---
+            agent_model = getattr(agent, "model_name", None)
+            
+            if agent_model and str(agent_model).strip():
+                active_model_target = str(agent_model).strip()
+            else:
+                # Agent has no model string assigned yet; look up workspace database key bounds
+                has_openai = db.query(UserAPIKey).filter(
+                    UserAPIKey.workspace_id == step.workspace_id,
+                    UserAPIKey.provider.ilike("%OPENAI%")
+                ).first()
+                
+                has_gemini = db.query(UserAPIKey).filter(
+                    UserAPIKey.workspace_id == step.workspace_id,
+                    UserAPIKey.provider.ilike("%GEMINI%")
+                ).first()
+
+                if has_openai:
+                    active_model_target = "gpt-4o-mini"
+                elif has_gemini:
+                    active_model_target = "gemini-2.5-flash-lite"
+                else:
+                    # FIXED ERROR MESSAGE: Mentions both structural system providers cleanly instead of a fallback string leak
+                    raise ValueError("No valid API credentials found. Please connect an active OpenAI or Google Gemini key in your Workspace Settings.")
 
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"
@@ -157,7 +179,6 @@ def process_step(self, step_id: str):
                     "cost": 0.0
                 }
             else:
-                # FIXED: Passing explicit multi-tenant DB lookups & model flags directly down pipeline
                 output = generate_llm_response(
                     prompt=prompt,
                     db=db,
@@ -166,7 +187,6 @@ def process_step(self, step_id: str):
                     model_name=active_model_target
                 )
                 
-                # Compute usage tracking maps cleanly dynamically matching the exact active engine
                 completion_usage = calculate_usage(
                    prompt=prompt,
                    completion=output,
@@ -282,7 +302,7 @@ def process_step(self, step_id: str):
             step_id=step.id,
             event_type="execution_completed",
             status="completed",
-            model_used=active_model_target,  # Tracks your exact dynamic engine parameters natively now
+            model_used=active_model_target,
             cost=float(completion_usage.get("cost", 0.0)),
             prompt_tokens=int(completion_usage.get("prompt_tokens", 0)),
             completion_tokens=int(completion_usage.get("completion_tokens", 0))
