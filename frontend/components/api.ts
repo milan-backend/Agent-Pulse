@@ -199,6 +199,26 @@ export const apiKeyApi = {
       method: "DELETE",
       headers,
     });
+  },
+
+  /**
+   * ADDED: Designate a provider key as the workspace master primary default pipeline target.
+   */
+  setDefaultProvider: async (provider: string, workspaceId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    return request(`/api-keys/set-default?provider=${encodeURIComponent(provider)}`, {
+      method: "PATCH",
+      headers,
+    });
   }
 };
 

@@ -179,3 +179,53 @@ def get_key_status(
         "last_updated": last_updated,
         "owner_context": current_user.full_name if not workspace_id else "Workspace Managed"
     }
+
+
+@router.patch("/set-default", status_code=status.HTTP_200_OK)
+def set_default_provider(
+    provider: str,
+    workspace_id: Optional[str] = Header(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Toggles the master runtime provider key for a specific workspace environment cluster.
+    Flips the chosen provider row to True and sets all other rows to False.
+    """
+    # 1. Multi-Tenant Security Clearance Boundary Check
+    if workspace_id:
+        get_workspace_membership(db=db, user_id=current_user.id, workspace_id=workspace_id)
+
+    # Clean and parse target provider text strings case-insensitively
+    provider_clean = str(provider).strip().upper()
+    target_provider = "OPENAI_API_KEY" if "OPENAI" in provider_clean else "GEMINI_API_KEY"
+
+    # 2. Build Isolation query context parameters
+    base_query = db.query(UserAPIKey)
+    if workspace_id:
+        base_query = base_query.filter(UserAPIKey.workspace_id == workspace_id)
+    else:
+        base_query = base_query.filter(UserAPIKey.user_id == current_user.id)
+
+    # 3. Step A: Reset all rows to False inside this workspace context zone first
+    base_query.update({"is_default": False}, synchronize_session=False)
+
+    # 4. Step B: Locate the target connection row to set as default active parameter
+    target_record = base_query.filter(UserAPIKey.provider.ilike(f"%{target_provider}%")).first()
+
+    if not target_record:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cannot set default active layer. No connected key found for provider tracking token: '{target_provider}'"
+        )
+
+    # 5. Step C: Elevate chosen target row state
+    target_record.is_default = True
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"{target_provider} successfully designated as the primary runtime pipeline platform.",
+        "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"
+    }

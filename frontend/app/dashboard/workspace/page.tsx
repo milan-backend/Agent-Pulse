@@ -18,9 +18,11 @@ export default function WorkspaceOverviewPage() {
   const [membersCount, setMembersCount] = useState(0);
   const [adminCount, setAdminCount] = useState(0);
   
-  // Dynamic states tracking connected keys
+  // Dynamic states tracking connected keys & defaults
   const [geminiActive, setGeminiActive] = useState(false);
   const [openaiActive, setOpenaiActive] = useState(false);
+  const [geminiDefault, setGeminiDefault] = useState(false);
+  const [openaiDefault, setOpenaiDefault] = useState(false);
 
   useEffect(() => {
     async function loadOverviewStats() {
@@ -35,12 +37,15 @@ export default function WorkspaceOverviewPage() {
         if (typeof window !== "undefined") {
           const storedWorkspaceId = localStorage.getItem("workspace_id");
           if (storedWorkspaceId) {
-            // Check both provider states flat-ly using your endpoint parameter logic
+            // Check both provider states and pull their specific default boolean tags
             const gRes = await apiKeyApi.getKeyStatus(storedWorkspaceId, "GEMINI_API_KEY");
             const oRes = await apiKeyApi.getKeyStatus(storedWorkspaceId, "OPENAI_API_KEY");
             
             setGeminiActive(!!gRes?.connected);
+            setGeminiDefault(!!gRes?.is_default);
+
             setOpenaiActive(!!oRes?.connected);
+            setOpenaiDefault(!!oRes?.is_default);
           }
         }
       } catch (err) {
@@ -105,10 +110,16 @@ export default function WorkspaceOverviewPage() {
               )}
             </div>
             
-            {/* MODIFIED: Completely dynamic text rendering block instead of hardcoded Gemini text */}
+            {/* DYNAMIC DEFAULT ROUTING STATUS TEXT */}
             <div className="text-xs text-zinc-400 pt-0.5 font-sans">
               {geminiActive && openaiActive ? (
-                <span className="text-cyan-400 font-semibold">Gemini & OpenAI Active Cluster</span>
+                openaiDefault ? (
+                  <span className="text-purple-400 font-semibold">OpenAI (Primary Default Active)</span>
+                ) : geminiDefault ? (
+                  <span className="text-cyan-400 font-semibold">Gemini (Primary Default Active)</span>
+                ) : (
+                  <span className="text-purple-400 font-semibold">OpenAI Core (System Fallback)</span>
+                )
               ) : openaiActive ? (
                 <span className="text-purple-400 font-semibold">OpenAI Infrastructure Core</span>
               ) : geminiActive ? (

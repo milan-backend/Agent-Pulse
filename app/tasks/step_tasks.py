@@ -145,43 +145,66 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # --- DYNAMIC RESOLUTION FIX (SAFE STRING EXTRACTION) ---
-            # Extract raw string parameters safely to prevent SQLAlchemy session detachment errors
+            # --- DYNAMIC RESOLUTION FIX (WITH EXPLICIT IS_DEFAULT TOGGLE MATCHING) ---
             current_workspace_id = str(step.workspace_id).strip() if step.workspace_id else None
             agent_model = getattr(agent, "model_name", None)
             
             if agent_model and str(agent_model).strip():
                 active_model_target = str(agent_model).strip()
             elif current_workspace_id:
-                # Query using the verified raw workspace string variable
-                has_openai = db.query(UserAPIKey).filter(
+                # 1. Primary Check: Look up if a specific key was marked default via the button
+                default_key = db.query(UserAPIKey).filter(
                     UserAPIKey.workspace_id == current_workspace_id,
-                    UserAPIKey.provider.ilike("%OPENAI%")
+                    UserAPIKey.is_default == True
+                ).first()
+
+                if default_key:
+                    if "OPENAI" in default_key.provider.upper():
+                        active_model_target = "gpt-4o-mini"
+                    else:
+                        active_model_target = "gemini-2.5-flash-lite"
+                else:
+                    # 2. Secondary Fallback Check: Old sequential check if no button was selected yet
+                    has_openai = db.query(UserAPIKey).filter(
+                        UserAPIKey.workspace_id == current_workspace_id,
+                        UserAPIKey.provider.ilike("%OPENAI%")
                 ).first()
                 
-                has_gemini = db.query(UserAPIKey).filter(
-                    UserAPIKey.workspace_id == current_workspace_id,
-                    UserAPIKey.provider.ilike("%GEMINI%")
-                ).first()
+                    has_gemini = db.query(UserAPIKey).filter(
+                        UserAPIKey.workspace_id == current_workspace_id,
+                        UserAPIKey.provider.ilike("%GEMINI%")
+                    ).first()
 
-                if has_openai:
-                    active_model_target = "gpt-4o-mini"
-                elif has_gemini:
-                    active_model_target = "gemini-2.5-flash-lite"
-                else:
-                    raise ValueError("No valid API credentials found. Please connect an active OpenAI or Google Gemini key in your Workspace Settings.")
+                    if has_openai:
+                        active_model_target = "gpt-4o-mini"
+                    elif has_gemini:
+                        active_model_target = "gemini-2.5-flash-lite"
+                    else:
+                        raise ValueError("No valid API credentials found. Please connect an active OpenAI or Google Gemini key in your Workspace Settings.")
             else:
-                # Fallback to current user context lookup if no workspace ID is attached
+                # Fallback context: Handles current user context row lookups preserving your old infrastructure loops
                 current_user_id = agent.user_id if hasattr(agent, 'user_id') else None
-                has_personal_openai = db.query(UserAPIKey).filter(
+                
+                default_personal_key = db.query(UserAPIKey).filter(
                     UserAPIKey.user_id == current_user_id,
-                    UserAPIKey.provider.ilike("%OPENAI%")
+                    UserAPIKey.is_default == True
                 ).first() if current_user_id else None
 
-                if has_personal_openai:
-                    active_model_target = "gpt-4o-mini"
+                if default_personal_key:
+                    if "OPENAI" in default_personal_key.provider.upper():
+                        active_model_target = "gpt-4o-mini"
+                    else:
+                        active_model_target = "gemini-2.5-flash-lite"
                 else:
-                    active_model_target = "gemini-2.5-flash-lite"
+                    has_personal_openai = db.query(UserAPIKey).filter(
+                        UserAPIKey.user_id == current_user_id,
+                        UserAPIKey.provider.ilike("%OPENAI%")
+                    ).first() if current_user_id else None
+
+                    if has_personal_openai:
+                        active_model_target = "gpt-4o-mini"
+                    else:
+                        active_model_target = "gemini-2.5-flash-lite"
 
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"

@@ -10,7 +10,8 @@ import {
   Loader2, 
   ExternalLink,
   Cpu,
-  LockKeyhole
+  LockKeyhole,
+  CheckCircle2
 } from "lucide-react";
 import { getCurrentUser, getWorkspaceMembers, apiKeyApi } from "@/components/api";
 import { toast } from "sonner";
@@ -20,14 +21,15 @@ export default function WorkspaceProvidersPage() {
   const [userRole, setUserRole] = useState<"admin" | "operator" | "viewer" | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
-  // Tracks active connectivity markers and string configurations
-  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
-  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
+  // Tracks active connectivity markers, string configurations, and default status flags
+  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "", masked_key: "", is_default: false });
+  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "", masked_key: "", is_default: false });
 
   // Input controller states
   const [activeProviderForm, setActiveProviderForm] = useState<"GEMINI_API_KEY" | "OPENAI_API_KEY" | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [submittingKey, setSubmittingKey] = useState(false);
+  const [togglingDefault, setTogglingDefault] = useState(false);
   const [hideTokenInput, setHideTokenInput] = useState(true);
 
   const providerMeta = {
@@ -45,13 +47,13 @@ export default function WorkspaceProvidersPage() {
 
   async function syncAllStatuses(workspaceId: string) {
     try {
-      // FIXED: Queries flat endpoints tracking loops sequentially to match backend architectures
       const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "GEMINI_API_KEY");
       if (geminiData) {
         setGeminiStatus({
           connected: !!geminiData.connected,
           last_updated: geminiData.last_updated || "Live Asset",
-          masked_key: geminiData.masked_key || "Connected"
+          masked_key: geminiData.masked_key || "Connected",
+          is_default: !!geminiData.is_default // Synchronize boolean tracking field from backend status dictionary
         });
       }
 
@@ -60,7 +62,8 @@ export default function WorkspaceProvidersPage() {
         setOpenaiStatus({
           connected: !!openaiData.connected,
           last_updated: openaiData.last_updated || "Live Asset",
-          masked_key: openaiData.masked_key || "Connected"
+          masked_key: openaiData.masked_key || "Connected",
+          is_default: !!openaiData.is_default // Synchronize boolean tracking field from backend status dictionary
         });
       }
     } catch (err) {
@@ -131,8 +134,8 @@ export default function WorkspaceProvidersPage() {
       await apiKeyApi.disconnectKey(providerKey, activeWorkspaceId);
       toast.success(`${providerMeta[providerKey].name} token cleared cleanly.`);
       
-      if (providerKey === "GEMINI_API_KEY") setGeminiStatus({ connected: false, last_updated: "", masked_key: "" });
-      else setOpenaiStatus({ connected: false, last_updated: "", masked_key: "" });
+      if (providerKey === "GEMINI_API_KEY") setGeminiStatus({ connected: false, last_updated: "", masked_key: "", is_default: false });
+      else setOpenaiStatus({ connected: false, last_updated: "", masked_key: "", is_default: false });
       
       await syncAllStatuses(activeWorkspaceId);
       setActiveProviderForm(null);
@@ -140,6 +143,20 @@ export default function WorkspaceProvidersPage() {
       toast.error(err.message || "Failed to disconnect target.");
     } finally {
       setSubmittingKey(false);
+    }
+  }
+
+  async function handleSetDefaultProvider(providerKey: "GEMINI_API_KEY" | "OPENAI_API_KEY") {
+    if (!activeWorkspaceId) return;
+    try {
+      setTogglingDefault(true);
+      await apiKeyApi.setDefaultProvider(providerKey, activeWorkspaceId);
+      toast.success(`${providerMeta[providerKey].name} set as workspace routing default.`);
+      await syncAllStatuses(activeWorkspaceId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update default workspace runtime configuration.");
+    } finally {
+      setTogglingDefault(false);
     }
   }
 
@@ -172,19 +189,23 @@ export default function WorkspaceProvidersPage() {
         {/* ======================================= */}
         {/* PROVIDER ROW 1: GOOGLE GEMINI          */}
         {/* ======================================= */}
-        <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
+        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${geminiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
           <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
                 <KeyRound size={20} />
               </div>
               <div className="space-y-1">
-                <div className="text-base font-bold text-white">Google Gemini Provider</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-base font-bold text-white">Google Gemini Provider</div>
+                  {geminiStatus.is_default && (
+                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-zinc-500">
                   <div className="flex items-center gap-1.5">
                     Status: {geminiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {/* MODIFIED: Renders your custom masked string variables dynamically indicating active key structures */}
                   {geminiStatus.connected && (
                     <>
                       <div className="text-zinc-400 font-sans font-medium bg-slate-950 px-2 py-0.5 rounded border border-slate-800/60 text-[11px]">{geminiStatus.masked_key}</div>
@@ -196,6 +217,20 @@ export default function WorkspaceProvidersPage() {
             </div>
             <div className="flex items-center gap-3 font-sans text-xs shrink-0 self-end lg:self-auto">
               <a href={providerMeta.GEMINI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
+              {geminiStatus.connected && (
+                <button
+                  type="button"
+                  disabled={togglingDefault || geminiStatus.is_default}
+                  onClick={() => handleSetDefaultProvider("GEMINI_API_KEY")}
+                  className={`px-4 h-10 rounded-xl font-bold transition-all border ${
+                    geminiStatus.is_default
+                      ? "bg-green-500/10 border-green-500/30 text-green-400 cursor-default"
+                      : "border-slate-800 bg-slate-900 text-zinc-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {geminiStatus.is_default ? "✓ Default Active" : "Set as Default"}
+                </button>
+              )}
               {geminiStatus.connected ? (
                 <>
                   <button type="button" onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
@@ -211,19 +246,23 @@ export default function WorkspaceProvidersPage() {
         {/* ======================================= */}
         {/* PROVIDER ROW 2: OPENAI PLATFORM        */}
         {/* ======================================= */}
-        <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
+        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${openaiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
           <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-11 w-11 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
                 <Cpu size={20} />
               </div>
               <div className="space-y-1">
-                <div className="text-base font-bold text-white">OpenAI Core Provider</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-base font-bold text-white">OpenAI Core Provider</div>
+                  {openaiStatus.is_default && (
+                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-zinc-500">
                   <div className="flex items-center gap-1.5">
                     Status: {openaiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {/* MODIFIED: Renders your custom masked string variables dynamically indicating active key structures */}
                   {openaiStatus.connected && (
                     <>
                       <div className="text-zinc-400 font-sans font-medium bg-slate-950 px-2 py-0.5 rounded border border-slate-800/60 text-[11px]">{openaiStatus.masked_key}</div>
@@ -235,6 +274,20 @@ export default function WorkspaceProvidersPage() {
             </div>
             <div className="flex items-center gap-3 font-sans text-xs shrink-0 self-end lg:self-auto">
               <a href={providerMeta.OPENAI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
+              {openaiStatus.connected && (
+                <button
+                  type="button"
+                  disabled={togglingDefault || openaiStatus.is_default}
+                  onClick={() => handleSetDefaultProvider("OPENAI_API_KEY")}
+                  className={`px-4 h-10 rounded-xl font-bold transition-all border ${
+                    openaiStatus.is_default
+                      ? "bg-green-500/10 border-green-500/30 text-green-400 cursor-default"
+                      : "border-slate-800 bg-slate-900 text-zinc-300 hover:bg-slate-800 hover:text-white"
+                  }`}
+                >
+                  {openaiStatus.is_default ? "✓ Default Active" : "Set as Default"}
+                </button>
+              )}
               {openaiStatus.connected ? (
                 <>
                   <button type="button" onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>

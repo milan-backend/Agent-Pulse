@@ -3,7 +3,8 @@ from sqlalchemy import (
     String,
     DateTime,
     ForeignKey,
-    UniqueConstraint
+    UniqueConstraint,
+    Boolean
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -60,6 +61,10 @@ class UserAPIKey(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow
     )
+
+    is_default = Column(Boolean, 
+     default=False, 
+     nullable=False)
 
     # Relationships
     user = relationship(
