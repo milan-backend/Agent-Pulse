@@ -8,7 +8,7 @@ from uuid import UUID
 from app.services.user_api_key_service import UserAPIKeyService
 
 # ============================================
-# MULTI-PROVIDER LLM RESPONSE GENERATOR (DIAGNOSTIC)
+# MULTI-PROVIDER LLM RESPONSE GENERATOR
 # ============================================
 
 def generate_llm_response(
@@ -48,12 +48,20 @@ def generate_llm_response(
         # --------------------------------------------
         if is_openai:
             if db:
+                # FIXED: Tries both uppercase and lowercase lookup vectors for bulletproof matching
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
                     provider="OPENAI_API_KEY", 
                     user_id=clean_user_id,
                     workspace_id=clean_workspace_id
                 )
+                if not active_key:
+                    active_key = UserAPIKeyService.fetch_decrypted_key(
+                        db=db,
+                        provider="openai_api_key", 
+                        user_id=clean_user_id,
+                        workspace_id=clean_workspace_id
+                    )
 
             if not active_key:
                 active_key = os.getenv("OPENAI_API_KEY")
@@ -76,31 +84,21 @@ def generate_llm_response(
         # BRANCH B: GOOGLE GEMINI ROUTING ENGINE
         # --------------------------------------------
         else:
-            # --- CRITICAL SYSTEM RECOVERY DEBUG PRINTS ---
-            print(f"=== LLM DEBUG: Incoming workspace_id raw: {workspace_id} (Type: {type(workspace_id)})")
-            print(f"=== LLM DEBUG: Converted clean_workspace_id: {clean_workspace_id} (Type: {type(clean_workspace_id)})")
-            print(f"=== LLM DEBUG: Incoming user_id raw: {user_id} (Type: {type(user_id)})")
-            print(f"=== LLM DEBUG: Converted clean_user_id: {clean_user_id} (Type: {type(clean_user_id)})")
-
             if db:
-                # Inspect every single row matching the credential structure inside the DB table
-                from app.models.user_api_key import UserAPIKey
-                try:
-                    all_db_keys = db.query(UserAPIKey).all()
-                    print(f"=== LLM DEBUG: Total keys in entire DB table: {len(all_db_keys)}")
-                    for k in all_db_keys:
-                        print(f"=== LLM DEBUG: Row ID: {k.id} | Provider in DB: '{k.provider}' | Workspace ID in DB: {k.workspace_id} | User ID in DB: {k.user_id}")
-                except Exception as db_print_err:
-                    print(f"=== LLM DEBUG: Could not print table items: {str(db_print_err)}")
-
+                # FIXED: Tries both uppercase and lowercase lookup vectors to catch 'gemini_api_key'
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
                     provider="GEMINI_API_KEY", 
                     user_id=clean_user_id,
                     workspace_id=clean_workspace_id
                 )
-            
-            print(f"=== LLM DEBUG: Decrypted active_key found: {True if active_key else False}")
+                if not active_key:
+                    active_key = UserAPIKeyService.fetch_decrypted_key(
+                        db=db,
+                        provider="gemini_api_key", 
+                        user_id=clean_user_id,
+                        workspace_id=clean_workspace_id
+                    )
 
             if not active_key:
                 active_key = os.getenv("GEMINI_API_KEY")
