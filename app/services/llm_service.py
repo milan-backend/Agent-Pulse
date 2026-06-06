@@ -8,7 +8,7 @@ from uuid import UUID
 from app.services.user_api_key_service import UserAPIKeyService
 
 # ============================================
-# MULTI-PROVIDER LLM RESPONSE GENERATOR (FIXED)
+# MULTI-PROVIDER LLM RESPONSE GENERATOR (DIAGNOSTIC)
 # ============================================
 
 def generate_llm_response(
@@ -47,7 +47,6 @@ def generate_llm_response(
         # BRANCH A: OPENAI ROUTING ENGINE
         # --------------------------------------------
         if is_openai:
-            # 1. Fetch from workspace database using your true encryption provider key
             if db:
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
@@ -56,17 +55,13 @@ def generate_llm_response(
                     workspace_id=clean_workspace_id
                 )
 
-            # 2. Infrastructure Fallback: System environment backup
             if not active_key:
                 active_key = os.getenv("OPENAI_API_KEY")
 
             if not active_key:
                 raise ValueError("No valid OpenAI API key configuration found for this execution runtime.")
 
-            # 3. Instantiate thread-safe OpenAI core client
             client = OpenAI(api_key=active_key)
-            
-            # Map specific model variations dynamically (defaults to gpt-4o-mini if generic string passed)
             target_model = model_name if "gpt" in model_lower else "gpt-4o-mini"
 
             response = client.chat.completions.create(
@@ -81,26 +76,39 @@ def generate_llm_response(
         # BRANCH B: GOOGLE GEMINI ROUTING ENGINE
         # --------------------------------------------
         else:
-            # 1. Fetch from workspace database using your true encryption provider key
+            # --- CRITICAL SYSTEM RECOVERY DEBUG PRINTS ---
+            print(f"=== LLM DEBUG: Incoming workspace_id raw: {workspace_id} (Type: {type(workspace_id)})")
+            print(f"=== LLM DEBUG: Converted clean_workspace_id: {clean_workspace_id} (Type: {type(clean_workspace_id)})")
+            print(f"=== LLM DEBUG: Incoming user_id raw: {user_id} (Type: {type(user_id)})")
+            print(f"=== LLM DEBUG: Converted clean_user_id: {clean_user_id} (Type: {type(clean_user_id)})")
+
             if db:
+                # Inspect every single row matching the credential structure inside the DB table
+                from app.models.user_api_key import UserAPIKey
+                try:
+                    all_db_keys = db.query(UserAPIKey).all()
+                    print(f"=== LLM DEBUG: Total keys in entire DB table: {len(all_db_keys)}")
+                    for k in all_db_keys:
+                        print(f"=== LLM DEBUG: Row ID: {k.id} | Provider in DB: '{k.provider}' | Workspace ID in DB: {k.workspace_id} | User ID in DB: {k.user_id}")
+                except Exception as db_print_err:
+                    print(f"=== LLM DEBUG: Could not print table items: {str(db_print_err)}")
+
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
                     provider="GEMINI_API_KEY", 
                     user_id=clean_user_id,
                     workspace_id=clean_workspace_id
                 )
+            
+            print(f"=== LLM DEBUG: Decrypted active_key found: {True if active_key else False}")
 
-            # 2. Infrastructure Fallback: System environment backup
             if not active_key:
                 active_key = os.getenv("GEMINI_API_KEY")
 
             if not active_key:
                 raise ValueError("No valid Gemini API key configuration found for this execution runtime.")
 
-            # 3. Instantiate thread-safe Google GenAI client
             client = genai.Client(api_key=active_key)
-            
-            # Keep your production model layout active
             target_model = model_name if "gemini" in model_lower else "gemini-2.5-flash-lite"
 
             response = client.models.generate_content(
