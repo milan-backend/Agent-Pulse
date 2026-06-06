@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { 
   KeyRound, 
-  ShieldAlert, 
   Calendar, 
   Lock, 
   Eye, 
@@ -21,65 +20,60 @@ export default function WorkspaceProvidersPage() {
   const [userRole, setUserRole] = useState<"admin" | "operator" | "viewer" | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
-  const [workspaceKeyStatus, setWorkspaceKeyStatus] = useState({ connected: false, last_updated: "", owner_context: "" });
-  const [showInput, setShowInput] = useState(false);
+  // Separate states to track Gemini vs OpenAI configuration logs independently
+  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "" });
+  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "" });
+
+  // Input states tracking console panels
+  const [activeProviderForm, setActiveProviderForm] = useState<"GEMINI_API_KEY" | "OPENAI_API_KEY" | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [submittingKey, setSubmittingKey] = useState(false);
   const [hideTokenInput, setHideTokenInput] = useState(true);
 
-  const providerLinks = {
-    gemini: "https://aistudio.google.com/"
+  const providerMeta = {
+    GEMINI_API_KEY: {
+      name: "Google Gemini",
+      link: "https://aistudio.google.com/",
+      placeholder: "Enter Google AI Studio key (AIzaSy...)"
+    },
+    OPENAI_API_KEY: {
+      name: "OpenAI Platform",
+      link: "https://platform.openai.com/api-keys",
+      placeholder: "Enter OpenAI platform key (sk-proj-...)"
+    }
   };
 
-  // Helper utility function to parse the status response matching your working backend data maps
-  function parseBackendStatus(response: any) {
-    if (!response) return { connected: false, last_updated: "", owner_context: "" };
-
-    // Scenario A: If your backend nests the status directly inside the "GEMINI_API_KEY" property key
-    if (response["GEMINI_API_KEY"]) {
-      return {
-        connected: !!response["GEMINI_API_KEY"].connected,
-        last_updated: response["GEMINI_API_KEY"].last_updated || "",
-        owner_context: response["GEMINI_API_KEY"].owner_context || ""
-      };
-    }
-
-    // Scenario B: If your backend responds with a raw array roster of providers
-    if (Array.isArray(response)) {
-      const match = response.find((item: any) => item.provider === "GEMINI_API_KEY" || item.key_name === "GEMINI_API_KEY");
-      if (match) {
-        return {
-          connected: !!match.connected,
-          last_updated: match.last_updated || "",
-          owner_context: match.owner_context || ""
-        };
-      }
-    }
-
-    // Scenario C: Fallback case if the response is flat
-    if (response.provider === "GEMINI_API_KEY") {
+  // Parses your backend flat JSON response structures
+  function parseProviderStatus(response: any, targetKey: string) {
+    if (!response) return { connected: false, last_updated: "" };
+    
+    const prov = response.provider?.toUpperCase();
+    if (prov === targetKey) {
       return {
         connected: !!response.connected,
-        last_updated: response.last_updated || "",
-        owner_context: response.owner_context || ""
+        last_updated: response.last_updated || "Live Asset"
       };
     }
-
-    // Scenario D: Alternative direct map fallback logic
-    return {
-      connected: !!response.connected,
-      last_updated: response.last_updated || "",
-      owner_context: response.owner_context || ""
-    };
+    return { connected: false, last_updated: "" };
   }
 
-  async function syncStatusMetrics(workspaceId: string) {
+  async function syncAllStatuses(workspaceId: string) {
     try {
+      // Fetch statuses matching backend tracking endpoints layout loops
       const rawData = await apiKeyApi.getKeyStatus(workspaceId);
-      const cleanData = parseBackendStatus(rawData);
-      setWorkspaceKeyStatus(cleanData);
+      
+      // Since status returns one provider context structure at a time based on lookup,
+      // we check what the active environment has stored.
+      if (rawData && rawData.provider) {
+        const provName = rawData.provider.toUpperCase();
+        if (provName === "GEMINI_API_KEY" || provName === "GEMINI") {
+          setGeminiStatus({ connected: !!rawData.connected, last_updated: rawData.last_updated || "Live" });
+        } else if (provName === "OPENAI_API_KEY" || provName === "OPENAI") {
+          setOpenaiStatus({ connected: !!rawData.connected, last_updated: rawData.last_updated || "Live" });
+        }
+      }
     } catch (err) {
-      console.error("Failed syncing vault statuses:", err);
+      console.error("Failed to sync structural provider data matrix:", err);
     }
   }
 
@@ -106,12 +100,12 @@ export default function WorkspaceProvidersPage() {
           const storedWorkspaceId = localStorage.getItem("workspace_id");
           if (storedWorkspaceId) {
             setActiveWorkspaceId(storedWorkspaceId);
-            await syncStatusMetrics(storedWorkspaceId);
+            await syncAllStatuses(storedWorkspaceId);
           }
         }
       } catch (err) {
-        console.error("Error on initialization:", err);
-      } finally {
+        console.error(err);
+      } relative: {
         setLoading(false);
       }
     }
@@ -123,32 +117,36 @@ export default function WorkspaceProvidersPage() {
   // ============================================
   async function handleConnectWorkspaceKey(e: React.FormEvent) {
     e.preventDefault();
-    if (!activeWorkspaceId || !inputKey.trim()) return;
+    if (!activeWorkspaceId || !inputKey.trim() || !activeProviderForm) return;
     try {
       setSubmittingKey(true);
-      await apiKeyApi.connectKey("GEMINI_API_KEY", inputKey.trim(), activeWorkspaceId);
-      toast.success("Shared Workspace API key updated and validated successfully!");
+      await apiKeyApi.connectKey(activeProviderForm, inputKey.trim(), activeWorkspaceId);
+      toast.success(`${providerMeta[activeProviderForm].name} API token stored successfully!`);
       setInputKey("");
-      setShowInput(false);
-      await syncStatusMetrics(activeWorkspaceId);
+      setActiveProviderForm(null);
+      await syncAllStatuses(activeWorkspaceId);
     } catch (err: any) {
-      toast.error(err.message || "Failed to validate key with Google model list parameters.");
+      toast.error(err.message || "Key verification handshaking failure.");
     } finally {
       setSubmittingKey(false);
     }
   }
 
-  async function handleDisconnectWorkspaceKey() {
+  async function handleDisconnectWorkspaceKey(providerKey: "GEMINI_API_KEY" | "OPENAI_API_KEY") {
     if (!activeWorkspaceId) return;
-    if (!window.confirm("Disconnect this shared key integration?")) return;
+    if (!window.confirm(`Disconnect shared ${providerMeta[providerKey].name} credential variables?`)) return;
     try {
       setSubmittingKey(true);
-      await apiKeyApi.disconnectKey("GEMINI_API_KEY", activeWorkspaceId);
-      toast.success("Workspace configuration decoupled cleanly.");
-      await syncStatusMetrics(activeWorkspaceId);
-      setShowInput(false);
+      await apiKeyApi.disconnectKey(providerKey, activeWorkspaceId);
+      toast.success(`${providerMeta[providerKey].name} token cleared cleanly.`);
+      
+      if (providerKey === "GEMINI_API_KEY") setGeminiStatus({ connected: false, last_updated: "" });
+      else setOpenaiStatus({ connected: false, last_updated: "" });
+      
+      await syncAllStatuses(activeWorkspaceId);
+      setActiveProviderForm(null);
     } catch (err: any) {
-      toast.error(err.message || "Failed to disconnect.");
+      toast.error(err.message || "Failed to disconnect target.");
     } finally {
       setSubmittingKey(false);
     }
@@ -158,7 +156,7 @@ export default function WorkspaceProvidersPage() {
     return (
       <div className="h-[50vh] w-full flex flex-col items-center justify-center gap-3 font-mono text-xs text-cyan-400 tracking-widest">
         <Loader2 className="animate-spin text-cyan-400" size={24} />
-        <span>LOADING VAULT METRICS...</span>
+        <span>LOADING CRYPTOGRAPHIC INFRASTRUCTURE...</span>
       </div>
     );
   }
@@ -169,125 +167,131 @@ export default function WorkspaceProvidersPage() {
         <LockKeyhole size={40} className="text-red-400 mx-auto animate-pulse" />
         <h3 className="text-lg font-bold text-white uppercase tracking-tight">Access Prohibited</h3>
         <p className="text-zinc-400 text-xs font-sans leading-relaxed">
-          Secure cluster fallback configurations are restricted strictly to Workspace Administrators.
+          Secure provider metrics lookups are restricted strictly to Workspace Administrators.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="w-full space-y-8 animate-fadeIn">
+    <div className="w-full space-y-6 animate-fadeIn">
       
-      {/* HORIZONTAL PROVIDER DATA CELL CARD */}
-      <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
-          
-          {/* PROVIDER DETAILS */}
-          <div className="flex items-center gap-4 flex-1">
-            <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
-              <KeyRound size={20} />
-            </div>
-            <div className="space-y-1">
-              <div className="text-base font-bold text-white">Google Gemini Provider</div>
-              <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-zinc-500">
-                <div className="flex items-center gap-1.5">
-                  Status: 
-                  {workspaceKeyStatus.connected ? (
-                    <span className="text-green-400 font-bold">CONNECTED</span>
-                  ) : (
-                    <span className="text-zinc-500">NOT CONFIGURED</span>
+      {/* MAP ARRAY DATA INTO COMPACT HORIZONTAL CELL BLOCKS */}
+      <div className="space-y-4">
+        
+        {/* ======================================= */}
+        {/* PROVIDER ROW 1: GOOGLE GEMINI          */}
+        {/* ======================================= */}
+        <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
+          <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
+                <KeyRound size={20} />
+              </div>
+              <div className="space-y-1">
+                <div className="text-base font-bold text-white">Google Gemini Provider</div>
+                <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-zinc-500">
+                  <div className="flex items-center gap-1.5">
+                    Status: {geminiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
+                  </div>
+                  {geminiStatus.connected && (
+                    <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{geminiStatus.last_updated}</span></div>
                   )}
                 </div>
-                {workspaceKeyStatus.connected && workspaceKeyStatus.last_updated && (
-                  <div className="flex items-center gap-1 text-zinc-400">
-                    <Calendar size={12} className="text-zinc-600" /> Synced: <span className="text-zinc-300">{workspaceKeyStatus.last_updated}</span>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
-
-          {/* ACTION BUTTON HORIZONTAL LAYOUT */}
-          <div className="flex items-center gap-3 font-sans text-xs shrink-0 self-end lg:self-auto">
-            <a
-              href={providerLinks.gemini}
-              target="_blank"
-              rel="noreferrer"
-              className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 hover:text-zinc-200 flex items-center gap-1.5 font-bold transition-colors"
-            >
-              <span>Get Token</span>
-              <ExternalLink size={12} />
-            </a>
-
-            {workspaceKeyStatus.connected ? (
-              <>
-                <button
-                  onClick={() => setShowInput(!showInput)}
-                  className="px-4 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-bold transition-colors"
-                >
-                  Update
-                </button>
-                <button
-                  onClick={handleDisconnectWorkspaceKey}
-                  disabled={submittingKey}
-                  className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-300 font-bold transition-colors"
-                >
-                  {submittingKey ? <Loader2 className="animate-spin" size={14} /> : "Remove"}
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setShowInput(!showInput)}
-                className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all"
-              >
-                Connect Provider
-              </button>
-            )}
+            <div className="flex items-center gap-3 font-sans text-xs shrink-0 self-end lg:self-auto">
+              <a href={providerMeta.GEMINI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
+              {geminiStatus.connected ? (
+                <>
+                  <button onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
+                  <button onClick={() => handleDisconnectWorkspaceKey("GEMINI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
+                </>
+              ) : (
+                <button onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* INPUT COMPONENT SLIDER ROW */}
-        {showInput && (
-          <form onSubmit={handleConnectWorkspaceKey} className="p-6 bg-black/40 border-t border-slate-800/60 flex flex-col sm:flex-row gap-3 font-mono text-xs animate-fadeIn">
-            <div className="relative flex-1 flex items-center">
-              <input
-                type={hideTokenInput ? "password" : "text"}
-                value={inputKey}
-                onChange={(e) => setInputKey(e.target.value)}
-                placeholder="Enter Google AI Studio key (AIzaSy...)"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-sans"
-              />
-              <button
-                type="button"
-                onClick={() => setHideTokenInput(!hideTokenInput)}
-                className="absolute right-4 text-zinc-500 hover:text-zinc-300"
-              >
-                {hideTokenInput ? <Eye size={16} /> : <EyeOff size={16} />}
-              </button>
+        {/* ======================================= */}
+        {/* PROVIDER ROW 2: OPENAI PLATFORM        */}
+        {/* ======================================= */}
+        <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
+          <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="h-11 w-11 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                <Cpu size={20} />
+              </div>
+              <div className="space-y-1">
+                <div className="text-base font-bold text-white">OpenAI Core Provider</div>
+                <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-zinc-500">
+                  <div className="flex items-center gap-1.5">
+                    Status: {openaiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
+                  </div>
+                  {openaiStatus.connected && (
+                    <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{openaiStatus.last_updated}</span></div>
+                  )}
+                </div>
+              </div>
             </div>
-            
-            <div className="flex gap-2 font-sans text-xs">
-              <button
-                type="submit"
-                disabled={submittingKey || !inputKey.trim()}
-                className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold px-5 h-11 rounded-xl transition-all disabled:opacity-40 whitespace-nowrap"
-              >
-                {submittingKey ? "Saving..." : "Save Configuration"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInput(false);
-                  setInputKey("");
-                }}
-                className="bg-transparent border border-slate-800 text-zinc-400 px-4 h-11 rounded-xl hover:bg-zinc-900 transition-colors"
-              >
-                Cancel
-              </button>
+            <div className="flex items-center gap-3 font-sans text-xs shrink-0 self-end lg:self-auto">
+              <a href={providerMeta.OPENAI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
+              {openaiStatus.connected ? (
+                <>
+                  <button onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
+                  <button onClick={() => handleDisconnectWorkspaceKey("OPENAI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
+                </>
+              ) : (
+                <button onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
+              )}
             </div>
-          </form>
-        )}
+          </div>
+        </div>
+
       </div>
+
+      {/* DYNAMIC COLLAPSIBLE INPUT CONTROL SLIDER BLOCK */}
+      {activeProviderForm && (
+        <form onSubmit={handleConnectWorkspaceKey} className="p-6 bg-[#040c18] border border-slate-800 rounded-2xl flex flex-col sm:flex-row gap-3 font-mono text-xs animate-fadeIn">
+          <div className="relative flex-1 flex items-center">
+            <input
+              type={hideTokenInput ? "password" : "text"}
+              value={inputKey}
+              onChange={(e) => setInputKey(e.target.value)}
+              placeholder={providerMeta[activeProviderForm].placeholder}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 pr-12 text-white outline-none focus:border-cyan-500/40 text-xs font-sans"
+            />
+            <button
+              type="button"
+              onClick={() => setHideTokenInput(!hideTokenInput)}
+              className="absolute right-4 text-zinc-500 hover:text-zinc-300"
+            >
+              {hideTokenInput ? <Eye size={16} /> : <EyeOff size={16} />}
+            </button>
+          </div>
+          
+          <div className="flex gap-2 font-sans text-xs">
+            <button
+              type="submit"
+              disabled={submittingKey || !inputKey.trim()}
+              className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold px-5 h-11 rounded-xl transition-all disabled:opacity-40 whitespace-nowrap"
+            >
+              {submittingKey ? "Syncing..." : `Save ${providerMeta[activeProviderForm].name} Key`}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveProviderForm(null);
+                setInputKey("");
+              }}
+              className="bg-transparent border border-slate-800 text-zinc-400 px-4 h-11 rounded-xl hover:bg-zinc-900 transition-colors"
+            >
+              Cancel
+            </button>
+            </div>
+        </form>
+      )}
 
     </div>
   );
