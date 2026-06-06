@@ -115,30 +115,31 @@ def disconnect_provider_key(
 
 
 # ============================================
-# GET KEY CONFIGURATION STATUS METADATA (FIXED MULTI-TENANT)
+# GET KEY CONFIGURATION STATUS METADATA
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
-    provider: Optional[str] = "GEMINI_API_KEY", # Added to pull context dynamically without breaking single schemas
+    provider: Optional[str] = "GEMINI_API_KEY",
     workspace_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns safe cryptographic metadata regarding saved keys matching active provider queries.
+    Returns safe cryptographic metadata regarding saved keys matching the active provider string.
     Admins, Operators, and Viewers can all check status. Never exposes raw decrypted tokens.
     """
-    # Anyone can check status if they belong to the workspace
+    # 1. Tenant Security isolation wall
     if workspace_id:
         get_workspace_membership(db=db, user_id=current_user.id, workspace_id=workspace_id)
         
     from app.models.user_api_key import UserAPIKey 
     
-    # Map the targeted string input smoothly to ensure robust database match checks
+    # Clean and match target provider type strings safely
     provider_clean = str(provider).strip().upper()
     target_provider = "OPENAI_API_KEY" if "OPENAI" in provider_clean else "GEMINI_API_KEY"
     
-    query = db.query(UserAPIKey).filter(UserAPIKey.provider == target_provider)
+    # 2. Query execution match using case-insensitive ilike wildcards
+    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike(f"%{target_provider}%"))
     if workspace_id:
         query = query.filter(UserAPIKey.workspace_id == workspace_id)
     else:
@@ -146,7 +147,7 @@ def get_key_status(
         
     key_record = query.first()
     
-    # FIXED: Returns accurate provider context tag matching your verified flat JSON responses
+    # 3. Flat clean response payload logic mapping
     if not key_record:
         return {
             "connected": False, 
@@ -164,7 +165,7 @@ def get_key_status(
         except Exception:
             masked_key = "Connected"
 
-    # Pull record dates cleanly if columns exist, otherwise fall back gracefully
+    # Extract sync timestamps safely
     last_updated = "Recent"
     if hasattr(key_record, "updated_at") and key_record.updated_at:
         last_updated = key_record.updated_at.strftime("%d %b %Y")
