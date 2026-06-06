@@ -115,78 +115,61 @@ def disconnect_provider_key(
 
 
 # ============================================
-# GET KEY CONFIGURATION STATUS METADATA (MULTI-PROVIDER)
+# GET KEY CONFIGURATION STATUS METADATA
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
+    provider: Optional[str] = "GEMINI_API_KEY", # Added to let frontend request gemini or openai dynamically
     workspace_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns safe cryptographic metadata regarding saved workspace/user keys for all active providers.
+    Returns safe cryptographic metadata regarding saved keys.
     Admins, Operators, and Viewers can all check status. Never exposes raw decrypted tokens.
     """
-    # 1. CRITICAL SECURITY GUARDRAIL: Validate active membership workspace scope
+    # Anyone can check status if they belong to the workspace
     if workspace_id:
         get_workspace_membership(db=db, user_id=current_user.id, workspace_id=workspace_id)
+        
+    from app.models.user_api_key import UserAPIKey 
     
-    # Define our target providers system keys list
-    target_providers = ["GEMINI_API_KEY", "OPENAI_API_KEY"]
+    # Check what target provider string name to look for cleanly
+    target_provider = "OPENAI_API_KEY" if "openai" in provider.lower() else "GEMINI_API_KEY"
     
-    # 2. Query all matching key records for the active context in one database pass
-    query = db.query(UserAPIKey).filter(UserAPIKey.provider.in_(target_providers))
+    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike(target_provider))
     if workspace_id:
         query = query.filter(UserAPIKey.workspace_id == workspace_id)
     else:
         query = query.filter(UserAPIKey.user_id == current_user.id)
         
-    records = query.all()
+    key_record = query.first()
     
-    # Map the database records into a lookup dictionary by their uppercase provider name
-    records_map = {r.provider.upper(): r for r in records}
-    
-    # 3. Dynamic payload generation loop for both providers
-    response_payload = {}
-    
-    for provider in target_providers:
-        key_record = records_map.get(provider)
+    if not key_record:
+        return {"connected": False, "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"}
         
-        if not key_record:
-            # If provider is not configured yet, return a clean default state
-            response_payload[provider] = {
-                "connected": False,
-                "provider": "gemini" if provider == "GEMINI_API_KEY" else "openai",
-                "masked_key": None,
-                "last_updated": None,
-                "owner_context": current_user.full_name if not workspace_id else "Workspace Managed"
-            }
-            continue
-            
-        # Safe Mask Generation for view states
-        masked_key = "Connected"
-        if not workspace_id and key_record.encrypted_api_key:
-            try:
-                raw = decrypt_api_key(key_record.encrypted_api_key)
-                if len(raw) > 10:
-                    masked_key = f"{raw[:6]}************{raw[-3:]}"
-            except Exception:
-                masked_key = "Connected"
+    # Safe Mask Generation for Personal Settings view
+    masked_key = "Connected"
+    if not workspace_id and key_record.encrypted_api_key:
+        try:
+            from app.core.crypto import decrypt_api_key
+            raw = decrypt_api_key(key_record.encrypted_api_key)
+            if len(raw) > 10:
+                masked_key = f"{raw[:6]}************{raw[-3:]}"
+        except Exception:
+            masked_key = "Connected"
 
-        # Extract timestamps cleanly
-        last_updated = "Recent"
-        if hasattr(key_record, "updated_at") and key_record.updated_at:
-            last_updated = key_record.updated_at.strftime("%d %b %Y")
-        elif hasattr(key_record, "created_at") and key_record.created_at:
-            last_updated = key_record.created_at.strftime("%d %b %Y")
-            
-        # Build payload slice
-        response_payload[provider] = {
-            "connected": True,
-            "provider": "gemini" if provider == "GEMINI_API_KEY" else "openai",
-            "masked_key": masked_key,
-            "last_updated": last_updated,
-            "owner_context": current_user.full_name if not workspace_id else "Workspace Managed"
-        }
-        
-    return response_payload
+    # Pull record dates cleanly if columns exist, otherwise fall back gracefully
+    last_updated = "Recent"
+    if hasattr(key_record, "updated_at") and key_record.updated_at:
+        last_updated = key_record.updated_at.strftime("%d %b %Y")
+    elif hasattr(key_record, "created_at") and key_record.created_at:
+        last_updated = key_record.created_at.strftime("%d %b %Y")
+
+    return {
+        "connected": True,
+        "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini",
+        "masked_key": masked_key,
+        "last_updated": last_updated,
+        "owner_context": current_user.full_name if not workspace_id else "Workspace Managed"
+    }
