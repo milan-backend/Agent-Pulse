@@ -20,11 +20,11 @@ export default function WorkspaceProvidersPage() {
   const [userRole, setUserRole] = useState<"admin" | "operator" | "viewer" | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
-  // Independent configuration states for individual card metrics lookups
-  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "" });
-  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "" });
+  // Tracks active connectivity markers and string configurations
+  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
+  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
 
-  // Input controller hooks
+  // Input controller states
   const [activeProviderForm, setActiveProviderForm] = useState<"GEMINI_API_KEY" | "OPENAI_API_KEY" | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [submittingKey, setSubmittingKey] = useState(false);
@@ -45,24 +45,23 @@ export default function WorkspaceProvidersPage() {
 
   async function syncAllStatuses(workspaceId: string) {
     try {
-      // Fetch our new unified multi-provider response payload dictionary
-      const responseData = await apiKeyApi.getKeyStatus(workspaceId);
-      
-      if (responseData) {
-        // Direct map parsing matching our secure backend keys explicitly
-        if (responseData.GEMINI_API_KEY) {
-          setGeminiStatus({
-            connected: !!responseData.GEMINI_API_KEY.connected,
-            last_updated: responseData.GEMINI_API_KEY.last_updated || ""
-          });
-        }
-        
-        if (responseData.OPENAI_API_KEY) {
-          setOpenaiStatus({
-            connected: !!responseData.OPENAI_API_KEY.connected,
-            last_updated: responseData.OPENAI_API_KEY.last_updated || ""
-          });
-        }
+      // FIXED: Queries flat endpoints tracking loops sequentially to match backend architectures
+      const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "GEMINI_API_KEY");
+      if (geminiData) {
+        setGeminiStatus({
+          connected: !!geminiData.connected,
+          last_updated: geminiData.last_updated || "Live Asset",
+          masked_key: geminiData.masked_key || "Connected"
+        });
+      }
+
+      const openaiData = await apiKeyApi.getKeyStatus(workspaceId, "OPENAI_API_KEY");
+      if (openaiData) {
+        setOpenaiStatus({
+          connected: !!openaiData.connected,
+          last_updated: openaiData.last_updated || "Live Asset",
+          masked_key: openaiData.masked_key || "Connected"
+        });
       }
     } catch (err) {
       console.error("Failed to sync structural provider data matrix:", err);
@@ -132,8 +131,8 @@ export default function WorkspaceProvidersPage() {
       await apiKeyApi.disconnectKey(providerKey, activeWorkspaceId);
       toast.success(`${providerMeta[providerKey].name} token cleared cleanly.`);
       
-      if (providerKey === "GEMINI_API_KEY") setGeminiStatus({ connected: false, last_updated: "" });
-      else setOpenaiStatus({ connected: false, last_updated: "" });
+      if (providerKey === "GEMINI_API_KEY") setGeminiStatus({ connected: false, last_updated: "", masked_key: "" });
+      else setOpenaiStatus({ connected: false, last_updated: "", masked_key: "" });
       
       await syncAllStatuses(activeWorkspaceId);
       setActiveProviderForm(null);
@@ -168,7 +167,6 @@ export default function WorkspaceProvidersPage() {
   return (
     <div className="w-full space-y-6 animate-fadeIn">
       
-      {/* MAP ARRAY DATA INTO COMPACT HORIZONTAL CELL BLOCKS */}
       <div className="space-y-4">
         
         {/* ======================================= */}
@@ -186,8 +184,12 @@ export default function WorkspaceProvidersPage() {
                   <div className="flex items-center gap-1.5">
                     Status: {geminiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {geminiStatus.connected && geminiStatus.last_updated && (
-                    <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{geminiStatus.last_updated}</span></div>
+                  {/* MODIFIED: Renders your custom masked string variables dynamically indicating active key structures */}
+                  {geminiStatus.connected && (
+                    <>
+                      <div className="text-zinc-400 font-sans font-medium bg-slate-950 px-2 py-0.5 rounded border border-slate-800/60 text-[11px]">{geminiStatus.masked_key}</div>
+                      <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{geminiStatus.last_updated}</span></div>
+                    </>
                   )}
                 </div>
               </div>
@@ -221,8 +223,12 @@ export default function WorkspaceProvidersPage() {
                   <div className="flex items-center gap-1.5">
                     Status: {openaiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {openaiStatus.connected && openaiStatus.last_updated && (
-                    <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{openaiStatus.last_updated}</span></div>
+                  {/* MODIFIED: Renders your custom masked string variables dynamically indicating active key structures */}
+                  {openaiStatus.connected && (
+                    <>
+                      <div className="text-zinc-400 font-sans font-medium bg-slate-950 px-2 py-0.5 rounded border border-slate-800/60 text-[11px]">{openaiStatus.masked_key}</div>
+                      <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{openaiStatus.last_updated}</span></div>
+                    </>
                   )}
                 </div>
               </div>

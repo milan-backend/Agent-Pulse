@@ -140,9 +140,9 @@ BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS
 export const apiKeyApi = {
   /**
    * Safe metadata lookup to discover active key status.
-   * If workspaceId context is blank/null, fetches Personal Credentials without header leakage.
+   * Upgraded signature to accept optional provider string parameters cleanly without compilation bugs.
    */
-  getKeyStatus: async (workspaceId?: string | null) => {
+  getKeyStatus: async (workspaceId?: string | null, provider: string = "GEMINI_API_KEY") => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -153,7 +153,8 @@ export const apiKeyApi = {
       headers["workspace-id"] = workspaceId;
     }
 
-    return request("/api-keys/status", {
+    // Passes provider as a clean flat query parameter matching your updated backend endpoints routing
+    return request(`/api-keys/status?provider=${encodeURIComponent(provider)}`, {
       method: "GET",
       headers,
     });

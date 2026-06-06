@@ -115,17 +115,17 @@ def disconnect_provider_key(
 
 
 # ============================================
-# GET KEY CONFIGURATION STATUS METADATA
+# GET KEY CONFIGURATION STATUS METADATA (FIXED MULTI-TENANT)
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
-    provider: Optional[str] = "GEMINI_API_KEY", # Added to let frontend request gemini or openai dynamically
+    provider: Optional[str] = "GEMINI_API_KEY", # Added to pull context dynamically without breaking single schemas
     workspace_id: Optional[str] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns safe cryptographic metadata regarding saved keys.
+    Returns safe cryptographic metadata regarding saved keys matching active provider queries.
     Admins, Operators, and Viewers can all check status. Never exposes raw decrypted tokens.
     """
     # Anyone can check status if they belong to the workspace
@@ -134,10 +134,11 @@ def get_key_status(
         
     from app.models.user_api_key import UserAPIKey 
     
-    # Check what target provider string name to look for cleanly
-    target_provider = "OPENAI_API_KEY" if "openai" in provider.lower() else "GEMINI_API_KEY"
+    # Map the targeted string input smoothly to ensure robust database match checks
+    provider_clean = str(provider).strip().upper()
+    target_provider = "OPENAI_API_KEY" if "OPENAI" in provider_clean else "GEMINI_API_KEY"
     
-    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike(target_provider))
+    query = db.query(UserAPIKey).filter(UserAPIKey.provider == target_provider)
     if workspace_id:
         query = query.filter(UserAPIKey.workspace_id == workspace_id)
     else:
@@ -145,8 +146,12 @@ def get_key_status(
         
     key_record = query.first()
     
+    # FIXED: Returns accurate provider context tag matching your verified flat JSON responses
     if not key_record:
-        return {"connected": False, "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"}
+        return {
+            "connected": False, 
+            "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"
+        }
         
     # Safe Mask Generation for Personal Settings view
     masked_key = "Connected"
