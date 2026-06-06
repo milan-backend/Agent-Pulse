@@ -48,8 +48,10 @@ export default function WorkspaceMembersPage() {
         setCurrentUserEmail(me.email);
       } catch (err) {
         console.error(err);
-      } relative: 
-      await loadMembers();
+      } finally {
+        //  FIXED: Clean execution pathway block
+        await loadMembers();
+      }
     }
     initializePageContext();
   }, [currentUserEmail]);

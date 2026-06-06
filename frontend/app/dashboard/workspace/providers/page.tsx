@@ -20,11 +20,11 @@ export default function WorkspaceProvidersPage() {
   const [userRole, setUserRole] = useState<"admin" | "operator" | "viewer" | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
-  // Separate states to track Gemini vs OpenAI configuration logs independently
+  // Independent configuration states for individual card metrics lookups
   const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "" });
   const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "" });
 
-  // Input states tracking console panels
+  // Input controller hooks
   const [activeProviderForm, setActiveProviderForm] = useState<"GEMINI_API_KEY" | "OPENAI_API_KEY" | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [submittingKey, setSubmittingKey] = useState(false);
@@ -43,33 +43,25 @@ export default function WorkspaceProvidersPage() {
     }
   };
 
-  // Parses your backend flat JSON response structures
-  function parseProviderStatus(response: any, targetKey: string) {
-    if (!response) return { connected: false, last_updated: "" };
-    
-    const prov = response.provider?.toUpperCase();
-    if (prov === targetKey) {
-      return {
-        connected: !!response.connected,
-        last_updated: response.last_updated || "Live Asset"
-      };
-    }
-    return { connected: false, last_updated: "" };
-  }
-
   async function syncAllStatuses(workspaceId: string) {
     try {
-      // Fetch statuses matching backend tracking endpoints layout loops
-      const rawData = await apiKeyApi.getKeyStatus(workspaceId);
+      // Fetch our new unified multi-provider response payload dictionary
+      const responseData = await apiKeyApi.getKeyStatus(workspaceId);
       
-      // Since status returns one provider context structure at a time based on lookup,
-      // we check what the active environment has stored.
-      if (rawData && rawData.provider) {
-        const provName = rawData.provider.toUpperCase();
-        if (provName === "GEMINI_API_KEY" || provName === "GEMINI") {
-          setGeminiStatus({ connected: !!rawData.connected, last_updated: rawData.last_updated || "Live" });
-        } else if (provName === "OPENAI_API_KEY" || provName === "OPENAI") {
-          setOpenaiStatus({ connected: !!rawData.connected, last_updated: rawData.last_updated || "Live" });
+      if (responseData) {
+        // Direct map parsing matching our secure backend keys explicitly
+        if (responseData.GEMINI_API_KEY) {
+          setGeminiStatus({
+            connected: !!responseData.GEMINI_API_KEY.connected,
+            last_updated: responseData.GEMINI_API_KEY.last_updated || ""
+          });
+        }
+        
+        if (responseData.OPENAI_API_KEY) {
+          setOpenaiStatus({
+            connected: !!responseData.OPENAI_API_KEY.connected,
+            last_updated: responseData.OPENAI_API_KEY.last_updated || ""
+          });
         }
       }
     } catch (err) {
@@ -105,7 +97,7 @@ export default function WorkspaceProvidersPage() {
         }
       } catch (err) {
         console.error(err);
-      } relative: {
+      } finally {
         setLoading(false);
       }
     }
@@ -194,7 +186,7 @@ export default function WorkspaceProvidersPage() {
                   <div className="flex items-center gap-1.5">
                     Status: {geminiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {geminiStatus.connected && (
+                  {geminiStatus.connected && geminiStatus.last_updated && (
                     <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{geminiStatus.last_updated}</span></div>
                   )}
                 </div>
@@ -204,11 +196,11 @@ export default function WorkspaceProvidersPage() {
               <a href={providerMeta.GEMINI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
               {geminiStatus.connected ? (
                 <>
-                  <button onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
-                  <button onClick={() => handleDisconnectWorkspaceKey("GEMINI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
+                  <button type="button" onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
+                  <button type="button" onClick={() => handleDisconnectWorkspaceKey("GEMINI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
                 </>
               ) : (
-                <button onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
+                <button type="button" onClick={() => { setActiveProviderForm("GEMINI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
               )}
             </div>
           </div>
@@ -229,7 +221,7 @@ export default function WorkspaceProvidersPage() {
                   <div className="flex items-center gap-1.5">
                     Status: {openaiStatus.connected ? <span className="text-green-400 font-bold">CONNECTED</span> : <span className="text-zinc-500">NOT CONFIGURED</span>}
                   </div>
-                  {openaiStatus.connected && (
+                  {openaiStatus.connected && openaiStatus.last_updated && (
                     <div className="flex items-center gap-1 text-zinc-400"><Calendar size={12} /> Synced: <span className="text-zinc-300">{openaiStatus.last_updated}</span></div>
                   )}
                 </div>
@@ -239,11 +231,11 @@ export default function WorkspaceProvidersPage() {
               <a href={providerMeta.OPENAI_API_KEY.link} target="_blank" rel="noreferrer" className="px-3.5 h-10 rounded-xl border border-slate-800 bg-zinc-950 hover:bg-slate-900 text-zinc-400 flex items-center gap-1.5 font-bold transition-colors"><ExternalLink size={12} /></a>
               {openaiStatus.connected ? (
                 <>
-                  <button onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
-                  <button onClick={() => handleDisconnectWorkspaceKey("OPENAI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
+                  <button type="button" onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-4 h-10 rounded-xl bg-zinc-800 text-zinc-200 font-bold hover:bg-zinc-700 transition-colors">Update</button>
+                  <button type="button" onClick={() => handleDisconnectWorkspaceKey("OPENAI_API_KEY")} className="px-4 h-10 rounded-xl border border-red-500/20 bg-red-500/10 text-red-300 font-bold hover:bg-red-500/20 transition-colors">Remove</button>
                 </>
               ) : (
-                <button onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
+                <button type="button" onClick={() => { setActiveProviderForm("OPENAI_API_KEY"); setInputKey(""); }} className="px-5 h-10 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-bold rounded-xl transition-all">Connect Provider</button>
               )}
             </div>
           </div>
@@ -289,7 +281,7 @@ export default function WorkspaceProvidersPage() {
             >
               Cancel
             </button>
-            </div>
+          </div>
         </form>
       )}
 
