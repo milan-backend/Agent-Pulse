@@ -8,15 +8,15 @@ from uuid import UUID
 from app.services.user_api_key_service import UserAPIKeyService
 
 # ============================================
-# MULTI-PROVIDER LLM RESPONSE GENERATOR
+# MULTI-PROVIDER LLM RESPONSE GENERATOR (FIXED)
 # ============================================
 
 def generate_llm_response(
-    prompt: str,                            # Kept as first parameter for full backward compatibility
-    db: Optional[Session] = None,           # Optional fallback context
-    user_id: Optional[UUID] = None,         # Optional fallback context
-    workspace_id: Optional[UUID] = None,    # Optional fallback context
-    model_name: str = "gemini"              # New parameter: defaults to gemini to prevent breaking current code
+    prompt: str,                             # Kept as first parameter for full backward compatibility
+    db: Optional[Session] = None,            # Optional fallback context
+    user_id: Optional[any] = None,           # Flex-type validation compatibility override
+    workspace_id: Optional[any] = None,      # Flex-type validation compatibility override
+    model_name: str = "gemini"               # New parameter: defaults to gemini to prevent breaking current code
 ):
     if not prompt or not str(prompt).strip():
         return "No prompt provided. Generation skipped."
@@ -24,6 +24,21 @@ def generate_llm_response(
     # Standardize our provider router flags
     model_lower = str(model_name).lower()
     is_openai = any(x in model_lower for x in ["gpt", "openai"])
+
+    # Safe data parsing type transformations before running DB queries
+    clean_user_id = user_id
+    if user_id and isinstance(user_id, str):
+        try:
+            clean_user_id = UUID(user_id.strip())
+        except ValueError:
+            pass
+
+    clean_workspace_id = workspace_id
+    if workspace_id and isinstance(workspace_id, str):
+        try:
+            clean_workspace_id = UUID(workspace_id.strip())
+        except ValueError:
+            pass
 
     try:
         active_key = None
@@ -36,9 +51,9 @@ def generate_llm_response(
             if db:
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
-                    provider="OPENAI_API_KEY", # Passing exact key matching your backend convention
-                    user_id=user_id,
-                    workspace_id=workspace_id
+                    provider="OPENAI_API_KEY", 
+                    user_id=clean_user_id,
+                    workspace_id=clean_workspace_id
                 )
 
             # 2. Infrastructure Fallback: System environment backup
@@ -70,9 +85,9 @@ def generate_llm_response(
             if db:
                 active_key = UserAPIKeyService.fetch_decrypted_key(
                     db=db,
-                    provider="GEMINI_API_KEY", # Aligned with your status/connect backend string updates
-                    user_id=user_id,
-                    workspace_id=workspace_id
+                    provider="GEMINI_API_KEY", 
+                    user_id=clean_user_id,
+                    workspace_id=clean_workspace_id
                 )
 
             # 2. Infrastructure Fallback: System environment backup
