@@ -145,20 +145,22 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # --- DYNAMIC RESOLUTION FIX ---
+            # --- DYNAMIC RESOLUTION FIX (SAFE STRING EXTRACTION) ---
+            # Extract raw string parameters safely to prevent SQLAlchemy session detachment errors
+            current_workspace_id = str(step.workspace_id).strip() if step.workspace_id else None
             agent_model = getattr(agent, "model_name", None)
             
             if agent_model and str(agent_model).strip():
                 active_model_target = str(agent_model).strip()
-            else:
-                # Agent has no model string assigned yet; look up workspace database key bounds
+            elif current_workspace_id:
+                # Query using the verified raw workspace string variable
                 has_openai = db.query(UserAPIKey).filter(
-                    UserAPIKey.workspace_id == step.workspace_id,
+                    UserAPIKey.workspace_id == current_workspace_id,
                     UserAPIKey.provider.ilike("%OPENAI%")
                 ).first()
                 
                 has_gemini = db.query(UserAPIKey).filter(
-                    UserAPIKey.workspace_id == step.workspace_id,
+                    UserAPIKey.workspace_id == current_workspace_id,
                     UserAPIKey.provider.ilike("%GEMINI%")
                 ).first()
 
@@ -167,8 +169,19 @@ def process_step(self, step_id: str):
                 elif has_gemini:
                     active_model_target = "gemini-2.5-flash-lite"
                 else:
-                    # FIXED ERROR MESSAGE: Mentions both structural system providers cleanly instead of a fallback string leak
                     raise ValueError("No valid API credentials found. Please connect an active OpenAI or Google Gemini key in your Workspace Settings.")
+            else:
+                # Fallback to current user context lookup if no workspace ID is attached
+                current_user_id = agent.user_id if hasattr(agent, 'user_id') else None
+                has_personal_openai = db.query(UserAPIKey).filter(
+                    UserAPIKey.user_id == current_user_id,
+                    UserAPIKey.provider.ilike("%OPENAI%")
+                ).first() if current_user_id else None
+
+                if has_personal_openai:
+                    active_model_target = "gpt-4o-mini"
+                else:
+                    active_model_target = "gemini-2.5-flash-lite"
 
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"
@@ -183,7 +196,7 @@ def process_step(self, step_id: str):
                     prompt=prompt,
                     db=db,
                     user_id=agent.user_id if hasattr(agent, 'user_id') else None,
-                    workspace_id=step.workspace_id,
+                    workspace_id=current_workspace_id,
                     model_name=active_model_target
                 )
                 
@@ -297,7 +310,7 @@ def process_step(self, step_id: str):
         # =========================================
         create_usage_event(
             db=db,
-            workspace_id=step.workspace_id,
+            workspace_id=current_workspace_id,
             agent_id=step.agent_id,
             step_id=step.id,
             event_type="execution_completed",
