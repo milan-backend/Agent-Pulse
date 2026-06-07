@@ -23,18 +23,19 @@ export default function AgentProviderPage() {
   const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState("Agent");
 
-  // Private cryptographic track arrays matching individual sandbox contexts
-  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
-  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "", masked_key: "" });
+  // Private cryptographic track arrays matching individual sandbox contexts (UPDATED)
+  const [geminiStatus, setGeminiStatus] = useState({ connected: false, last_updated: "", masked_key: "", is_default: false, model_version: "" });
+  const [openaiStatus, setOpenaiStatus] = useState({ connected: false, last_updated: "", masked_key: "", is_default: false, model_version: "" });
 
   // Dropdown option tracking loops
   const [selectedGeminiModel, setSelectedGeminiModel] = useState("gemini-2.5-flash-lite");
   const [selectedOpenAIModel, setSelectedOpenAIModel] = useState("gpt-4o-mini");
 
-  // Form toggles
+  // Form toggles & Loading Indicators
   const [activeProviderForm, setActiveProviderForm] = useState<"gemini" | "openai" | null>(null);
   const [inputKey, setInputKey] = useState("");
   const [submittingKey, setSubmittingKey] = useState(false);
+  const [togglingDefault, setTogglingDefault] = useState(false);
   const [hideTokenInput, setHideTokenInput] = useState(true);
 
   const providerMeta = {
@@ -57,26 +58,30 @@ export default function AgentProviderPage() {
     const workspaceId = localStorage.getItem("workspace_id");
 
     try {
-      // 1. Check Gemini Status bound to this explicit agent context (FIXED: Passed workspaceId instead of null)
+      // 1. Check Gemini Status bound to this explicit agent context
       const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "gemini", agentId);
       if (geminiData) {
         setGeminiStatus({
           connected: !!geminiData.connected,
           last_updated: geminiData.last_updated || "Live Override",
-          masked_key: geminiData.masked_key || "Overridden Context"
+          masked_key: geminiData.masked_key || "Overridden Context",
+          is_default: !!geminiData.is_default,
+          model_version: geminiData.model_version || "gemini-2.5-flash-lite"
         });
         if (geminiData.model_version) {
           setSelectedGeminiModel(geminiData.model_version);
         }
       }
 
-      // 2. Check OpenAI Status bound to this explicit agent context (FIXED: Passed workspaceId instead of null)
+      // 2. Check OpenAI Status bound to this explicit agent context
       const openaiData = await apiKeyApi.getKeyStatus(workspaceId, "openai", agentId);
       if (openaiData) {
         setOpenaiStatus({
           connected: !!openaiData.connected,
           last_updated: openaiData.last_updated || "Live Override",
-          masked_key: openaiData.masked_key || "Overridden Context"
+          masked_key: openaiData.masked_key || "Overridden Context",
+          is_default: !!openaiData.is_default,
+          model_version: openaiData.model_version || "gpt-4o-mini"
         });
         if (openaiData.model_version) {
           setSelectedOpenAIModel(openaiData.model_version);
@@ -145,8 +150,8 @@ export default function AgentProviderPage() {
       await apiKeyApi.disconnectKey(providerKey, workspaceId, agentId, chosenModel);
       toast.success(`Private ${providerMeta[providerKey].name} mapping deleted. Reverted to shared workspace assets.`);
       
-      if (providerKey === "gemini") setGeminiStatus({ connected: false, last_updated: "", masked_key: "" });
-      else setOpenaiStatus({ connected: false, last_updated: "", masked_key: "" });
+      if (providerKey === "gemini") setGeminiStatus({ connected: false, last_updated: "", masked_key: "", is_default: false, model_version: "" });
+      else setOpenaiStatus({ connected: false, last_updated: "", masked_key: "", is_default: false, model_version: "" });
       
       await syncAgentStatuses();
       setActiveProviderForm(null);
@@ -154,6 +159,24 @@ export default function AgentProviderPage() {
       toast.error(err.message || "Failed to drop custom target row mapping.");
     } finally {
       setSubmittingKey(false);
+    }
+  }
+
+  async function handleSetDefaultAgentProvider(providerKey: "gemini" | "openai") {
+    if (!agentId) return;
+    const workspaceId = localStorage.getItem("workspace_id");
+    const targetModelVersion = providerKey === "gemini" ? selectedGeminiModel : selectedOpenAIModel;
+
+    try {
+      setTogglingDefault(true);
+      // Passes agentId parameter at the end to scope default activation to this single agent asset!
+      await apiKeyApi.setDefaultProvider(providerKey, workspaceId, targetModelVersion, agentId);
+      toast.success(`${providerMeta[providerKey].name} activated as the default pipeline choice for this agent.`);
+      await syncAgentStatuses();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to shift default provider tracking state.");
+    } finally {
+      setTogglingDefault(false);
     }
   }
 
@@ -207,14 +230,19 @@ export default function AgentProviderPage() {
       <div className="grid gap-8 lg:grid-cols-2">
         
         {/* plate 1: GOOGLE GEMINI SANDBOX OVERRIDE */}
-        <div className={`rounded-3xl border p-8 transition-all duration-300 bg-[#09131f] ${geminiStatus.connected ? 'border-green-500/20 ring-1 ring-green-500/5' : 'border-cyan-500/30'}`}>
+        <div className={`rounded-3xl border p-8 transition-all duration-300 bg-[#09131f] ${geminiStatus.connected && geminiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-cyan-500/30'}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-300 shrink-0">
                 <KeyRound size={24} />
               </div>
               <div className="space-y-1.5">
-                <h3 className="text-3xl font-black text-white">Google Gemini</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-3xl font-black text-white">Google Gemini</h3>
+                  {geminiStatus.connected && geminiStatus.is_default && (
+                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-gray-500">
                   <div>Override Status: {geminiStatus.connected ? <span className="text-green-400 font-bold">ACTIVE OVERRIDE</span> : <span className="text-gray-500">INHERITING WORKSPACE</span>}</div>
                 </div>
@@ -245,6 +273,20 @@ export default function AgentProviderPage() {
           </div>
 
           <div className="mt-6 flex gap-3 font-sans text-xs font-bold">
+            {geminiStatus.connected && (
+              <button
+                type="button"
+                disabled={togglingDefault}
+                onClick={() => handleSetDefaultAgentProvider("gemini")}
+                className={`px-4 h-12 rounded-xl font-bold transition-all border ${
+                  geminiStatus.is_default
+                    ? "bg-green-500/10 border-green-500/30 text-green-400 cursor-default"
+                    : "border-slate-800 bg-slate-900 text-zinc-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {geminiStatus.is_default ? "✓ Default Active" : "Set as Default"}
+              </button>
+            )}
             <button 
               type="button" 
               onClick={() => { setActiveProviderForm("gemini"); setInputKey(""); }} 
@@ -265,14 +307,19 @@ export default function AgentProviderPage() {
         </div>
 
         {/* plate 2: OPENAI CORE SANDBOX OVERRIDE */}
-        <div className={`rounded-3xl border p-8 transition-all duration-300 bg-[#09131f] ${openaiStatus.connected ? 'border-green-500/20 ring-1 ring-green-500/5' : 'border-cyan-500/30'}`}>
+        <div className={`rounded-3xl border p-8 transition-all duration-300 bg-[#09131f] ${openaiStatus.connected && openaiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-cyan-500/30'}`}>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               <div className="h-14 w-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
                 <Cpu size={24} />
               </div>
               <div className="space-y-1.5">
-                <h3 className="text-3xl font-black text-white">OpenAI Engine</h3>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-3xl font-black text-white">OpenAI Engine</h3>
+                  {openaiStatus.connected && openaiStatus.is_default && (
+                    <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-x-4 text-xs font-mono text-gray-500">
                   <div>Override Status: {openaiStatus.connected ? <span className="text-green-400 font-bold">ACTIVE OVERRIDE</span> : <span className="text-gray-500">INHERITING WORKSPACE</span>}</div>
                 </div>
@@ -303,6 +350,20 @@ export default function AgentProviderPage() {
           </div>
 
           <div className="mt-6 flex gap-3 font-sans text-xs font-bold">
+            {openaiStatus.connected && (
+              <button
+                type="button"
+                disabled={togglingDefault}
+                onClick={() => handleSetDefaultAgentProvider("openai")}
+                className={`px-4 h-12 rounded-xl font-bold transition-all border ${
+                  openaiStatus.is_default
+                    ? "bg-green-500/10 border-green-500/30 text-green-400 cursor-default"
+                    : "border-slate-800 bg-slate-900 text-zinc-300 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                {openaiStatus.is_default ? "✓ Default Active" : "Set as Default"}
+              </button>
+            )}
             <button 
               type="button" 
               onClick={() => { setActiveProviderForm("openai"); setInputKey(""); }} 
