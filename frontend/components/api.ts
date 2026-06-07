@@ -159,7 +159,7 @@ export const apiKeyApi = {
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
     // FIXED: Corrected router path prefix to match your FastAPI endpoints backend string mapping
-    return request(`/api/user_api_key/status?${queryParams.toString()}`, {
+    return request(`/api-keys/status?${queryParams.toString()}`, {
       method: "GET",
       headers,
     });
@@ -190,7 +190,7 @@ export const apiKeyApi = {
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
 
     const queryString = queryParams.toString();
-    const endpoint = `/api/user_api_key/connect${queryString ? `?${queryString}` : ""}`;
+    const endpoint = `/api-keys/connect${queryString ? `?${queryString}` : ""}`;
 
     return request(endpoint, {
       method: "POST",
@@ -227,7 +227,7 @@ export const apiKeyApi = {
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
-    return request(`/api/user_api_key/disconnect?${queryParams.toString()}`, {
+    return request(`/api-key/disconnect?${queryParams.toString()}`, {
       method: "DELETE",
       headers,
     });
@@ -257,7 +257,7 @@ export const apiKeyApi = {
     if (modelVersion) queryParams.append("model_version", modelVersion);
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
 
-    return request(`/api/user_api_key/set-default?${queryParams.toString()}`, {
+    return request(`/api-key/set-default?${queryParams.toString()}`, {
       method: "PATCH",
       headers,
     });
