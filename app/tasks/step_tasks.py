@@ -6,7 +6,7 @@ from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
 from app.models.agent_policy import AgentPolicy
-from app.models.user_api_key import UserAPIKey  # Imported safely for multi-tier routing
+from app.models.user_api_key import UserAPIKey  # Imported safely for hierarchical routing
 
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
@@ -26,16 +26,29 @@ def process_step(self, step_id: str):
                 "message": "Step not found"
             }
 
+        # STRICT BOUNDARY CHECK: Ensure workspace_id exists on the step right away
+        if not step.workspace_id:
+            step.status = "failed"
+            step.error_message = "Security Violation: Workspace context missing from step execution parameters"
+            db.commit()
+            return {
+                "status": "failed",
+                "message": "Mandatory Workspace Context validation missing"
+            }
+
+        current_workspace_id = str(step.workspace_id).strip()
+
         # =========================================
         # GET AGENT
         # =========================================
         agent = db.query(Agent).filter(
-            Agent.id == step.agent_id
+            Agent.id == step.agent_id,
+            Agent.workspace_id == current_workspace_id  # Enforces cross-workspace isolation protection
         ).first()
 
         if not agent:
             step.status = "failed"
-            step.error_message = "Agent not found"
+            step.error_message = "Agent not found within this workspace scope"
             db.commit()
             return {
                 "status": "failed",
@@ -136,7 +149,7 @@ def process_step(self, step_id: str):
             }
 
         # =========================================
-        # REAL MULTI-PROVIDER AI EXECUTION
+        # REAL AI EXECUTION
         # =========================================
         try:
             prompt = ""
@@ -145,103 +158,6 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # --- DYNAMIC 3-TIER ROUTING RESOLUTION PIPELINE ---
-            current_workspace_id = str(step.workspace_id).strip() if step.workspace_id else None
-            agent_id_raw = agent.id if agent else None
-            agent_model = getattr(agent, "model_name", None)
-            
-            active_model_target = None
-
-            # -----------------------------------------------------------------
-            # TIER 1: Check for explicit Private Agent-Specific API Credentials
-            # -----------------------------------------------------------------
-            if agent_id_raw:
-                agent_specific_key = db.query(UserAPIKey).filter(
-                    UserAPIKey.agent_id == agent_id_raw
-                ).first()
-                if agent_specific_key and agent_specific_key.model_version:
-                    active_model_target = str(agent_specific_key.model_version).strip()
-
-            # -----------------------------------------------------------------
-            # TIER 2: Fallback to Tenant Workspace Level Configurations
-            # -----------------------------------------------------------------
-            if not active_model_target:
-                if agent_model and str(agent_model).strip():
-                    active_model_target = str(agent_model).strip()
-                elif current_workspace_id:
-                    # 1. Primary Check: Look up key marked default via active UI button state
-                    default_key = db.query(UserAPIKey).filter(
-                        UserAPIKey.workspace_id == current_workspace_id,
-                        UserAPIKey.is_default == True,
-                        UserAPIKey.agent_id == None
-                    ).first()
-
-                    if default_key:
-                        # Grab chosen version completely dynamically from your saved column row!
-                        active_model_target = default_key.model_version if default_key.model_version else (
-                            "gpt-4o-mini" if "OPENAI" in default_key.provider.upper() else "gemini-2.5-flash-lite"
-                        )
-                    else:
-                        # 2. Secondary Fallback Check: Use older sequential detection if no button is selected
-                        has_openai = db.query(UserAPIKey).filter(
-                            UserAPIKey.workspace_id == current_workspace_id,
-                            UserAPIKey.provider.ilike("%OPENAI%"),
-                            UserAPIKey.agent_id == None
-                        ).first()
-                        
-                        has_gemini = db.query(UserAPIKey).filter(
-                            UserAPIKey.workspace_id == current_workspace_id,
-                            UserAPIKey.provider.ilike("%GEMINI%"),
-                            UserAPIKey.agent_id == None
-                        ).first()
-
-                        if has_openai:
-                            active_model_target = has_openai.model_version or "gpt-4o-mini"
-                        elif has_gemini:
-                            active_model_target = has_gemini.model_version or "gemini-2.5-flash-lite"
-
-                # 3. Flat personal context layer fallback if workspace elements are empty
-                if not active_model_target:
-                    current_user_id = agent.user_id if hasattr(agent, 'user_id') else None
-                    default_personal_key = db.query(UserAPIKey).filter(
-                        UserAPIKey.user_id == current_user_id,
-                        UserAPIKey.is_default == True,
-                        UserAPIKey.agent_id == None,
-                        UserAPIKey.workspace_id == None
-                    ).first() if current_user_id else None
-
-                    if default_personal_key:
-                        active_model_target = default_personal_key.model_version or (
-                            "gpt-4o-mini" if "OPENAI" in default_personal_key.provider.upper() else "gemini-2.5-flash-lite"
-                        )
-                    else:
-                        has_personal_openai = db.query(UserAPIKey).filter(
-                            UserAPIKey.user_id == current_user_id,
-                            UserAPIKey.provider.ilike("%OPENAI%"),
-                            UserAPIKey.agent_id == None,
-                            UserAPIKey.workspace_id == None
-                        ).first() if current_user_id else None
-
-                        if has_personal_openai:
-                            active_model_target = has_personal_openai.model_version or "gpt-4o-mini"
-                        else:
-                            has_personal_gemini = db.query(UserAPIKey).filter(
-                                UserAPIKey.user_id == current_user_id,
-                                UserAPIKey.provider.ilike("%GEMINI%"),
-                                UserAPIKey.agent_id == None,
-                                UserAPIKey.workspace_id == None
-                            ).first() if current_user_id else None
-                            if has_personal_gemini:
-                                active_model_target = has_personal_gemini.model_version or "gemini-2.5-flash-lite"
-
-            # -----------------------------------------------------------------
-            # TIER 3: Absolute Last Resort Server Testing Variables Fallback
-            # -----------------------------------------------------------------
-            if not active_model_target:
-                # If there are zero keys found across the tables, safely use testing targets
-                active_model_target = "gemini-2.5-flash-lite"
-
-            # Execute response collection loops
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"
                 completion_usage = {
@@ -250,20 +166,60 @@ def process_step(self, step_id: str):
                     "total_tokens": 0,
                     "cost": 0.0
                 }
+                active_model_target = "gemini-2.5-flash-lite"
             else:
+                # --- DYNAMIC STRUCTURAL MODEL TARGET RESOLUTION ---
+                agent_id_raw = agent.id if agent else None
+                agent_model = getattr(agent, "model_name", None)
+                active_model_target = None
+
+                # 1. Check for custom Agent-specific Dropdown Setup
+                if agent_id_raw:
+                    agent_specific_key = db.query(UserAPIKey).filter(
+                        UserAPIKey.agent_id == agent_id_raw,
+                        UserAPIKey.workspace_id == current_workspace_id
+                    ).first()
+                    if agent_specific_key and agent_specific_key.model_version:
+                        active_model_target = str(agent_specific_key.model_version).strip()
+
+                # 2. Fallback to General Agent Row Metadata Choice
+                if not active_model_target and agent_model and str(agent_model).strip():
+                    active_model_target = str(agent_model).strip()
+
+                # 3. Fallback to Workspace Level Settings (Read directly from your user-configured column row)
+                if not active_model_target:
+                    default_key = db.query(UserAPIKey).filter(
+                        UserAPIKey.workspace_id == current_workspace_id,
+                        UserAPIKey.is_default == True,
+                        UserAPIKey.agent_id == None
+                    ).first()
+
+                    if default_key and default_key.model_version:
+                        active_model_target = default_key.model_version
+                    else:
+                        # Fallback directly to the last configured key model version for this workspace
+                        any_workspace_key = db.query(UserAPIKey).filter(
+                            UserAPIKey.workspace_id == current_workspace_id,
+                            UserAPIKey.agent_id == None
+                        ).order_by(UserAPIKey.updated_at.desc()).first()
+                        
+                        if any_workspace_key and any_workspace_key.model_version:
+                            active_model_target = any_workspace_key.model_version
+
+                # Run Handshake via the updated hierarchical engine layer 
+                # (If active_model_target is None here, llm_service will dynamically resolve it via environment variables)
                 output = generate_llm_response(
                     prompt=prompt,
                     db=db,
-                    user_id=agent.user_id if hasattr(agent, 'user_id') else None,
                     workspace_id=current_workspace_id,
-                    agent_id=agent_id_raw,  # Passed cleanly to match Tier 1 keys inside services layer
+                    agent_id=agent_id_raw,
                     model_name=active_model_target
                 )
                 
                 completion_usage = calculate_usage(
                    prompt=prompt,
                    completion=output,
-                   model_name=active_model_target
+                   model_name=active_model_target if active_model_target else "gemini-2.5-flash-lite"
                 )
 
         except Exception as llm_error:
@@ -280,11 +236,13 @@ def process_step(self, step_id: str):
             max_allowed_retries = policy.max_retries if policy else 0
 
             if policy and policy.enable_retry_control and current_retries < max_allowed_retries:
+                # Increment the database tracking counter attribute safely
                 step.retry_count = current_retries + 1
                 step.status = "pending"
                 step.error_message = f"Execution failed, attempting automatic retry ({step.retry_count}/{max_allowed_retries}): {error_message}"
                 db.commit()
 
+                # Re-queue the exact same task instance step execution wrapper block smoothly
                 process_step.delay(str(step.id))
                 
                 return {
@@ -292,7 +250,7 @@ def process_step(self, step_id: str):
                     "message": f"Step execution failed. Automatic retry tracking re-queued background loop."
                 }
 
-            # 3. Permanent failure state mapping
+            # 3. If retries are disabled or exhausted, permanently fail the tracking node gracefully
             step.status = "failed"
             step.error_message = f"LLM execution failed and retries exhausted: {error_message}"
             step.output_data = {
@@ -366,7 +324,7 @@ def process_step(self, step_id: str):
         agent.total_cost = float((agent.total_cost or 0.0) + completion_usage.get("cost", 0.0))
 
         # =========================================
-        # CREATE USAGE EVENT (DYNAMIC MODEL RECORDING)
+        # CREATE USAGE EVENT
         # =========================================
         create_usage_event(
             db=db,
@@ -375,14 +333,14 @@ def process_step(self, step_id: str):
             step_id=step.id,
             event_type="execution_completed",
             status="completed",
-            model_used=active_model_target,
+            model_used=active_model_target if active_model_target else "environment-default",
             cost=float(completion_usage.get("cost", 0.0)),
             prompt_tokens=int(completion_usage.get("prompt_tokens", 0)),
             completion_tokens=int(completion_usage.get("completion_tokens", 0))
         )
 
         # =========================================
-        # SUCCESS (UPDATED WITH AUTOMATIC ERROR WIPEOUT)
+        # SUCCESS
         # =========================================
         result = {
             "success": True,
@@ -392,7 +350,7 @@ def process_step(self, step_id: str):
 
         step.output_data = result
         step.status = "completed"
-        step.error_message = None  # Cleans up any old retry errors perfectly on final success!
+        step.error_message = None  
         step.completed_at = datetime.utcnow()
         db.commit()
 

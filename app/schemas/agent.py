@@ -6,14 +6,9 @@ from app.db.enums import AgentStatus
 class AgentCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
-    
-    # Optional fields for setting up an API provider immediately during agent creation
-    api_provider: Optional[str] = None     # 'openai', 'gemini'
-    agent_api_key: Optional[str] = None    # Raw API Key token
-    model_version: Optional[str] = None    # E.g., 'gpt-4o', 'gemini-1.5-pro'
 
 
-# Keep this strictly focused on policy limits, exactly how it should be!
+# Focused completely on active running constraints and loop policy controls
 class AgentPolicyUpdateRequest(BaseModel):
     max_steps: Optional[int] = None
     max_retries: Optional[int] = None
@@ -21,13 +16,10 @@ class AgentPolicyUpdateRequest(BaseModel):
     max_repeated_tasks: Optional[int] = None
 
 
-# Add a dedicated agent update class to handle settings and task connection overrides cleanly
+# Clean schema for basic agent metadata updates
 class AgentUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    api_provider: Optional[str] = None     # 'openai', 'gemini'
-    agent_api_key: Optional[str] = None    # Raw API Key token
-    model_version: Optional[str] = None    # E.g., 'gpt-4o', 'gemini-1.5-pro'
 
 
 class AgentResponse(BaseModel):

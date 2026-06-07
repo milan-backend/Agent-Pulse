@@ -16,10 +16,6 @@ class UserAPIKeyCreate(BaseModel):
         None, 
         description="The specific version string selected from the dropdown, e.g., 'gpt-4o', 'gemini-2.5-pro'"
     )
-    agent_id: Optional[UUID] = Field(
-        None, 
-        description="Optional specific agent ID to bind this key exclusively to an individual agent"
-    )
 
 
 class UserAPIKeyResponse(BaseModel):

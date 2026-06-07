@@ -6,10 +6,7 @@ import {
   ChevronRight, 
   Plus, 
   Copy, 
-  X,
-  Sliders,
-  ChevronDown,
-  ChevronUp
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { createAgent, getDashboardAgents } from "@/components/api";
@@ -29,25 +26,9 @@ export default function AgentsPage() {
   const [newAgentName, setNewAgentName] = useState("");
   const [role, setRole] = useState("");
 
-  // New states to handle multi-tier provider key generation immediately on create
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [apiProvider, setApiProvider] = useState<"gemini" | "openai">("gemini");
-  const [agentApiKey, setAgentApiKey] = useState("");
-  const [modelVersion, setModelVersion] = useState("gemini-2.5-flash-lite");
-
-  const modelOptions = {
-    gemini: ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-pro"],
-    openai: ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "o1-mini"]
-  };
-
   useEffect(() => {
     fetchAgents();
   }, []);
-
-  // Sync state model variants when provider selection is toggled
-  useEffect(() => {
-    setModelVersion(modelOptions[apiProvider][0]);
-  }, [apiProvider]);
 
   async function fetchAgents() {
     try {
@@ -70,13 +51,6 @@ export default function AgentsPage() {
         name: agentName
       };
 
-      // Only pass integration tokens if the user expanded advanced mode and input values
-      if (showAdvanced && agentApiKey.trim()) {
-        payload.api_provider = apiProvider;
-        payload.agent_api_key = agentApiKey.trim();
-        payload.model_version = modelVersion;
-      }
-
       const data = await createAgent(payload);
 
       setNewApiKey(data?.api_key || "");
@@ -86,9 +60,6 @@ export default function AgentsPage() {
       
       // Reset variables cleanly
       setAgentName("");
-      setAgentApiKey("");
-      setShowAdvanced(false);
-      setApiProvider("gemini");
 
       fetchAgents();
     } catch (error: any) {
@@ -181,8 +152,6 @@ export default function AgentsPage() {
                   setNewApiKey("");
                   setNewAgentName("");
                   setAgentName("");
-                  setAgentApiKey("");
-                  setShowAdvanced(false);
                 }}
                 className="rounded-xl border border-white/10 p-2 text-zinc-400 hover:bg-white/5"
               >
@@ -192,7 +161,7 @@ export default function AgentsPage() {
 
             {/* FORM */}
             {!newApiKey ? (
-              <div className="space-y-4">
+              <div className="space-y-6">
                 <div>
                   <label className="block text-xs font-mono text-zinc-400 uppercase tracking-wider mb-2">Agent Name</label>
                   <input
@@ -201,74 +170,6 @@ export default function AgentsPage() {
                     placeholder="E.g., Research-Bot"
                     className="w-full rounded-2xl border border-cyan-500/20 bg-black/30 px-5 py-4 text-lg outline-none focus:border-cyan-500/50 transition-colors text-white"
                   />
-                </div>
-
-                {/* ADVANCED ROUTING OVERRIDES DROPDOWN SLIDER */}
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center justify-between w-full p-4 rounded-xl border border-slate-800 bg-slate-950/40 hover:bg-slate-950 text-zinc-400 hover:text-white transition-all font-sans text-xs font-semibold"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Sliders size={14} className="text-cyan-400" />
-                      <span>Configure Private Credentials Override (Optional)</span>
-                    </div>
-                    {showAdvanced ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-
-                  {showAdvanced && (
-                    <div className="mt-3 p-4 rounded-2xl border border-slate-800 bg-black/20 space-y-4 animate-fadeIn">
-                      
-                      {/* PROVIDER ENGINE SWITCHER */}
-                      <div>
-                        <label className="block text-[11px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">API Provider</label>
-                        <div className="grid grid-cols-2 gap-2 text-xs font-sans font-bold">
-                          <button
-                            type="button"
-                            onClick={() => setApiProvider("gemini")}
-                            className={`h-10 rounded-xl border transition-all ${apiProvider === "gemini" ? "bg-cyan-500/10 border-cyan-400 text-cyan-300" : "bg-transparent border-slate-800 text-zinc-500 hover:text-zinc-300"}`}
-                          >
-                            Google Gemini
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setApiProvider("openai")}
-                            className={`h-10 rounded-xl border transition-all ${apiProvider === "openai" ? "bg-purple-500/10 border-purple-400 text-purple-300" : "bg-transparent border-slate-800 text-zinc-500 hover:text-zinc-300"}`}
-                          >
-                            OpenAI Core
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* PRIVATE TOKEN INPUT FIELD */}
-                      <div>
-                        <label className="block text-[11px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">Private Provider Token</label>
-                        <input
-                          type="password"
-                          value={agentApiKey}
-                          onChange={(e) => setAgentApiKey(e.target.value)}
-                          placeholder={apiProvider === "gemini" ? "Enter AI Studio key (AIzaSy...)" : "Enter OpenAI key (sk-proj-...)"}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl h-11 px-4 text-white outline-none focus:border-cyan-500/30 text-xs font-sans"
-                        />
-                      </div>
-
-                      {/* MODEL SELECTION DROPDOWN FIELD */}
-                      <div>
-                        <label className="block text-[11px] font-mono text-zinc-500 uppercase tracking-wider mb-1.5">Model Dropdown Variant</label>
-                        <select
-                          value={modelVersion}
-                          onChange={(e) => setModelVersion(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 text-zinc-300 rounded-xl h-11 px-4 text-xs outline-none focus:border-cyan-500/30 font-sans transition-colors"
-                        >
-                          {modelOptions[apiProvider].map((model) => (
-                            <option key={model} value={model}>{model}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                    </div>
-                  )}
                 </div>
 
                 <button

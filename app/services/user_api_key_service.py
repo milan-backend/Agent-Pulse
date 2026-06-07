@@ -13,40 +13,39 @@ class UserAPIKeyService:
         db: Session, 
         provider: str, 
         raw_key: str, 
+        workspace_id: UUID,            # STRICT SECURITY BOUNDARY: MANDATORY
         user_id: Optional[UUID] = None, 
-        workspace_id: Optional[UUID] = None,
         agent_id: Optional[UUID] = None,
         model_version: Optional[str] = None
     ) -> UserAPIKey:
         """
-        Encrypts the raw API key and saves it into the database.
-        If a key already exists under the matching unique constraints 
-        (Agent-specific, Workspace-specific, or User-specific), it updates cleanly.
+        Encrypts the raw API key from the frontend dropdown/input and saves it.
+        If a key record already exists under the matching hierarchical constraints 
+        (Agent-specific or Workspace-default), it cleanly updates it in place.
         """
-        provider_clean = provider.lower().strip()
+        if not workspace_id:
+            raise ValueError("Security Violation: workspace_id is strictly mandatory for storing credentials.")
+
+        provider_clean = provider.lower().strip()      # Always stores as clean lowercase 'gemini' or 'openai'
         model_version_clean = model_version.strip() if model_version else None
         encrypted_str = encrypt_api_key(raw_key)
 
-        # Look for an existing key match based on our new 3-tier tracking constraints
+        # Look for an existing key match based on our strict hierarchical tracking constraints
         if agent_id:
-            # Tier 1: Agent specific keys are unique per agent + provider
-            stmt = select(UserAPIKey).where(
-                and_(UserAPIKey.agent_id == agent_id, UserAPIKey.provider == provider_clean)
-            )
-        elif workspace_id:
-            # Tier 2: Workspace keys are unique per workspace + provider + model dropdown selection
+            # Tier 1: Agent specific keys are unique per agent + workspace + provider
             stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.workspace_id == workspace_id, 
-                    UserAPIKey.provider == provider_clean,
-                    UserAPIKey.model_version == model_version_clean
+                    UserAPIKey.agent_id == agent_id,
+                    UserAPIKey.workspace_id == workspace_id,
+                    UserAPIKey.provider == provider_clean
                 )
             )
         else:
-            # User level fallback key context
+            # Tier 2: Workspace keys are unique per workspace + provider + model version choice
             stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.user_id == user_id, 
+                    UserAPIKey.workspace_id == workspace_id, 
+                    UserAPIKey.agent_id == None,
                     UserAPIKey.provider == provider_clean,
                     UserAPIKey.model_version == model_version_clean
                 )
@@ -77,34 +76,33 @@ class UserAPIKeyService:
     def fetch_decrypted_key(
         db: Session, 
         provider: str, 
-        user_id: Optional[UUID] = None, 
-        workspace_id: Optional[UUID] = None,
+        workspace_id: UUID,            # STRICT SECURITY BOUNDARY: MANDATORY
         agent_id: Optional[UUID] = None,
         model_version: Optional[str] = None
     ) -> Optional[str]:
         """
-        Fetches the encrypted API key from the database using precise routing targets
-        and returns the fully decrypted plain text token string ready for execution runtime.
+        Fetches the encrypted API key from the database using explicit hierarchical scopes
+        and returns the fully decrypted plain text token string ready for client initialization.
         """
+        if not workspace_id:
+            raise ValueError("Security Violation: workspace_id is strictly mandatory for retrieving credentials.")
+
         provider_clean = provider.lower().strip()
         model_version_clean = model_version.strip() if model_version else None
 
         if agent_id:
             stmt = select(UserAPIKey).where(
-                and_(UserAPIKey.agent_id == agent_id, UserAPIKey.provider == provider_clean)
-            )
-        elif workspace_id:
-            stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.workspace_id == workspace_id, 
-                    UserAPIKey.provider == provider_clean,
-                    UserAPIKey.model_version == model_version_clean
+                    UserAPIKey.agent_id == agent_id,
+                    UserAPIKey.workspace_id == workspace_id,
+                    UserAPIKey.provider == provider_clean
                 )
             )
         else:
             stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.user_id == user_id, 
+                    UserAPIKey.workspace_id == workspace_id, 
+                    UserAPIKey.agent_id == None,
                     UserAPIKey.provider == provider_clean,
                     UserAPIKey.model_version == model_version_clean
                 )
@@ -121,33 +119,32 @@ class UserAPIKeyService:
     def remove_key(
         db: Session, 
         provider: str, 
-        user_id: Optional[UUID] = None, 
-        workspace_id: Optional[UUID] = None,
+        workspace_id: UUID,            # STRICT SECURITY BOUNDARY: MANDATORY
         agent_id: Optional[UUID] = None,
         model_version: Optional[str] = None
     ) -> bool:
         """
-        Deletes a specific targeted provider API key configuration row cleanly.
+        Deletes a specific targeted provider API key configuration row cleanly within a workspace scope.
         """
+        if not workspace_id:
+            raise ValueError("Security Violation: workspace_id is strictly mandatory for removing credentials.")
+
         provider_clean = provider.lower().strip()
         model_version_clean = model_version.strip() if model_version else None
 
         if agent_id:
             stmt = select(UserAPIKey).where(
-                and_(UserAPIKey.agent_id == agent_id, UserAPIKey.provider == provider_clean)
-            )
-        elif workspace_id:
-            stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.workspace_id == workspace_id, 
-                    UserAPIKey.provider == provider_clean,
-                    UserAPIKey.model_version == model_version_clean
+                    UserAPIKey.agent_id == agent_id,
+                    UserAPIKey.workspace_id == workspace_id,
+                    UserAPIKey.provider == provider_clean
                 )
             )
         else:
             stmt = select(UserAPIKey).where(
                 and_(
-                    UserAPIKey.user_id == user_id, 
+                    UserAPIKey.workspace_id == workspace_id, 
+                    UserAPIKey.agent_id == None,
                     UserAPIKey.provider == provider_clean,
                     UserAPIKey.model_version == model_version_clean
                 )

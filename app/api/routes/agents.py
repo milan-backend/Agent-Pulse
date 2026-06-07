@@ -2,19 +2,20 @@ from fastapi import (
     APIRouter,
     Depends,
     Header,
-    status,
-    HTTPException
+    HTTPException,
+    status
 )
 from sqlalchemy.orm import Session
 from uuid import UUID
 
 from app.db.session import get_db
 from app.models.user import User
+from app.models.agent import Agent  # Imported to execute the metadata updates
 from app.schemas.agent import (
     AgentCreateRequest,
     AgentCreateResponse,
     AgentPolicyUpdateRequest,
-    AgentUpdateRequest  # Imported our new general settings payload class
+    AgentUpdateRequest
 )
 from app.api.deps_user import get_current_user
 from app.core.workspace_access import get_workspace_membership
@@ -27,7 +28,6 @@ from app.services.agent_service import (
     regenerate_agent_api_key,
     update_agent_policy_service
 )
-from app.services.user_api_key_service import UserAPIKeyService  # Connected our key service layer
 
 router = APIRouter()
 
@@ -41,49 +41,31 @@ router = APIRouter()
 )
 def create_agent(
     request: AgentCreateRequest,
-    workspace_id: str = Header(...),
+    workspace_id: str = Header(...),  # STRICT BOUNDARY: Mandatory Header
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
     # VALIDATE MEMBERSHIP
     membership = get_workspace_membership(
         db=db,
         user_id=current_user.id,
-        workspace_id=workspace_id
+        workspace_id=clean_ws_id
     )
 
     # REQUIRE OPERATOR
     require_operator(membership)
 
-    # 1. Execute base system agent registration service loop
-    new_agent_response = create_agent_service(
+    return create_agent_service(
         db=db,
-        workspace_id=workspace_id,
+        workspace_id=str(clean_ws_id),
         current_user=current_user,
         request=request
     )
-
-    # 2. Intercept payload and store custom agent credentials immediately if provided
-    if request.agent_api_key and request.api_provider:
-        try:
-            # Parse string tokens into clean database matching UUIDs
-            clean_ws_id = UUID(workspace_id.strip())
-            clean_agent_id = UUID(new_agent_response.id.strip())
-            
-            UserAPIKeyService.store_key(
-                db=db,
-                provider=request.api_provider,
-                raw_key=request.agent_api_key,
-                user_id=None,
-                workspace_id=clean_ws_id,      # Keeps it locked to this workspace context
-                agent_id=clean_agent_id,        # Binds it exclusively to this unique agent
-                model_version=request.model_version
-            )
-        except Exception as key_err:
-            # Prevent schema failure if parsing fails, ensuring basic agent is preserved
-            print(f"⚠️ Warning: Failed to automatically store initialization agent keys: {str(key_err)}")
-
-    return new_agent_response
 
 
 # ============================================
@@ -94,15 +76,20 @@ def create_agent(
 )
 def regenerate_api_key(
     agent_id: str,
-    workspace_id: str = Header(...),
+    workspace_id: str = Header(...),  # STRICT BOUNDARY: Mandatory Header
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
     # VALIDATE MEMBERSHIP
     membership = get_workspace_membership(
         db=db,
         user_id=current_user.id,
-        workspace_id=workspace_id
+        workspace_id=clean_ws_id
     )
 
     # REQUIRE ADMIN
@@ -110,7 +97,7 @@ def regenerate_api_key(
 
     return regenerate_agent_api_key(
         db=db,
-        workspace_id=workspace_id,
+        workspace_id=str(clean_ws_id),
         agent_id=agent_id
     )
 
@@ -122,15 +109,20 @@ def regenerate_api_key(
 def update_agent(
     agent_id: str,
     request: AgentPolicyUpdateRequest,
-    workspace_id: str = Header(...),
+    workspace_id: str = Header(...),  # STRICT BOUNDARY: Mandatory Header
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
     # VALIDATE MEMBERSHIP
     membership = get_workspace_membership(
         db=db,
         user_id=current_user.id,
-        workspace_id=workspace_id
+        workspace_id=clean_ws_id
     )
 
     # REQUIRE OPERATOR
@@ -138,73 +130,69 @@ def update_agent(
 
     return update_agent_policy_service(
         db=db,
-        workspace_id=workspace_id,
+        workspace_id=str(clean_ws_id),
         agent_id=agent_id,
         request=request
     )
 
 
 # ============================================
-# PATCH AGENT CONFIGURATIONS / TASK SETTINGS
+# PATCH AGENT CONFIGURATIONS / METADATA
 # ============================================
 @router.patch("/{agent_id}", status_code=status.HTTP_200_OK)
 def update_agent_settings(
     agent_id: str,
     request: AgentUpdateRequest,
-    workspace_id: str = Header(...),
+    workspace_id: str = Header(...),  # STRICT BOUNDARY: Mandatory Header
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Endpoint for updating generic agent configurations and task level 
-    API provider credentials safely inside a protected multi-tenant sandbox workspace.
+    Endpoint for updating core agent basic metadata (like names/descriptions) safely.
+    All infrastructure provider keys are now handled securely by the dedicated user_api_key routing system.
     """
-    # VALIDATE MEMBERSHIP
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
+    # 1. VALIDATE MEMBERSHIP & SCOPE BOUNDARIES FIRST
     membership = get_workspace_membership(
         db=db,
         user_id=current_user.id,
-        workspace_id=workspace_id
+        workspace_id=clean_ws_id
     )
 
     # REQUIRE OPERATOR
     require_operator(membership)
 
-    try:
-        clean_ws_id = UUID(workspace_id.strip())
-        clean_agent_id = UUID(agent_id.strip())
-    except ValueError:
+    # 2. FETCH THE REAL AGENT OBJECT (Ensuring it belongs strictly to this workspace)
+    agent = db.query(Agent).filter(
+        Agent.id == agent_id,
+        Agent.workspace_id == clean_ws_id
+    ).first()
+
+    if not agent:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Invalid workspace_id or agent_id structural UUID format."
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Agent context missing or cross-workspace access forbidden."
         )
 
-    # 1. Update infrastructure level routing keys if provided in settings body
-    if request.agent_api_key and request.api_provider:
-        # If a non-empty key token string is sent, store or refresh it cleanly
-        UserAPIKeyService.store_key(
-            db=db,
-            provider=request.api_provider,
-            raw_key=request.agent_api_key,
-            user_id=None,
-            workspace_id=clean_ws_id,
-            agent_id=clean_agent_id,
-            model_version=request.model_version
-        )
-    elif request.api_provider and request.agent_api_key == "":
-        # If the key is an empty string, wipe out the record so it falls back to workspace settings
-        UserAPIKeyService.remove_key(
-            db=db,
-            provider=request.api_provider,
-            user_id=None,
-            workspace_id=clean_ws_id,
-            agent_id=clean_agent_id,
-            model_version=request.model_version
-        )
+    # 3. DYNAMICALLY APPLY PRIMITIVE UPDATES FROM DROPDOWN/INPUTS
+    update_data = request.dict(exclude_unset=True) # Only updates what the frontend explicitly passes
+    
+    for key, value in update_data.items():
+        setattr(agent, key, value)
 
-    # Note: If your agent model requires saving other primitive properties (like updating name),
-    # call your database query operations or core repository update calls here!
+    db.commit()
+    db.refresh(agent)
 
     return {
         "status": "success",
-        "message": "Agent task connection settings updated successfully."
+        "message": "Agent metadata settings updated successfully.",
+        "agent": {
+            "id": agent.id,
+            "name": getattr(agent, "name", None),
+            "model_name": getattr(agent, "model_name", None)
+        }
     }
