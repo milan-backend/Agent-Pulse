@@ -105,3 +105,4 @@ view_column.py
 check_tokens.py
 run_migration.py
 inject_column.py
+inject_columns.py

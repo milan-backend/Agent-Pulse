@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from sqlalchemy.orm import Session
 from google import genai
 from typing import Optional
+from uuid import UUID
 
 from app.db.session import get_db
 from app.models.user import User
@@ -25,7 +26,7 @@ router = APIRouter()
 @router.post("/connect", response_model=UserAPIKeyResponse, status_code=status.HTTP_201_CREATED)
 def connect_provider_key(
     payload: UserAPIKeyCreate,
-    workspace_id: Optional[str] = Header(None),
+    workspace_id: Optional[UUID] = Header(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -56,16 +57,24 @@ def connect_provider_key(
             )
 
     try:
-        UserAPIKeyService.store_key(
+        saved_key = UserAPIKeyService.store_key(
             db=db,
             provider=payload.provider,
             raw_key=payload.api_key,
-            user_id=current_user.id if not workspace_id else None,
-            workspace_id=workspace_id if workspace_id else None
+            user_id=current_user.id if not workspace_id and not payload.agent_id else None,
+            workspace_id=workspace_id,
+            agent_id=payload.agent_id,
+            model_version=payload.model_version
         )
+        
         return {
-            "provider": payload.provider,
-            "message": f"Successfully validated and connected credentials for {payload.provider}."
+            "id": saved_key.id,
+            "provider": saved_key.provider,
+            "message": f"Successfully validated and connected credentials for {saved_key.provider}.",
+            "model_version": saved_key.model_version,
+            "workspace_id": saved_key.workspace_id,
+            "agent_id": saved_key.agent_id,
+            "is_default": saved_key.is_default
         }
     except ValueError as val_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
@@ -82,7 +91,9 @@ def connect_provider_key(
 @router.delete("/disconnect", status_code=status.HTTP_200_OK)
 def disconnect_provider_key(
     provider: str,
-    workspace_id: Optional[str] = Header(None),
+    workspace_id: Optional[UUID] = Header(None),
+    agent_id: Optional[UUID] = Query(None),
+    model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -101,14 +112,16 @@ def disconnect_provider_key(
     success = UserAPIKeyService.remove_key(
         db=db,
         provider=provider,
-        user_id=current_user.id if not workspace_id else None,
-        workspace_id=workspace_id if workspace_id else None
+        user_id=current_user.id if not workspace_id and not agent_id else None,
+        workspace_id=workspace_id,
+        agent_id=agent_id,
+        model_version=model_version
     )
     
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"No active credentials found for provider '{provider}'."
+            detail=f"No active credentials found for provider '{provider}' matching requested scope."
         )
         
     return {"message": f"Successfully removed integration configurations for {provider}."}
@@ -119,8 +132,10 @@ def disconnect_provider_key(
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
-    provider: Optional[str] = "GEMINI_API_KEY",
-    workspace_id: Optional[str] = Header(None),
+    provider: Optional[str] = "gemini",
+    workspace_id: Optional[UUID] = Header(None),
+    agent_id: Optional[UUID] = Query(None),
+    model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -132,18 +147,23 @@ def get_key_status(
     if workspace_id:
         get_workspace_membership(db=db, user_id=current_user.id, workspace_id=workspace_id)
         
-    from app.models.user_api_key import UserAPIKey 
-    
     # Clean and match target provider type strings safely
-    provider_clean = str(provider).strip().upper()
-    target_provider = "OPENAI_API_KEY" if "OPENAI" in provider_clean else "GEMINI_API_KEY"
+    provider_clean = str(provider).strip().lower()
+    target_provider = "openai" if "openai" in provider_clean else "gemini"
     
-    # 2. Query execution match using case-insensitive ilike wildcards
-    query = db.query(UserAPIKey).filter(UserAPIKey.provider.ilike(f"%{target_provider}%"))
-    if workspace_id:
+    # 2. Query execution match using precision target filtering
+    query = db.query(UserAPIKey).filter(UserAPIKey.provider == target_provider)
+    
+    if agent_id:
+        query = query.filter(UserAPIKey.agent_id == agent_id)
+    elif workspace_id:
         query = query.filter(UserAPIKey.workspace_id == workspace_id)
+        if model_version:
+            query = query.filter(UserAPIKey.model_version == model_version.strip())
     else:
         query = query.filter(UserAPIKey.user_id == current_user.id)
+        if model_version:
+            query = query.filter(UserAPIKey.model_version == model_version.strip())
         
     key_record = query.first()
     
@@ -151,14 +171,15 @@ def get_key_status(
     if not key_record:
         return {
             "connected": False, 
-            "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"
+            "provider": target_provider,
+            "model_version": model_version,
+            "agent_id": agent_id
         }
         
     # Safe Mask Generation for Personal Settings view
     masked_key = "Connected"
-    if not workspace_id and key_record.encrypted_api_key:
+    if not workspace_id and not agent_id and key_record.encrypted_api_key:
         try:
-            from app.core.crypto import decrypt_api_key
             raw = decrypt_api_key(key_record.encrypted_api_key)
             if len(raw) > 10:
                 masked_key = f"{raw[:6]}************{raw[-3:]}"
@@ -173,18 +194,27 @@ def get_key_status(
         last_updated = key_record.created_at.strftime("%d %b %Y")
 
     return {
+        "id": key_record.id,
         "connected": True,
-        "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini",
+        "provider": key_record.provider,
+        "model_version": key_record.model_version,
         "masked_key": masked_key,
         "last_updated": last_updated,
+        "is_default": key_record.is_default,
+        "workspace_id": key_record.workspace_id,
+        "agent_id": key_record.agent_id,
         "owner_context": current_user.full_name if not workspace_id else "Workspace Managed"
     }
 
 
+# ============================================
+# SET DEFAULT PROVIDER CONFIGURATION
+# ============================================
 @router.patch("/set-default", status_code=status.HTTP_200_OK)
 def set_default_provider(
     provider: str,
-    workspace_id: Optional[str] = Header(None),
+    workspace_id: Optional[UUID] = Header(None),
+    model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -197,11 +227,11 @@ def set_default_provider(
         get_workspace_membership(db=db, user_id=current_user.id, workspace_id=workspace_id)
 
     # Clean and parse target provider text strings case-insensitively
-    provider_clean = str(provider).strip().upper()
-    target_provider = "OPENAI_API_KEY" if "OPENAI" in provider_clean else "GEMINI_API_KEY"
+    provider_clean = str(provider).strip().lower()
+    target_provider = "openai" if "openai" in provider_clean else "gemini"
 
     # 2. Build Isolation query context parameters
-    base_query = db.query(UserAPIKey)
+    base_query = db.query(UserAPIKey).filter(UserAPIKey.agent_id == None)
     if workspace_id:
         base_query = base_query.filter(UserAPIKey.workspace_id == workspace_id)
     else:
@@ -211,7 +241,11 @@ def set_default_provider(
     base_query.update({"is_default": False}, synchronize_session=False)
 
     # 4. Step B: Locate the target connection row to set as default active parameter
-    target_record = base_query.filter(UserAPIKey.provider.ilike(f"%{target_provider}%")).first()
+    target_query = base_query.filter(UserAPIKey.provider == target_provider)
+    if model_version:
+        target_query = target_query.filter(UserAPIKey.model_version == model_version.strip())
+        
+    target_record = target_query.first()
 
     if not target_record:
         db.rollback()
@@ -227,5 +261,6 @@ def set_default_provider(
     return {
         "status": "success",
         "message": f"{target_provider} successfully designated as the primary runtime pipeline platform.",
-        "provider": "openai" if target_provider == "OPENAI_API_KEY" else "gemini"
+        "provider": target_record.provider,
+        "model_version": target_record.model_version
     }

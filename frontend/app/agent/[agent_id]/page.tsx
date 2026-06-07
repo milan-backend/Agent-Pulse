@@ -1,7 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Cpu, Activity, DollarSign, RotateCcw, ShieldCheck, ArrowLeft, Pause, Settings, Repeat, Timer } from "lucide-react";
+import { 
+  Cpu, 
+  Activity, 
+  DollarSign, 
+  RotateCcw, 
+  ShieldCheck, 
+  ArrowLeft, 
+  Pause, 
+  Settings, 
+  Repeat, 
+  Timer,
+  KeyRound // Imported for your new API Provider link icon
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
@@ -45,7 +57,6 @@ export default function AgentRuntimePage() {
         max_steps: Number(policy?.max_steps ?? 0),  
         max_retries: Number(policy?.max_retries ?? 0),  
         max_repeated_tasks: Number(policy?.max_repeated_tasks ?? 0),  
-        // FIX: Read metrics straight from response root directly to align with new types
         mission_count: Number(response?.mission_count ?? 0),  
         total_cost: Number(response?.total_cost ?? 0),  
         created_at: agentData?.created_at || null,  
@@ -54,7 +65,7 @@ export default function AgentRuntimePage() {
       setAgent(normalizedAgent);  
     } catch (error) {  
       console.error(error);  
-      toast.error("Failed to load agent");  
+      toast.error("Failed to load agent"); // No sugarcoat, real time logging
     } finally {  
       setLoading(false);  
     }
@@ -105,7 +116,8 @@ export default function AgentRuntimePage() {
 
   return (
     <div className="min-h-screen bg-[#020817] text-white flex">
-      {/* SIDEBAR */}
+      
+      {/* SIDEBAR CONTAINER */}
       <aside className="w-[300px] shrink-0 border-r border-cyan-500/10 bg-[#040b18] p-6">
         <div>
           <h1 className="text-5xl font-black">
@@ -119,12 +131,20 @@ export default function AgentRuntimePage() {
           <Link href="/dashboard/agents" className="flex items-center gap-3 rounded-2xl bg-[#0b1628] px-5 py-4 font-bold transition-all hover:bg-cyan-500/10">  
             <ArrowLeft size={18} /> Back To Agents  
           </Link>  
+          
           <button onClick={pauseAgent} disabled={pausing} className="w-full flex items-center gap-3 rounded-2xl bg-green-500/20 border border-green-500/30 px-5 py-4 font-bold text-green-300 transition-all hover:bg-green-500/30 disabled:opacity-50">  
             <Pause size={18} /> {pausing ? "Pausing..." : "Pause Agent"}  
           </button>  
+          
           <Link href={`/agent/${agent.id}/settings`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 px-5 py-4 font-bold text-cyan-300 transition-all hover:bg-cyan-500/30">  
             <Settings size={18} /> Agent Settings  
           </Link>  
+
+          {/* ADDED: DEDICATED PRIVATE PROVIDER INTEGRATION LINK (YOUR AWESOME IDEA!) */}
+          <Link href={`/agent/${agent.id}/provider`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 px-5 py-4 font-bold text-cyan-400 transition-all hover:bg-cyan-500/20">  
+            <KeyRound size={18} /> API Provider  
+          </Link>  
+          
           <Link href={`/agent/${agent.id}/tasks`} className="flex items-center gap-3 rounded-2xl bg-purple-500/20 border border-purple-500/30 px-5 py-4 font-bold text-purple-300 transition-all hover:bg-purple-500/30">  
             <Activity size={18} /> Agent Tasks  
           </Link>  

@@ -140,9 +140,14 @@ BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS
 export const apiKeyApi = {
   /**
    * Safe metadata lookup to discover active key status.
-   * Upgraded signature to accept optional provider string parameters cleanly without compilation bugs.
+   * Enhanced signature to handle fine-grained agent context lookups safely.
    */
-  getKeyStatus: async (workspaceId?: string | null, provider: string = "GEMINI_API_KEY") => {
+  getKeyStatus: async (
+    workspaceId?: string | null, 
+    provider: string = "gemini",
+    agentId?: string | null,
+    modelVersion?: string | null
+  ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -153,8 +158,12 @@ export const apiKeyApi = {
       headers["workspace-id"] = workspaceId;
     }
 
-    // Passes provider as a clean flat query parameter matching your updated backend endpoints routing
-    return request(`/api-keys/status?provider=${encodeURIComponent(provider)}`, {
+    const queryParams = new URLSearchParams();
+    queryParams.append("provider", provider.toLowerCase().trim());
+    if (agentId) queryParams.append("agent_id", agentId);
+    if (modelVersion) queryParams.append("model_version", modelVersion);
+
+    return request(`/api-keys/status?${queryParams.toString()}`, {
       method: "GET",
       headers,
     });
@@ -162,8 +171,15 @@ export const apiKeyApi = {
 
   /**
    * Connect and live-verify an AI console token string.
+   * Pass workspace_id in header AND support optional fields in body to prevent cross-workspace leak.
    */
-  connectKey: async (provider: string, apiKey: string, workspaceId?: string | null) => {
+  connectKey: async (
+    provider: string, 
+    apiKey: string, 
+    workspaceId?: string | null,
+    agentId?: string | null,
+    modelVersion?: string | null
+  ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -177,14 +193,24 @@ export const apiKeyApi = {
     return request("/api-keys/connect", {
       method: "POST",
       headers,
-      body: { provider, api_key: apiKey },
+      body: { 
+        provider: provider.toLowerCase().trim(), 
+        api_key: apiKey,
+        agent_id: agentId || null,
+        model_version: modelVersion || null
+      },
     });
   },
 
   /**
    * Completely erase configuration rows from backend storage tables.
    */
-  disconnectKey: async (provider: string, workspaceId?: string | null) => {
+  disconnectKey: async (
+    provider: string, 
+    workspaceId?: string | null,
+    agentId?: string | null,
+    modelVersion?: string | null
+  ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -195,16 +221,21 @@ export const apiKeyApi = {
       headers["workspace-id"] = workspaceId;
     }
 
-    return request(`/api-keys/disconnect?provider=${encodeURIComponent(provider)}`, {
+    const queryParams = new URLSearchParams();
+    queryParams.append("provider", provider.toLowerCase().trim());
+    if (agentId) queryParams.append("agent_id", agentId);
+    if (modelVersion) queryParams.append("model_version", modelVersion);
+
+    return request(`/api-keys/disconnect?${queryParams.toString()}`, {
       method: "DELETE",
       headers,
     });
   },
 
   /**
-   * ADDED: Designate a provider key as the workspace master primary default pipeline target.
+   * Designate a provider key as the workspace master primary default pipeline target.
    */
-  setDefaultProvider: async (provider: string, workspaceId?: string | null) => {
+  setDefaultProvider: async (provider: string, workspaceId?: string | null, modelVersion?: string | null) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -215,7 +246,11 @@ export const apiKeyApi = {
       headers["workspace-id"] = workspaceId;
     }
 
-    return request(`/api-keys/set-default?provider=${encodeURIComponent(provider)}`, {
+    const queryParams = new URLSearchParams();
+    queryParams.append("provider", provider.toLowerCase().trim());
+    if (modelVersion) queryParams.append("model_version", modelVersion);
+
+    return request(`/api-keys/set-default?${queryParams.toString()}`, {
       method: "PATCH",
       headers,
     });
@@ -415,10 +450,17 @@ export async function getDashboardUsageLogs(q?: string) {
 }
 
 /* =========================================================
-AGENT RUNTIME (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
+AGENT RUNTIME 
 ========================================================= */
 
-export async function createAgent(data: { name: string; system_prompt?: string; model?: string; }) {
+export async function createAgent(data: { 
+  name: string; 
+  system_prompt?: string; 
+  model?: string;
+  api_provider?: string;    // Added integration variables
+  agent_api_key?: string;   // Added integration variables
+  model_version?: string;   // Added integration variables
+}) {
   return request("/agents/", {
     method: "POST",
     body: data,
@@ -453,6 +495,25 @@ export async function updateAgentSettings(
 ) {
   return request(`/agents/${agentId}`, {
     method: "PUT",
+    body: payload,
+  });
+}
+
+/**
+ * PATCH Agent connection configuration overrides inside Tasks Settings view page cleanly.
+ */
+export async function patchAgentSettings(
+  agentId: string,
+  payload: {
+    name?: string;
+    description?: string;
+    api_provider?: string;
+    agent_api_key?: string;
+    model_version?: string;
+  }
+) {
+  return request(`/agents/${agentId}`, {
+    method: "PATCH",
     body: payload,
   });
 }
@@ -633,7 +694,6 @@ LOGOUT
 
 export function logout() {
   if (typeof window !== "undefined") {
-    // Included credentials option to clear HTTP-Only tracking cookies on your live FastAPI server
     fetch(`${API_URL}/auth/logout`, { 
       method: "POST",
       credentials: "include"

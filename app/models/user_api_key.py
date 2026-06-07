@@ -40,10 +40,25 @@ class UserAPIKey(Base):
         index=True
     )
 
+    # Agent Link: For fine-grained agent-level key routing
+    agent_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+
     provider = Column(
         String,
         nullable=False,
         index=True  # 'gemini', 'openai', etc.
+    )
+
+    # Dynamic Model Column: Stores the exact version chosen from the frontend dropdown
+    model_version = Column(
+        String,
+        nullable=True,
+        index=True  # 'gpt-4o', 'gemini-1.5-pro', etc.
     )
 
     encrypted_api_key = Column(
@@ -62,9 +77,11 @@ class UserAPIKey(Base):
         onupdate=datetime.utcnow
     )
 
-    is_default = Column(Boolean, 
-     default=False, 
-     nullable=False)
+    is_default = Column(
+        Boolean, 
+        default=False, 
+        nullable=False
+    )
 
     # Relationships
     user = relationship(
@@ -77,9 +94,15 @@ class UserAPIKey(Base):
         backref="workspace_api_keys"
     )
 
+    agent = relationship(
+        "Agent",
+        backref="agent_api_keys"
+    )
+
     # Database Security Constraints:
-    # Prevents duplicate keys for the same provider inside a workspace or personal account
+    # Updated to ensure uniqueness combinations account for workspace, user, or specific agent targets
     __table_args__ = (
-        UniqueConstraint("user_id", "provider", name="uq_user_provider_key"),
-        UniqueConstraint("workspace_id", "provider", name="uq_workspace_provider_key"),
+        UniqueConstraint("user_id", "provider", "model_version", name="uq_user_provider_model_key"),
+        UniqueConstraint("workspace_id", "provider", "model_version", name="uq_workspace_provider_model_key"),
+        UniqueConstraint("agent_id", "provider", name="uq_agent_provider_key"),
     )

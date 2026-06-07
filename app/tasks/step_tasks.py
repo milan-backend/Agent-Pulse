@@ -6,7 +6,7 @@ from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
 from app.models.agent_policy import AgentPolicy
-from app.models.user_api_key import UserAPIKey  # Imported safely for workspace key lookups
+from app.models.user_api_key import UserAPIKey  # Imported safely for multi-tier routing
 
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
@@ -145,67 +145,103 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # --- DYNAMIC RESOLUTION FIX (WITH EXPLICIT IS_DEFAULT TOGGLE MATCHING) ---
+            # --- DYNAMIC 3-TIER ROUTING RESOLUTION PIPELINE ---
             current_workspace_id = str(step.workspace_id).strip() if step.workspace_id else None
+            agent_id_raw = agent.id if agent else None
             agent_model = getattr(agent, "model_name", None)
             
-            if agent_model and str(agent_model).strip():
-                active_model_target = str(agent_model).strip()
-            elif current_workspace_id:
-                # 1. Primary Check: Look up if a specific key was marked default via the button
-                default_key = db.query(UserAPIKey).filter(
-                    UserAPIKey.workspace_id == current_workspace_id,
-                    UserAPIKey.is_default == True
-                ).first()
+            active_model_target = None
 
-                if default_key:
-                    if "OPENAI" in default_key.provider.upper():
-                        active_model_target = "gpt-4o-mini"
-                    else:
-                        active_model_target = "gemini-2.5-flash-lite"
-                else:
-                    # 2. Secondary Fallback Check: Old sequential check if no button was selected yet
-                    has_openai = db.query(UserAPIKey).filter(
-                        UserAPIKey.workspace_id == current_workspace_id,
-                        UserAPIKey.provider.ilike("%OPENAI%")
+            # -----------------------------------------------------------------
+            # TIER 1: Check for explicit Private Agent-Specific API Credentials
+            # -----------------------------------------------------------------
+            if agent_id_raw:
+                agent_specific_key = db.query(UserAPIKey).filter(
+                    UserAPIKey.agent_id == agent_id_raw
                 ).first()
-                
-                    has_gemini = db.query(UserAPIKey).filter(
+                if agent_specific_key and agent_specific_key.model_version:
+                    active_model_target = str(agent_specific_key.model_version).strip()
+
+            # -----------------------------------------------------------------
+            # TIER 2: Fallback to Tenant Workspace Level Configurations
+            # -----------------------------------------------------------------
+            if not active_model_target:
+                if agent_model and str(agent_model).strip():
+                    active_model_target = str(agent_model).strip()
+                elif current_workspace_id:
+                    # 1. Primary Check: Look up key marked default via active UI button state
+                    default_key = db.query(UserAPIKey).filter(
                         UserAPIKey.workspace_id == current_workspace_id,
-                        UserAPIKey.provider.ilike("%GEMINI%")
+                        UserAPIKey.is_default == True,
+                        UserAPIKey.agent_id == None
                     ).first()
 
-                    if has_openai:
-                        active_model_target = "gpt-4o-mini"
-                    elif has_gemini:
-                        active_model_target = "gemini-2.5-flash-lite"
+                    if default_key:
+                        # Grab chosen version completely dynamically from your saved column row!
+                        active_model_target = default_key.model_version if default_key.model_version else (
+                            "gpt-4o-mini" if "OPENAI" in default_key.provider.upper() else "gemini-2.5-flash-lite"
+                        )
                     else:
-                        raise ValueError("No valid API credentials found. Please connect an active OpenAI or Google Gemini key in your Workspace Settings.")
-            else:
-                # Fallback context: Handles current user context row lookups preserving your old infrastructure loops
-                current_user_id = agent.user_id if hasattr(agent, 'user_id') else None
-                
-                default_personal_key = db.query(UserAPIKey).filter(
-                    UserAPIKey.user_id == current_user_id,
-                    UserAPIKey.is_default == True
-                ).first() if current_user_id else None
+                        # 2. Secondary Fallback Check: Use older sequential detection if no button is selected
+                        has_openai = db.query(UserAPIKey).filter(
+                            UserAPIKey.workspace_id == current_workspace_id,
+                            UserAPIKey.provider.ilike("%OPENAI%"),
+                            UserAPIKey.agent_id == None
+                        ).first()
+                        
+                        has_gemini = db.query(UserAPIKey).filter(
+                            UserAPIKey.workspace_id == current_workspace_id,
+                            UserAPIKey.provider.ilike("%GEMINI%"),
+                            UserAPIKey.agent_id == None
+                        ).first()
 
-                if default_personal_key:
-                    if "OPENAI" in default_personal_key.provider.upper():
-                        active_model_target = "gpt-4o-mini"
-                    else:
-                        active_model_target = "gemini-2.5-flash-lite"
-                else:
-                    has_personal_openai = db.query(UserAPIKey).filter(
+                        if has_openai:
+                            active_model_target = has_openai.model_version or "gpt-4o-mini"
+                        elif has_gemini:
+                            active_model_target = has_gemini.model_version or "gemini-2.5-flash-lite"
+
+                # 3. Flat personal context layer fallback if workspace elements are empty
+                if not active_model_target:
+                    current_user_id = agent.user_id if hasattr(agent, 'user_id') else None
+                    default_personal_key = db.query(UserAPIKey).filter(
                         UserAPIKey.user_id == current_user_id,
-                        UserAPIKey.provider.ilike("%OPENAI%")
+                        UserAPIKey.is_default == True,
+                        UserAPIKey.agent_id == None,
+                        UserAPIKey.workspace_id == None
                     ).first() if current_user_id else None
 
-                    if has_personal_openai:
-                        active_model_target = "gpt-4o-mini"
+                    if default_personal_key:
+                        active_model_target = default_personal_key.model_version or (
+                            "gpt-4o-mini" if "OPENAI" in default_personal_key.provider.upper() else "gemini-2.5-flash-lite"
+                        )
                     else:
-                        active_model_target = "gemini-2.5-flash-lite"
+                        has_personal_openai = db.query(UserAPIKey).filter(
+                            UserAPIKey.user_id == current_user_id,
+                            UserAPIKey.provider.ilike("%OPENAI%"),
+                            UserAPIKey.agent_id == None,
+                            UserAPIKey.workspace_id == None
+                        ).first() if current_user_id else None
 
+                        if has_personal_openai:
+                            active_model_target = has_personal_openai.model_version or "gpt-4o-mini"
+                        else:
+                            has_personal_gemini = db.query(UserAPIKey).filter(
+                                UserAPIKey.user_id == current_user_id,
+                                UserAPIKey.provider.ilike("%GEMINI%"),
+                                UserAPIKey.agent_id == None,
+                                UserAPIKey.workspace_id == None
+                            ).first() if current_user_id else None
+                            if has_personal_gemini:
+                                active_model_target = has_personal_gemini.model_version or "gemini-2.5-flash-lite"
+
+            # -----------------------------------------------------------------
+            # TIER 3: Absolute Last Resort Server Testing Variables Fallback
+            # -----------------------------------------------------------------
+            if not active_model_target:
+                # If there are zero keys found across the tables, safely use testing targets
+                active_model_target = "gemini-2.5-flash-lite"
+
+            # Execute response collection loops
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"
                 completion_usage = {
@@ -220,6 +256,7 @@ def process_step(self, step_id: str):
                     db=db,
                     user_id=agent.user_id if hasattr(agent, 'user_id') else None,
                     workspace_id=current_workspace_id,
+                    agent_id=agent_id_raw,  # Passed cleanly to match Tier 1 keys inside services layer
                     model_name=active_model_target
                 )
                 
@@ -345,7 +382,7 @@ def process_step(self, step_id: str):
         )
 
         # =========================================
-        # SUCCESS
+        # SUCCESS (UPDATED WITH AUTOMATIC ERROR WIPEOUT)
         # =========================================
         result = {
             "success": True,
@@ -355,6 +392,7 @@ def process_step(self, step_id: str):
 
         step.output_data = result
         step.status = "completed"
+        step.error_message = None  # Cleans up any old retry errors perfectly on final success!
         step.completed_at = datetime.utcnow()
         db.commit()
 
