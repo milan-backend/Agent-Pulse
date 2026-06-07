@@ -19,24 +19,22 @@ router = APIRouter()
 
 
 # ============================================
-# CONNECT API KEY (Admin / Operator required)
+# CONNECT API KEY
 # ============================================
 @router.post("/connect", response_model=UserAPIKeyResponse, status_code=status.HTTP_201_CREATED)
 def connect_provider_key(
-    payload: UserAPIKeyCreate,               # JSON body: provider, api_key, model_version
-    workspace_id: str = Header(...),         # STRICT BOUNDARY: Made strictly mandatory
-    agent_id: Optional[str] = Query(None),   # agent_id is purely a URL parameter
+    payload: UserAPIKeyCreate,               
+    workspace_id: str = Header(...),         # STRICT BOUNDARY: Mandatory Header
+    agent_id: Optional[str] = Query(None),   
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Endpoint to validate, encrypt, and save an AI Provider API Key securely.
     """
-    # 1. Clean and convert provider strings to simple lowercase ('openai' / 'gemini')
     raw_provider = payload.provider.strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
 
-    # 2. Enforce absolute workspace UUID parsing
     try:
         clean_ws_id = UUID(str(workspace_id).strip())
     except ValueError:
@@ -49,27 +47,24 @@ def connect_provider_key(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
 
-    # 3. Validate membership and role parameters strictly to prevent unauthorized access
-    membership = get_workspace_membership(
-        db=db,
-        user_id=current_user.id,
-        workspace_id=clean_ws_id
-    )
-    # Require Operator or Admin role permissions to add or update workspace configurations
+    # Validate membership and role parameters strictly
+    membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
     require_operator(membership)
 
-    # 4. Google GenAI SDK Verification Handshake
+    # 4. Google GenAI SDK Verification Handshake - FIXED: Uses minimal generation request to avoid 501 Unimplemented
     if target_provider == "gemini":
         try:
             test_client = genai.Client(api_key=payload.api_key)
-            test_client.models.list() 
+            test_client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents="ping"
+            )
         except Exception as auth_err:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid Gemini API Key: Connection verification failed. ({str(auth_err)})"
             )
 
-    # 5. Route through service layer matching our architectural model updates
     try:
         saved_key = UserAPIKeyService.store_key(
             db=db,
@@ -100,12 +95,12 @@ def connect_provider_key(
 
 
 # ============================================
-# GET KEY CONFIGURATION STATUS METADATA
+# GET KEY CONFIGURATION STATUS METADATA (FIXED STATUS BUG)
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
     provider: str = Query("gemini"),
-    workspace_id: str = Header(...),         # STRICT BOUNDARY: Made strictly mandatory
+    workspace_id: str = Header(...),         
     agent_id: Optional[str] = Query(None),
     model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -113,6 +108,7 @@ def get_key_status(
 ):
     """
     Returns safe cryptographic metadata regarding saved keys matching the active provider string.
+    Strictly isolates Agent keys from Workspace keys so status updates correctly on the frontend.
     """
     try:
         clean_ws_id = UUID(str(workspace_id).strip())
@@ -126,18 +122,20 @@ def get_key_status(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
 
-    # Enforce clear data visibility barriers across scopes
+    # Validate workspace visibility access
     get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
         
     raw_provider = str(provider).strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
     
-    # Structural isolation lookup query matching step_tasks processing flow
+    # Base query filters matching the specific workspace scope
     query = db.query(UserAPIKey).filter(
         UserAPIKey.provider == target_provider,
         UserAPIKey.workspace_id == clean_ws_id
     )
     
+    # CRITICAL FIX HERE: If agent_id is requested, force matching agent row ONLY. 
+    # Do not leak or fall back to the workspace row during status checks.
     if clean_agent_id:
         query = query.filter(UserAPIKey.agent_id == clean_agent_id)
     else:
@@ -178,17 +176,17 @@ def get_key_status(
         "is_default": key_record.is_default,
         "workspace_id": key_record.workspace_id,
         "agent_id": key_record.agent_id,
-        "owner_context": "Workspace Managed"
+        "owner_context": "Agent Overridden" if key_record.agent_id else "Workspace Managed"
     }
 
 
 # ============================================
-# DISCONNECT API KEY (Admin / Operator required)
+# DISCONNECT API KEY
 # ============================================
 @router.delete("/disconnect", status_code=status.HTTP_200_OK)
 def disconnect_provider_key(
     provider: str,
-    workspace_id: str = Header(...),         # STRICT BOUNDARY: Made strictly mandatory
+    workspace_id: str = Header(...),         
     agent_id: Optional[str] = Query(None),
     model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -209,7 +207,6 @@ def disconnect_provider_key(
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
 
-    # Validate deletion authorizations safely
     membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
     require_operator(membership)
 
@@ -231,12 +228,13 @@ def disconnect_provider_key(
 
 
 # ============================================
-# SET DEFAULT PROVIDER CONFIGURATION (Admin required)
+# SET DEFAULT PROVIDER CONFIGURATION (FIXED FOR AGENT SCOPES)
 # ============================================
 @router.patch("/set-default", status_code=status.HTTP_200_OK)
 def set_default_provider(
     provider: str,
-    workspace_id: str = Header(...),         # STRICT BOUNDARY: Made strictly mandatory
+    workspace_id: str = Header(...),         
+    agent_id: Optional[str] = Query(None),   # Added to allow private agent-level default selections
     model_version: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -246,20 +244,35 @@ def set_default_provider(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
 
-    # Require explicit admin membership status to execute global fallback changes
+    clean_agent_id = None
+    if agent_id and str(agent_id).strip() not in ["", "null", "None"]:
+        try:
+            clean_agent_id = UUID(str(agent_id).strip())
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
+
+    # Validate action authorizations
     membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
-    require_admin(membership)
+    require_operator(membership)
 
     raw_provider = str(provider).strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
 
-    # Standardize updating the database context smoothly
-    base_query = db.query(UserAPIKey).filter(
-        UserAPIKey.agent_id == None,
-        UserAPIKey.workspace_id == clean_ws_id
-    )
+    # CRITICAL FIX HERE: Dynamically scope the default updates to the active view pane
+    if clean_agent_id:
+        # Clear out default markers only for alternative keys belonging to THIS specific agent
+        base_query = db.query(UserAPIKey).filter(
+            UserAPIKey.agent_id == clean_agent_id,
+            UserAPIKey.workspace_id == clean_ws_id
+        )
+    else:
+        # Clear out default workspace tracking keys
+        base_query = db.query(UserAPIKey).filter(
+            UserAPIKey.agent_id == None,
+            UserAPIKey.workspace_id == clean_ws_id
+        )
 
-    # Wipe existing active defaults across the workspace scope smoothly
+    # Clear active default toggles for the scoped block
     base_query.update({"is_default": False}, synchronize_session=False)
 
     target_query = base_query.filter(UserAPIKey.provider == target_provider)
@@ -280,7 +293,8 @@ def set_default_provider(
 
     return {
         "status": "success",
-        "message": f"{target_provider} designated as default pipeline platform.",
+        "message": f"{target_provider} designated as active pipeline choice for this scope.",
         "provider": target_record.provider,
-        "model_version": target_record.model_version
+        "model_version": target_record.model_version,
+        "agent_id": target_record.agent_id
     }
