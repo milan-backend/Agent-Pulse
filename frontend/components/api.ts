@@ -2,8 +2,8 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL!;
 
 type RequestOptions = {
   method?: string;
-  body?: unknown; // Upgraded from any for better type safety
-  headers?: Record<string, string>; // Added support for page-level custom headers overrides
+  body?: unknown; 
+  headers?: Record<string, string>; 
 };
 
 function authHeaders() {
@@ -34,7 +34,6 @@ function onTokenRefreshed() {
 
 async function request(endpoint: string, options: RequestOptions = {}): Promise<any> {
   const executeFetch = () => {
-    // If explicit customHeaders are supplied, prioritize them over default automated storage lookups
     const finalHeaders = options.headers !== undefined ? options.headers : authHeaders();
 
     return fetch(`${API_URL}${endpoint}`, {
@@ -55,7 +54,6 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
         isRefreshing = true;
 
         try {
-          // Trigger the HTTP-Only secure rotation endpoint explicitly passing credentials
           const refreshResponse = await fetch(`${API_URL}/auth/refresh`, {
             method: "POST",
             credentials: "include",
@@ -68,11 +66,9 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
               localStorage.setItem("token", data.access_token);
             }
             
-            // 1. Wake up and execute all parallel queued subscribers first
             onTokenRefreshed();
             isRefreshing = false;
 
-            // 2. Request A immediately retries itself right here
             const retryResponse = await executeFetch();
             
             if (!retryResponse.ok) {
@@ -93,7 +89,6 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
         }
       }
 
-      // Parallel Request Queue: Handle overlapping requests cleanly while Request A refreshes
       return new Promise((resolve, reject) => {
         refreshSubscribers.push(async () => {
           try {
@@ -134,13 +129,13 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
 }
 
 /* =========================================================
-BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS
+BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS (FIXED ROUTING)
 ========================================================= */
 
 export const apiKeyApi = {
   /**
    * Safe metadata lookup to discover active key status.
-   * Enhanced signature to handle fine-grained agent context lookups safely.
+   * Scopes strictly based on presence of agentId query contexts.
    */
   getKeyStatus: async (
     workspaceId?: string | null, 
@@ -160,10 +155,11 @@ export const apiKeyApi = {
 
     const queryParams = new URLSearchParams();
     queryParams.append("provider", provider.toLowerCase().trim());
-    if (agentId) queryParams.append("agent_id", agentId);
+    if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
-    return request(`/api-keys/status?${queryParams.toString()}`, {
+    // FIXED: Corrected router path prefix to match your FastAPI endpoints backend string mapping
+    return request(`/api/user_api_key/status?${queryParams.toString()}`, {
       method: "GET",
       headers,
     });
@@ -171,7 +167,7 @@ export const apiKeyApi = {
 
   /**
    * Connect and live-verify an AI console token string.
-   * Pass workspace_id in header AND support optional fields in body to prevent cross-workspace leak.
+   * Passes workspace_id in mandatory header context.
    */
   connectKey: async (
     provider: string, 
@@ -190,13 +186,18 @@ export const apiKeyApi = {
       headers["workspace-id"] = workspaceId;
     }
 
-    return request("/api-keys/connect", {
+    const queryParams = new URLSearchParams();
+    if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
+
+    const queryString = queryParams.toString();
+    const endpoint = `/api/user_api_key/connect${queryString ? `?${queryString}` : ""}`;
+
+    return request(endpoint, {
       method: "POST",
       headers,
       body: { 
         provider: provider.toLowerCase().trim(), 
         api_key: apiKey,
-        agent_id: agentId || null,
         model_version: modelVersion || null
       },
     });
@@ -223,19 +224,24 @@ export const apiKeyApi = {
 
     const queryParams = new URLSearchParams();
     queryParams.append("provider", provider.toLowerCase().trim());
-    if (agentId) queryParams.append("agent_id", agentId);
+    if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
-    return request(`/api-keys/disconnect?${queryParams.toString()}`, {
+    return request(`/api/user_api_key/disconnect?${queryParams.toString()}`, {
       method: "DELETE",
       headers,
     });
   },
 
   /**
-   * Designate a provider key as the workspace master primary default pipeline target.
+   * Designate a provider key as the scoped primary default target.
    */
-  setDefaultProvider: async (provider: string, workspaceId?: string | null, modelVersion?: string | null) => {
+  setDefaultProvider: async (
+    provider: string, 
+    workspaceId?: string | null, 
+    modelVersion?: string | null,
+    agentId?: string | null
+  ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -249,8 +255,9 @@ export const apiKeyApi = {
     const queryParams = new URLSearchParams();
     queryParams.append("provider", provider.toLowerCase().trim());
     if (modelVersion) queryParams.append("model_version", modelVersion);
+    if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
 
-    return request(`/api-keys/set-default?${queryParams.toString()}`, {
+    return request(`/api/user_api_key/set-default?${queryParams.toString()}`, {
       method: "PATCH",
       headers,
     });
@@ -457,9 +464,9 @@ export async function createAgent(data: {
   name: string; 
   system_prompt?: string; 
   model?: string;
-  api_provider?: string;    // Added integration variables
-  agent_api_key?: string;   // Added integration variables
-  model_version?: string;   // Added integration variables
+  api_provider?: string;    
+  agent_api_key?: string;   
+  model_version?: string;   
 }) {
   return request("/agents/", {
     method: "POST",
@@ -499,9 +506,6 @@ export async function updateAgentSettings(
   });
 }
 
-/**
- * PATCH Agent connection configuration overrides inside Tasks Settings view page cleanly.
- */
 export async function patchAgentSettings(
   agentId: string,
   payload: {

@@ -53,9 +53,12 @@ export default function AgentProviderPage() {
   };
 
   async function syncAgentStatuses() {
+    if (typeof window === "undefined") return;
+    const workspaceId = localStorage.getItem("workspace_id");
+
     try {
-      // 1. Check Gemini Status bound to this explicit agent context
-      const geminiData = await apiKeyApi.getKeyStatus(null, "gemini", agentId);
+      // 1. Check Gemini Status bound to this explicit agent context (FIXED: Passed workspaceId instead of null)
+      const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "gemini", agentId);
       if (geminiData) {
         setGeminiStatus({
           connected: !!geminiData.connected,
@@ -67,8 +70,8 @@ export default function AgentProviderPage() {
         }
       }
 
-      // 2. Check OpenAI Status bound to this explicit agent context
-      const openaiData = await apiKeyApi.getKeyStatus(null, "openai", agentId);
+      // 2. Check OpenAI Status bound to this explicit agent context (FIXED: Passed workspaceId instead of null)
+      const openaiData = await apiKeyApi.getKeyStatus(workspaceId, "openai", agentId);
       if (openaiData) {
         setOpenaiStatus({
           connected: !!openaiData.connected,
@@ -113,8 +116,12 @@ export default function AgentProviderPage() {
 
     try {
       setSubmittingKey(true);
-      // Calls updated payload: keeping workspaceId in header loop for multi-tenant safety walls
+      // Calls updated payload with mandatory workspace isolation verification checks
       await apiKeyApi.connectKey(activeProviderForm, inputKey.trim(), workspaceId, agentId, chosenModel);
+      
+      // Automatically trigger the /set-default configuration for this specific agent's scope
+      await apiKeyApi.setDefaultProvider(activeProviderForm, workspaceId, chosenModel, agentId);
+
       toast.success(`Private ${providerMeta[activeProviderForm].name} credential override assigned cleanly!`);
       setInputKey("");
       setActiveProviderForm(null);
@@ -131,10 +138,11 @@ export default function AgentProviderPage() {
     if (!window.confirm(`Delete private ${providerMeta[providerKey].name} credential overrides? This will immediately revert this agent back to standard Workspace configurations.`)) return;
     
     const workspaceId = localStorage.getItem("workspace_id");
+    const chosenModel = providerKey === "gemini" ? selectedGeminiModel : selectedOpenAIModel;
     
     try {
       setSubmittingKey(true);
-      await apiKeyApi.disconnectKey(providerKey, workspaceId, agentId);
+      await apiKeyApi.disconnectKey(providerKey, workspaceId, agentId, chosenModel);
       toast.success(`Private ${providerMeta[providerKey].name} mapping deleted. Reverted to shared workspace assets.`);
       
       if (providerKey === "gemini") setGeminiStatus({ connected: false, last_updated: "", masked_key: "" });

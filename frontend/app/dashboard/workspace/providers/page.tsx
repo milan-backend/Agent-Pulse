@@ -4,14 +4,12 @@ import { useState, useEffect } from "react";
 import { 
   KeyRound, 
   Calendar, 
-  Lock, 
   Eye, 
   EyeOff, 
   Loader2, 
   ExternalLink,
   Cpu,
-  LockKeyhole,
-  CheckCircle2
+  LockKeyhole
 } from "lucide-react";
 import { getCurrentUser, getWorkspaceMembers, apiKeyApi } from "@/components/api";
 import { toast } from "sonner";
@@ -53,7 +51,8 @@ export default function WorkspaceProvidersPage() {
 
   async function syncAllStatuses(workspaceId: string) {
     try {
-      const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "gemini");
+      // Passes explicitly null for agent_id parameter to ensure workspace-level key isolation
+      const geminiData = await apiKeyApi.getKeyStatus(workspaceId, "gemini", null, selectedGeminiModel);
       if (geminiData) {
         setGeminiStatus({
           connected: !!geminiData.connected,
@@ -67,7 +66,7 @@ export default function WorkspaceProvidersPage() {
         }
       }
 
-      const openaiData = await apiKeyApi.getKeyStatus(workspaceId, "openai");
+      const openaiData = await apiKeyApi.getKeyStatus(workspaceId, "openai", null, selectedOpenAIModel);
       if (openaiData) {
         setOpenaiStatus({
           connected: !!openaiData.connected,
@@ -84,6 +83,13 @@ export default function WorkspaceProvidersPage() {
       console.error("Failed to sync structural provider data matrix:", err);
     }
   }
+
+  // Trigger status sync whenever dropdown selections switch to verify variant-level existence checks
+  useEffect(() => {
+    if (activeWorkspaceId) {
+      syncAllStatuses(activeWorkspaceId);
+    }
+  }, [selectedGeminiModel, selectedOpenAIModel, activeWorkspaceId]);
 
   useEffect(() => {
     async function initializeSecureContext() {
@@ -132,7 +138,11 @@ export default function WorkspaceProvidersPage() {
     try {
       setSubmittingKey(true);
       await apiKeyApi.connectKey(activeProviderForm, inputKey.trim(), activeWorkspaceId, null, targetModelVersion);
-      toast.success(`${providerMeta[activeProviderForm].name} API token stored successfully!`);
+      
+      // Auto-Toggle the saved target to become default active for this workspace tier immediately
+      await apiKeyApi.setDefaultProvider(activeProviderForm, activeWorkspaceId, targetModelVersion, null);
+
+      toast.success(`${providerMeta[activeProviderForm].name} API token stored and activated successfully!`);
       setInputKey("");
       setActiveProviderForm(null);
       await syncAllStatuses(activeWorkspaceId);
@@ -146,9 +156,13 @@ export default function WorkspaceProvidersPage() {
   async function handleDisconnectWorkspaceKey(providerKey: "gemini" | "openai") {
     if (!activeWorkspaceId) return;
     if (!window.confirm(`Disconnect shared ${providerMeta[providerKey].name} credential variables?`)) return;
+    
+    const targetModelVersion = providerKey === "gemini" ? selectedGeminiModel : selectedOpenAIModel;
+    
     try {
       setSubmittingKey(true);
-      await apiKeyApi.disconnectKey(providerKey, activeWorkspaceId);
+      // FIXED: Passed targetModelVersion so backend find-and-delete queries succeed perfectly
+      await apiKeyApi.disconnectKey(providerKey, activeWorkspaceId, null, targetModelVersion);
       toast.success(`${providerMeta[providerKey].name} token cleared cleanly.`);
       
       if (providerKey === "gemini") setGeminiStatus({ connected: false, last_updated: "", masked_key: "", is_default: false, model_version: "" });
@@ -168,7 +182,8 @@ export default function WorkspaceProvidersPage() {
     const targetModelVersion = providerKey === "gemini" ? selectedGeminiModel : selectedOpenAIModel;
     try {
       setTogglingDefault(true);
-      await apiKeyApi.setDefaultProvider(providerKey, activeWorkspaceId, targetModelVersion);
+      // Passes agent_id as null explicitly to safeguard global routing scopes
+      await apiKeyApi.setDefaultProvider(providerKey, activeWorkspaceId, targetModelVersion, null);
       toast.success(`${providerMeta[providerKey].name} set as workspace routing default.`);
       await syncAllStatuses(activeWorkspaceId);
     } catch (err: any) {
@@ -207,7 +222,7 @@ export default function WorkspaceProvidersPage() {
         {/* ======================================= */}
         {/* PROVIDER ROW 1: GOOGLE GEMINI          */}
         {/* ======================================= */}
-        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${geminiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
+        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${geminiStatus.is_default && geminiStatus.model_version === selectedGeminiModel ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
           <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-11 w-11 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center text-cyan-400 shrink-0">
@@ -216,7 +231,7 @@ export default function WorkspaceProvidersPage() {
               <div className="space-y-2 flex-1">
                 <div className="flex items-center gap-2">
                   <div className="text-base font-bold text-white">Google Gemini Provider</div>
-                  {geminiStatus.is_default && (
+                  {geminiStatus.is_default && geminiStatus.model_version === selectedGeminiModel && (
                     <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
                   )}
                 </div>
@@ -279,7 +294,7 @@ export default function WorkspaceProvidersPage() {
         {/* ======================================= */}
         {/* PROVIDER ROW 2: OPENAI PLATFORM        */}
         {/* ======================================= */}
-        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${openaiStatus.is_default ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
+        <div className={`bg-[#090f1c]/40 border rounded-2xl overflow-hidden shadow-xl transition-all duration-300 ${openaiStatus.is_default && openaiStatus.model_version === selectedOpenAIModel ? 'border-green-500/30 ring-1 ring-green-500/10' : 'border-slate-800/60'}`}>
           <div className="p-6 md:p-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-slate-950/20">
             <div className="flex items-center gap-4 flex-1">
               <div className="h-11 w-11 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
@@ -288,7 +303,7 @@ export default function WorkspaceProvidersPage() {
               <div className="space-y-2 flex-1">
                 <div className="flex items-center gap-2">
                   <div className="text-base font-bold text-white">OpenAI Core Provider</div>
-                  {openaiStatus.is_default && (
+                  {openaiStatus.is_default && openaiStatus.model_version === selectedOpenAIModel && (
                     <span className="flex items-center gap-1 text-[10px] uppercase tracking-wider font-mono font-bold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full">Active Default</span>
                   )}
                 </div>

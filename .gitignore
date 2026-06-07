@@ -106,3 +106,4 @@ check_tokens.py
 run_migration.py
 inject_column.py
 inject_columns.py
+wipe_api_key.py
