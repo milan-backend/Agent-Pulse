@@ -227,7 +227,7 @@ export const apiKeyApi = {
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
-    return request(`/api-key/disconnect?${queryParams.toString()}`, {
+    return request(`/api-keys/disconnect?${queryParams.toString()}`, {
       method: "DELETE",
       headers,
     });
@@ -257,7 +257,7 @@ export const apiKeyApi = {
     if (modelVersion) queryParams.append("model_version", modelVersion);
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
 
-    return request(`/api-key/set-default?${queryParams.toString()}`, {
+    return request(`/api-keys/set-default?${queryParams.toString()}`, {
       method: "PATCH",
       headers,
     });
