@@ -39,8 +39,8 @@ def encrypt_file_bytes(file_bytes: bytes, workspace_id: UUID) -> tuple[bytes, by
     key = derive_workspace_key(workspace_id)
     aesgcm = AESGCM(key)
     
-    # Generate a secure random 12-byte initialization vector (nonce)
-    iv = AESGCM.generate_nonce()
+    # FIX: Using os.urandom(12) to securely generate a 12-byte initialization vector (nonce)
+    iv = os.urandom(12)
     
     # Encrypt raw data payload
     ciphertext = aesgcm.encrypt(iv, file_bytes, None)
@@ -73,7 +73,9 @@ def encrypt_text_string(plain_text: str, workspace_id: UUID) -> str:
         
     key = derive_workspace_key(workspace_id)
     aesgcm = AESGCM(key)
-    iv = AESGCM.generate_nonce()
+    
+    # FIX: Using os.urandom(12) to securely generate a 12-byte initialization vector (nonce)
+    iv = os.urandom(12)
     
     ciphertext = aesgcm.encrypt(iv, plain_text.encode("utf-8"), None)
     
