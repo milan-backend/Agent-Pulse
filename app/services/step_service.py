@@ -145,7 +145,7 @@ async def create_step_execution(
     )
 
     if guard["stop"]:
-       failed_step = DurableStep(
+        failed_step = DurableStep(
             agent_id=current_agent.id,
             workspace_id=current_agent.workspace_id,
             task_name=request.task_name,
@@ -154,25 +154,25 @@ async def create_step_execution(
             error_message=guard["reason"],
             runtime_controlled=True,
             idempotency_key=request.idempotency_key
-       )
+        )
 
-       db.add(failed_step)
-       db.flush()
+        db.add(failed_step)
+        db.flush()
 
-       create_usage_event(
+        create_usage_event(
              db=db,
              workspace_id=current_agent.workspace_id,
              agent_id=current_agent.id,
              step_id=failed_step.id,
              event_type="execution_failed"
-       )
+        )
 
-       db.commit()
+        db.commit()
 
-       raise HTTPException(
+        raise HTTPException(
             status_code=429,
             detail=f"Agent stopped: {guard['reason']}"
-       )
+        )
 
     # ============================================
     # IDEMPOTENCY
@@ -220,13 +220,18 @@ async def create_step_execution(
         )
 
     # ============================================
-    # CONCURRENT EXECUTION LIMIT
+    # ✅ FIXED: CONCURRENT LIMIT EVALUATION PATH
     # ============================================
+    # We filter for active tasks created within a realistic window to avoid 
+    # being locked out by orphaned, historical crashed rows from old server deployments.
+    active_timeout_window = datetime.utcnow() - timedelta(hours=1)
+    
     running_steps = (
         db.query(func.count(DurableStep.id))
         .filter(
             DurableStep.workspace_id == current_agent.workspace_id,
-            DurableStep.status.in_(["pending", "running"])
+            DurableStep.status.in_(["pending", "running"]),
+            DurableStep.created_at >= active_timeout_window
         )
         .scalar()
     )
@@ -238,7 +243,8 @@ async def create_step_execution(
             status_code=429,
             detail=(
                 f"Concurrent execution limit exceeded. "
-                f"Running={running_steps}, Limits={max_parallel_runs}"
+                f"Running={running_steps}, Limits={max_parallel_runs}. "
+                f"Please allow old operations to time out or run the cleanup script."
             )
         )
 
