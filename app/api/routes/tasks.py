@@ -22,9 +22,21 @@ from app.services.feature_access import require_feature
 
 router = APIRouter()
 
-# DECENTRALIZED: Switch from local disk client to cloud server HTTP Client
+# =====================================================================
+# DECENTRALIZED MULTI-CLOUD CHROMADB CONNECTION LAYER WITH AUTH TOKEN
+# =====================================================================
 CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
-chroma_client = chromadb.HttpClient(host=CHROMA_HOST)
+CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "")
+
+# Render reads this block, passing the API_KEY safely over the public internet proxy
+if CHROMA_TOKEN:
+    chroma_client = chromadb.HttpClient(
+        host=CHROMA_HOST,
+        headers={"Authorization": f"Bearer {CHROMA_TOKEN}"}
+    )
+else:
+    # Safe fallback interface layout path context
+    chroma_client = chromadb.HttpClient(host=CHROMA_HOST)
 
 
 # ============================================
@@ -42,7 +54,7 @@ def validate_task_access(db: Session, workspace_id: str):
 
 
 # ============================================
-# GET AGENT TASKS (UPDATED WITH CONTEXT SEARCH)
+# GET AGENT TASKS
 # ============================================
 @router.get("/agent/{agent_id}")
 def get_agent_tasks(
@@ -106,7 +118,7 @@ def get_agent_tasks(
 
 
 # =====================================================================
-# VIEW MORE INFORMATION (100% DYNAMIC TEAMWORK RETRIEVAL TELEMETRY)
+# VIEW MORE INFORMATION (DYNAMIC TELEMETRY ROUTE LOOP)
 # =====================================================================
 @router.get("/info/{step_id}")
 def get_task_execution_telemetry(
@@ -150,7 +162,7 @@ def get_task_execution_telemetry(
 
     if prompt and prompt.strip():
         try:
-            # TEAMWORK: Query the separate ChromaDB cluster instance via HTTP Client
+            # Query the separate ChromaDB cluster instance via secure HTTP Client wrapper
             collection = chroma_client.get_collection(name="rag_knowledge_base")
             if collection:
                 chroma_results = collection.query(
@@ -176,7 +188,7 @@ def get_task_execution_telemetry(
                         parent_distance_score = float(distances_list[index]) if distances_list is not None else 0.0
                         accuracy = max((1.0 - parent_distance_score), 0.0) * 100
                         
-                        # TEAMWORK: Take hidden document_id and ask Postgres for the real file name
+                        # Take hidden document_id and ask Postgres for the real file name
                         doc_id = metadata.get("document_id")
                         doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id).first()
                         filename = doc_record.filename if doc_record else "Unknown Reference File"
@@ -206,10 +218,7 @@ def get_task_execution_telemetry(
     # 4. Completely Dynamic Model Resolution (Hierarchy Evaluation Matrix)
     model_used = "environment-default"
     
-    # Check hierarchy step 1 & 2: Read active agent parameters configuration
-    from app.models.agent import Agent
     agent_record = db.query(Agent).filter(Agent.id == step.agent_id).first()
-    
     if agent_record:
         # Check custom UserAPIKey model version first
         agent_specific_key = db.query(UserAPIKey).filter(
