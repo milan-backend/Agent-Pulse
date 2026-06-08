@@ -23,19 +23,25 @@ from app.services.feature_access import require_feature
 router = APIRouter()
 
 # =====================================================================
-# PRODUCTION CLOUD CHROMADB HTTP CONNECTION (FOR RENDER)
+# LAZY INITIALIZATION HELPER: PREVENTS RENDER BOOT CRASHES
 # =====================================================================
-CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
-CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "")
-
-# Render connects to your Railway Auth Proxy using this secure client config
-if CHROMA_TOKEN:
-    chroma_client = chromadb.HttpClient(
-        host=CHROMA_HOST,
-        headers={"Authorization": f"Bearer {CHROMA_TOKEN}"}
-    )
-else:
-    chroma_client = chromadb.HttpClient(host=CHROMA_HOST)
+def get_chroma_client():
+    """
+    Dynamically initializes the Chroma client when needed. This ensures 
+    Render boots smoothly even if the Railway instance takes a moment to respond.
+    """
+    CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
+    CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "")
+    
+    # Clean up accidental trailing slashes or spaces from dashboard typos
+    CHROMA_HOST = CHROMA_HOST.strip().rstrip("/")
+    
+    if CHROMA_TOKEN:
+        return chromadb.HttpClient(
+            host=CHROMA_HOST,
+            headers={"Authorization": f"Bearer {CHROMA_TOKEN.strip()}"}
+        )
+    return chromadb.HttpClient(host=CHROMA_HOST)
 
 
 # ============================================
@@ -148,6 +154,8 @@ def get_task_execution_telemetry(
 
     if prompt and prompt.strip():
         try:
+            # Call lazy client handler over network on demand
+            chroma_client = get_chroma_client()
             collection = chroma_client.get_collection(name="rag_knowledge_base")
             if collection:
                 chroma_results = collection.query(
@@ -201,7 +209,7 @@ def get_task_execution_telemetry(
     if agent_record:
         agent_specific_key = db.query(UserAPIKey).filter(
             UserAPIKey.agent_id == agent_record.id,
-            workspace_id == workspace_id
+            UserAPIKey.workspace_id == workspace_id
         ).first()
         
         if agent_specific_key and agent_specific_key.model_version:
