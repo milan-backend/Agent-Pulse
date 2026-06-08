@@ -14,9 +14,17 @@ from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL") or "redis://localhost:6379/0"
 celery_app = Celery("rag_tasks", broker=CELERY_BROKER)
 
-# DECENTRALIZED: Switch from local disk client to cloud server HTTP Client
-CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
-chroma_client = chromadb.HttpClient(host=CHROMA_HOST)
+# =====================================================================
+# ✅ FIXED: LAZY INITIALIZATION HELPER (NO LONGER SITTING AT TOP LEVEL)
+# =====================================================================
+def get_chroma_client():
+    """
+    Dynamically initializes the Chroma client over the private internal network.
+    This safely prevents boot crashes when the Chroma instance is sleeping.
+    """
+    CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
+    CHROMA_HOST = CHROMA_HOST.strip().rstrip("/")
+    return chromadb.HttpClient(host=CHROMA_HOST)
 
 
 def chunk_text(text: str, chunk_size: int = 600, chunk_overlap: int = 120) -> list[str]:
@@ -85,7 +93,10 @@ def process_document_embedding(document_id: str):
         # 4. Generate overlapping semantic chunks arrays
         text_chunks = chunk_text(extracted_text)
         
-        # 5. Handshake with the centralized ChromaDB cluster over HTTP
+        # =====================================================================
+        # ✅ FIXED: INITIALIZE HERE EXACTLY WHEN PROCESSING RUNS
+        # =====================================================================
+        chroma_client = get_chroma_client()
         collection = chroma_client.get_or_create_collection(name="rag_knowledge_base")
         
         ids = []
