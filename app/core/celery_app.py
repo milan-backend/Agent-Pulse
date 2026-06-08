@@ -24,3 +24,4 @@ celery.conf.task_track_started = True
 celery.conf.result_expires = 3600
 
 import app.tasks.step_tasks
+import app.tasks.rag_tasks
