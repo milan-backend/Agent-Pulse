@@ -1,16 +1,23 @@
 from celery import shared_task
 from datetime import datetime
 import uuid
+import chromadb
+import os
 
 from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
 from app.models.agent_policy import AgentPolicy
 from app.models.user_api_key import UserAPIKey  # Imported safely for hierarchical routing
+from app.core.rag_crypto import decrypt_text_string  # Secure decryption utility for database text
 
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
 from app.services.usage_service import create_usage_event
+
+# Initialize standard ChromaDB Client instance to scan vector arrays
+CHROMA_DIR = os.path.join(os.getcwd(), "chroma_storage")
+chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
 
 @shared_task(bind=True, max_retries=5)
 def process_step(self, step_id: str):
@@ -206,10 +213,70 @@ def process_step(self, step_id: str):
                         if any_workspace_key and any_workspace_key.model_version:
                             active_model_target = any_workspace_key.model_version
 
+                # ========================================================
+                # ADVANCED HIERARCHICAL CONTEXT RETRIEVAL (RAG LOOKUP)
+                # ========================================================
+                context_fragments = []
+                try:
+                    # Fetch database collection bucket if it exists
+                    collection = chroma_client.get_collection(name="rag_knowledge_base")
+                    
+                    if collection:
+                        # TIER 1: Query Chroma strictly matching this custom Agent's UUID first
+                        agent_results = collection.query(
+                            query_texts=[prompt],
+                            n_results=4,
+                            where={
+                                "$and": [
+                                    {"workspace_id": current_workspace_id},
+                                    {"agent_id": str(agent_id_raw)}
+                                ]
+                            }
+                        )
+                        
+                        # Unpack encrypted text responses if surfaced directly
+                        if agent_results and agent_results.get("documents") and agent_results["documents"][0]:
+                            for encrypted_chunk in agent_results["documents"][0]:
+                                plain_chunk = decrypt_text_string(encrypted_chunk, uuid.UUID(current_workspace_id))
+                                if plain_chunk:
+                                    context_fragments.append(plain_chunk)
+                        
+                        # TIER 2: Fall back to general Workspace data if Agent context was clean
+                        if not context_fragments:
+                            workspace_results = collection.query(
+                                query_texts=[prompt],
+                                n_results=4,
+                                where={
+                                    "$and": [
+                                        {"workspace_id": current_workspace_id},
+                                        {"agent_id": "None"}
+                                    ]
+                                }
+                            )
+                            if workspace_results and workspace_results.get("documents") and workspace_results["documents"][0]:
+                                for encrypted_chunk in workspace_results["documents"][0]:
+                                    plain_chunk = decrypt_text_string(encrypted_chunk, uuid.UUID(current_workspace_id))
+                                    if plain_chunk:
+                                        context_fragments.append(plain_chunk)
+                except Exception as chroma_err:
+                    # Graceful non-blocking degradation if Chroma isn't completely indexed yet
+                    print(f"⚠️ Vector search bypassed or uninitialized: {str(chroma_err)}")
+
+                # Inject decoded context pieces natively into the instruction system prompt block
+                final_prompt_payload = prompt
+                if context_fragments:
+                    combined_context = "\n\n".join(context_fragments)
+                    final_prompt_payload = (
+                        f"CRITICAL CONTEXT DISCOVERED IN SECURITY CORE:\n"
+                        f"==================================================\n"
+                        f"{combined_context}\n"
+                        f"==================================================\n\n"
+                        f"USER INSTRUCTION TASK: {prompt}"
+                    )
+
                 # Run Handshake via the updated hierarchical engine layer 
-                # (If active_model_target is None here, llm_service will dynamically resolve it via environment variables)
                 output = generate_llm_response(
-                    prompt=prompt,
+                    prompt=final_prompt_payload,
                     db=db,
                     workspace_id=current_workspace_id,
                     agent_id=agent_id_raw,
@@ -217,7 +284,7 @@ def process_step(self, step_id: str):
                 )
                 
                 completion_usage = calculate_usage(
-                   prompt=prompt,
+                   prompt=final_prompt_payload,
                    completion=output,
                    model_name=active_model_target if active_model_target else "gemini-2.5-flash-lite"
                 )

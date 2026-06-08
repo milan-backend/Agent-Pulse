@@ -12,7 +12,8 @@ import {
   Settings, 
   Repeat, 
   Timer,
-  KeyRound // Imported for your new API Provider link icon
+  KeyRound,
+  FileText // Imported for the agent private sandbox document vault link icon
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -24,7 +25,7 @@ interface Agent {
   name: string;
   is_active: boolean;
   is_killed: boolean;
-  max_cost: number;
+max_cost: number;
   max_steps: number;
   max_retries: number;
   max_repeated_tasks: number;
@@ -118,39 +119,45 @@ export default function AgentRuntimePage() {
     <div className="min-h-screen bg-[#020817] text-white flex">
       
       {/* SIDEBAR CONTAINER */}
-      <aside className="w-[300px] shrink-0 border-r border-cyan-500/10 bg-[#040b18] p-6">
-        <div>
-          <h1 className="text-5xl font-black">
-            <span className="text-cyan-400">Agent</span>
-            <span className="text-white">Pulse</span>
-          </h1>
-          <p className="mt-2 text-zinc-400">Runtime Agent Control</p>
+      <aside className="w-[300px] shrink-0 border-r border-cyan-500/10 bg-[#040b18] p-6 flex flex-col justify-between h-screen sticky top-0">
+        <div className="space-y-10">
+          <div>
+            <h1 className="text-5xl font-black">
+              <span className="text-cyan-400">Agent</span>
+              <span className="text-white">Pulse</span>
+            </h1>
+            <p className="mt-2 text-zinc-400">Runtime Agent Control</p>
+          </div>
+
+          <div className="space-y-4">  
+            <Link href="/dashboard/agents" className="flex items-center gap-3 rounded-2xl bg-[#0b1628] px-5 py-4 font-bold transition-all hover:bg-cyan-500/10">  
+              <ArrowLeft size={18} /> Back To Agents  
+            </Link>  
+            
+            <button onClick={pauseAgent} disabled={pausing} className="w-full flex items-center gap-3 rounded-2xl bg-green-500/20 border border-green-500/30 px-5 py-4 font-bold text-green-300 transition-all hover:bg-green-500/30 disabled:opacity-50">  
+              <Pause size={18} /> {pausing ? "Pausing..." : "Pause Agent"}  
+            </button>  
+            
+            <Link href={`/agent/${agent.id}/settings`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 px-5 py-4 font-bold text-cyan-300 transition-all hover:bg-cyan-500/30">  
+              <Settings size={18} /> Agent Settings  
+            </Link>  
+
+            <Link href={`/agent/${agent.id}/provider`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 px-5 py-4 font-bold text-cyan-400 transition-all hover:bg-cyan-500/20">  
+              <KeyRound size={18} /> API Provider  
+            </Link>  
+
+            {/* NEW: AGENT SCENTED PRIVATE KNOWLEDGE BASE ROUTE CONNECTOR VAULT LINK */}
+            <Link href={`/agent/${agent.id}/knowledge`} className="flex items-center gap-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 px-5 py-4 font-bold text-emerald-400 transition-all hover:bg-emerald-500/20 shadow-[0_0_15px_rgba(16,185,129,0.02)]">  
+              <FileText size={18} /> Agent Knowledge  
+            </Link>  
+            
+            <Link href={`/agent/${agent.id}/tasks`} className="flex items-center gap-3 rounded-2xl bg-purple-500/20 border border-purple-500/30 px-5 py-4 font-bold text-purple-300 transition-all hover:bg-purple-500/30">  
+              <Activity size={18} /> Agent Tasks  
+            </Link>  
+          </div>  
         </div>
 
-        <div className="mt-10 space-y-4">  
-          <Link href="/dashboard/agents" className="flex items-center gap-3 rounded-2xl bg-[#0b1628] px-5 py-4 font-bold transition-all hover:bg-cyan-500/10">  
-            <ArrowLeft size={18} /> Back To Agents  
-          </Link>  
-          
-          <button onClick={pauseAgent} disabled={pausing} className="w-full flex items-center gap-3 rounded-2xl bg-green-500/20 border border-green-500/30 px-5 py-4 font-bold text-green-300 transition-all hover:bg-green-500/30 disabled:opacity-50">  
-            <Pause size={18} /> {pausing ? "Pausing..." : "Pause Agent"}  
-          </button>  
-          
-          <Link href={`/agent/${agent.id}/settings`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 px-5 py-4 font-bold text-cyan-300 transition-all hover:bg-cyan-500/30">  
-            <Settings size={18} /> Agent Settings  
-          </Link>  
-
-          {/* ADDED: DEDICATED PRIVATE PROVIDER INTEGRATION LINK (YOUR AWESOME IDEA!) */}
-          <Link href={`/agent/${agent.id}/provider`} className="flex items-center gap-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 px-5 py-4 font-bold text-cyan-400 transition-all hover:bg-cyan-500/20">  
-            <KeyRound size={18} /> API Provider  
-          </Link>  
-          
-          <Link href={`/agent/${agent.id}/tasks`} className="flex items-center gap-3 rounded-2xl bg-purple-500/20 border border-purple-500/30 px-5 py-4 font-bold text-purple-300 transition-all hover:bg-purple-500/30">  
-            <Activity size={18} /> Agent Tasks  
-          </Link>  
-        </div>  
-
-        <div className="mt-10 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-6">  
+        <div className="mb-2 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-6">  
           <p className="text-zinc-400">Runtime Status</p>  
           <div className="mt-4 flex items-center justify-between">  
             <h2 className={`text-4xl font-black ${agent.is_active ? "text-green-300" : "text-red-300"}`}>{agent.is_active ? "ACTIVE" : "PAUSED"}</h2>  

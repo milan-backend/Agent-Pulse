@@ -24,3 +24,5 @@ google-genai==0.6.0
 
 grpcio
 protobuf
+
+pypdf

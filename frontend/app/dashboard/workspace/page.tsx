@@ -9,7 +9,8 @@ import {
   ArrowRight, 
   Loader2,
   Boxes,
-  Cpu
+  Cpu,
+  FileCode2 // Imported for the RAG Knowledge Base card icon styling
 } from "lucide-react";
 import { getWorkspaceMembers, apiKeyApi } from "@/components/api";
 
@@ -138,23 +139,57 @@ export default function WorkspaceOverviewPage() {
 
       </div>
 
-      {/* FOOTER ACTIONS ROW */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
-        <Link href="/dashboard/workspace/members" className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-cyan-500/20 group flex items-center justify-between gap-6">
+      {/* FOOTER ACTIONS ROW - GRID CHANGED TO grid-cols-1 md:grid-cols-3 FOR THE NEW CARD */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+        
+        {/* TEAM CLEARANCE CONFIGURATOR */}
+        <Link href="/dashboard/workspace/members" className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-cyan-500/20 group flex flex-col justify-between h-48 relative">
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors flex items-center gap-2"><Boxes size={18} className="text-cyan-400" /> Control Team Profiles & Clearances</h3>
-            <p className="text-xs text-zinc-400 font-sans max-w-xl leading-relaxed">Dispatch encrypted invitations, evict operational accounts dynamically, and evaluate inline permissions matrix tags natively.</p>
+            <h3 className="text-lg font-bold text-white group-hover:text-cyan-400 transition-colors flex items-center gap-2">
+              <Boxes size={18} className="text-cyan-400" /> 
+              Control Team Clearances
+            </h3>
+            <p className="text-xs text-zinc-400 font-sans leading-relaxed">
+              Dispatch encrypted invitations, evict operational accounts dynamically, and evaluate inline permissions matrix tags natively.
+            </p>
           </div>
-          <ArrowRight size={18} className="text-zinc-600 group-hover:text-cyan-400 group-hover:translate-x-1.5 transition-all shrink-0" />
+          <div className="flex justify-end w-full">
+            <ArrowRight size={18} className="text-zinc-600 group-hover:text-cyan-400 group-hover:translate-x-1.5 transition-all" />
+          </div>
         </Link>
 
-        <Link href="/dashboard/workspace/providers" className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-purple-500/20 group flex items-center justify-between gap-6">
+        {/* PROVIDER KEY STORAGE VAULT */}
+        <Link href="/dashboard/workspace/providers" className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-purple-500/20 group flex flex-col justify-between h-48 relative">
           <div className="space-y-1.5">
-            <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors flex items-center gap-2"><Cpu size={18} className="text-purple-400" /> Configure API Provider Vault</h3>
-            <p className="text-xs text-zinc-400 font-sans max-w-xl leading-relaxed">Inject multi-tenant infrastructure key tokens (BYOK) safely into background server parameters without data cross-leak hazards.</p>
+            <h3 className="text-lg font-bold text-white group-hover:text-purple-400 transition-colors flex items-center gap-2">
+              <Cpu size={18} className="text-purple-400" /> 
+              Configure Provider Vault
+            </h3>
+            <p className="text-xs text-zinc-400 font-sans leading-relaxed">
+              Inject multi-tenant infrastructure key tokens (BYOK) safely into background server parameters without data cross-leak hazards.
+            </p>
           </div>
-          <ArrowRight size={18} className="text-zinc-600 group-hover:text-purple-400 group-hover:translate-x-1.5 transition-all shrink-0" />
+          <div className="flex justify-end w-full">
+            <ArrowRight size={18} className="text-zinc-600 group-hover:text-purple-400 group-hover:translate-x-1.5 transition-all" />
+          </div>
         </Link>
+
+        {/* NEW: RAG DATA KNOWLEDGE BASE ACCELERATOR PANEL CARD */}
+        <Link href="/dashboard/workspace/knowledge" className="p-8 rounded-2xl border border-slate-800/80 bg-[#090f1c]/20 hover:bg-[#090f1c]/50 transition-all hover:border-emerald-500/20 group flex flex-col justify-between h-48 relative">
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-bold text-white group-hover:text-emerald-400 transition-colors flex items-center gap-2">
+              <FileCode2 size={18} className="text-emerald-400" /> 
+              RAG Knowledge Base
+            </h3>
+            <p className="text-xs text-zinc-400 font-sans leading-relaxed">
+              Ingest plain text or raw multi-page PDF documents securely into our decoupled, two-tier isolated vector storage boundaries.
+            </p>
+          </div>
+          <div className="flex justify-end w-full">
+            <ArrowRight size={18} className="text-zinc-600 group-hover:text-emerald-400 group-hover:translate-x-1.5 transition-all" />
+          </div>
+        </Link>
+
       </div>
 
     </div>

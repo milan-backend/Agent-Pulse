@@ -107,3 +107,7 @@ run_migration.py
 inject_column.py
 inject_columns.py
 wipe_api_key.py
+inject_rag_table.py
+update_plan_limits.py
+inject_refresh_tokens.py
+locustfile.py

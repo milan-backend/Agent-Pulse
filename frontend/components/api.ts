@@ -39,7 +39,7 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
     return fetch(`${API_URL}${endpoint}`, {
       method: options.method || "GET",
       headers: finalHeaders,
-      body: options.body ? JSON.stringify(options.body) : undefined,
+      body: options.body instanceof FormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
     });
   };
 
@@ -158,7 +158,6 @@ export const apiKeyApi = {
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
 
-    // FIXED: Corrected router path prefix to match your FastAPI endpoints backend string mapping
     return request(`/api-keys/status?${queryParams.toString()}`, {
       method: "GET",
       headers,
@@ -268,14 +267,14 @@ export const apiKeyApi = {
 AUTH
 ========================================================= */
 
-export async function signup(name: string, email: string, password: string) {
+export const signup = async (name: string, email: string, password: string) => {
   return request("/auth/signup", {
     method: "POST",
     body: { name, email, password },
   });
-}
+};
 
-export async function login(email: string, password: string) {
+export const login = async (email: string, password: string) => {
   const data = await request("/auth/login", {
     method: "POST",
     body: { email, password },
@@ -295,120 +294,120 @@ export async function login(email: string, password: string) {
     localStorage.setItem("workspaces", JSON.stringify(data.workspaces || []));
   }
   return data;
-}
+};
 
 /* =========================================================
 DEACTIVATE ACCOUNT
 ========================================================= */
 
-export async function deactivateAccount(password: string) {
+export const deactivateAccount = async (password: string) => {
   return request("/auth/deactivate-account", {
     method: "DELETE",
     body: { password },
   });
-}
+};
 
 /* =========================================================
 VERIFY EMAIL
 ========================================================= */
 
-export async function verifyEmail(token: string) {
+export const verifyEmail = async (token: string) => {
   return request(`/auth/verify-email?token=${token}`);
-}
+};
 
 /* =========================================================
 FORGOT PASSWORD
 ========================================================= */
 
-export async function forgotPassword(email: string) {
+export const forgotPassword = async (email: string) => {
   return request("/auth/forgot-password", {
     method: "POST",
     body: { email },
   });
-}
+};
 
 /* =========================================================
 RESET PASSWORD
 ========================================================= */
 
-export async function resetPassword(token: string, new_password: string) {
+export const resetPassword = async (token: string, new_password: string) => {
   return request("/auth/reset-password", {
     method: "POST",
     body: { token, new_password },
   });
-}
+};
 
-export async function getCurrentUser() {
+export const getCurrentUser = async () => {
   return request("/auth/me");
-}
+};
 
 /* =========================================================
 BILLING
 ========================================================= */
 
-export async function createCheckout(planName: string) {
+export const createCheckout = async (planName: string) => {
   return request(`/billing/checkout/${planName}`, {
     method: "POST",
   });
-}
+};
 
-export async function getCurrentPlan() {
+export const getCurrentPlan = async () => {
   return request("/billing/current-plan");
-}
+};
 
 /* =========================================================
 DASHBOARD
 ========================================================= */
 
-export async function getDashboardSummary() {
+export const getDashboardSummary = async () => {
   const response = await request("/dashboard/summary");
   return response?.data || response;
-}
+};
 
-export async function getDashboardSteps() {
+export const getDashboardSteps = async () => {
   const response = await request("/dashboard/steps");
   return response?.steps || response?.data || response || [];
-}
+};
 
-export async function getDashboardAgents() {
+export const getDashboardAgents = async () => {
   const response = await request("/dashboard/agents");
   return response;
-}
+};
 
 /* =========================================================
 ANALYTICS
 ========================================================= */
 
-export async function getCostAnalytics() {
+export const getCostAnalytics = async () => {
   const response = await request("/analytics/costs");
   return response?.data || response;
-}
+};
 
-export async function getBlockedMissions() {
+export const getBlockedMissions = async () => {
   const response = await request("/analytics/blocked");
   return response?.data || response;
-}
+};
 
-export async function getAgentAnalytics() {
+export const getAgentAnalytics = async () => {
   const response = await request("/analytics/agents");
   return response?.data || response;
-}
+};
 
-export async function getAnalyticsOverview() {
+export const getAnalyticsOverview = async () => {
   const response = await request("/analytics/overview");
   return response?.data || response;
-}
+};
 
 /* =========================================================
 MISSIONS (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
 ========================================================= */
 
-export async function getMissionOverview() {
+export const getMissionOverview = async () => {
   const response = await request("/missions/overview");
   return response?.data || response;
-}
+};
 
-export async function getMissionList(q?: string, status?: string) {
+export const getMissionList = async (q?: string, status?: string) => {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
   if (status) queryParams.append("status", status);
@@ -417,36 +416,36 @@ export async function getMissionList(q?: string, status?: string) {
   const endpoint = `/missions/list${queryString ? `?${queryString}` : ""}`;
   const response = await request(endpoint);
   return Array.isArray(response) ? response : [];
-}
+};
 
-export async function fetchMissionById(missionId: string) {
+export const fetchMissionById = async (missionId: string) => {
   const response = await request(`/missions/${missionId}`);
   return response?.data || response;
-}
+};
 
-export async function retryMission(missionId: string) {
+export const retryMission = async (missionId: string) => {
   return request(`/missions/${missionId}/retry`, {
     method: "POST",
   });
-}
+};
 
-export async function killMission(missionId: string) {
+export const killMission = async (missionId: string) => {
   return request(`/missions/${missionId}/kill`, {
     method: "POST",
   });
-}
+};
 
-export async function resumeMission(missionId: string) {
+export const resumeMission = async (missionId: string) => {
   return request(`/missions/${missionId}/resume`, {
     method: "POST",
   });
-}
+};
 
 /* =========================================================
 USAGE LOGS (UPDATED WITH OPTIONAL SEARCH COMPLIANCE HOOKS)
 ========================================================= */
 
-export async function getDashboardUsageLogs(q?: string) {
+export const getDashboardUsageLogs = async (q?: string) => {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
 
@@ -454,32 +453,32 @@ export async function getDashboardUsageLogs(q?: string) {
   const endpoint = `/usage/feed${queryString ? `?${queryString}` : ""}`;
   const response = await request(endpoint);
   return response?.logs || response?.data || response || [];
-}
+};
 
 /* =========================================================
 AGENT RUNTIME 
 ========================================================= */
 
-export async function createAgent(data: { 
+export const createAgent = async (data: { 
   name: string; 
   system_prompt?: string; 
   model?: string;
   api_provider?: string;    
   agent_api_key?: string;   
   model_version?: string;   
-}) {
+}) => {
   return request("/agents/", {
     method: "POST",
     body: data,
   });
-}
+};
 
-export async function getAgent(agentId: string) {
+export const getAgent = async (agentId: string) => {
   const response = await request(`/dashboard/agent/${agentId}`);
   return response?.data || response;
-}
+};
 
-export async function getAgentTasks(agentId: string, q?: string, status?: string) {
+export const getAgentTasks = async (agentId: string, q?: string, status?: string) => {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
   if (status) queryParams.append("status", status);
@@ -488,25 +487,25 @@ export async function getAgentTasks(agentId: string, q?: string, status?: string
   const endpoint = `/agent/${agentId}${queryString ? `?${queryString}` : ""}`;
   const response = await request(endpoint);
   return response?.tasks || response?.data || response || [];
-}
+};
 
-export async function regenerateAgentKey(agentId: string) {
+export const regenerateAgentKey = async (agentId: string) => {
   return request(`/agents/regenerate-key/${agentId}`, {
     method: "POST",
   });
-}
+};
 
-export async function updateAgentSettings(
+export const updateAgentSettings = async (
   agentId: string,
   payload: { max_steps?: number; max_retries?: number; max_cost?: number; max_repeated_tasks?: number; }
-) {
+) => {
   return request(`/agents/${agentId}`, {
     method: "PUT",
     body: payload,
   });
-}
+};
 
-export async function patchAgentSettings(
+export const patchAgentSettings = async (
   agentId: string,
   payload: {
     name?: string;
@@ -515,114 +514,114 @@ export async function patchAgentSettings(
     agent_api_key?: string;
     model_version?: string;
   }
-) {
+) => {
   return request(`/agents/${agentId}`, {
     method: "PATCH",
     body: payload,
   });
-}
+};
 
-export async function pauseAgentMission(agentId: string) {
+export const pauseAgentMission = async (agentId: string) => {
   return request(`/mission-control/pause/${agentId}`, {
     method: "POST",
   });
-}
+};
 
-export async function resumeAgentMission(agentId: string) {
+export const resumeAgentMission = async (agentId: string) => {
   return request(`/mission-control/resume/${agentId}`, {
     method: "POST",
   });
-}
+};
 
-export async function killAgentMission(agentId: string) {
+export const killAgentMission = async (agentId: string) => {
   return request(`/mission-control/kill/${agentId}`, {
     method: "POST",
   });
-}
+};
 
-export async function stopAllAgents() {
+export const stopAllAgents = async () => {
   return request("/agents/kill", {
     method: "POST",
   });
-}
+};
 
-export async function resumeAllAgents() {
+export const resumeAllAgents = async () => {
   return request("/agents/resume", {
     method: "POST",
   });
-}
+};
 
 /* =========================================================
 STEPS
 ========================================================= */
 
-export async function executeStep(data: unknown) {
+export const executeStep = async (data: unknown) => {
   return request("/steps/execute", {
     method: "POST",
     body: data,
   });
-}
+};
 
-export async function getStepStatus(stepId: string) {
+export const getStepStatus = async (stepId: string) => {
   const response = await request(`/steps/${stepId}`);
   return response?.data || response;
-}
+};
 
-export async function retryStep(stepId: string) {
+export const retryStep = async (stepId: string) => {
   return request(`/steps/retry/${stepId}`, {
     method: "POST",
   });
-}
+};
 
-export async function getStepLogs(stepId: string) {
+export const getStepLogs = async (stepId: string) => {
   const response = await request(`/steps/${stepId}/logs`);
   return response?.logs || response?.data || response || [];
-}
+};
 
 /* =========================================================
 WORKSPACE
 ========================================================= */
 
-export async function createWorkspaceMember(data: { email: string; role: string; }) {
+export const createWorkspaceMember = async (data: { email: string; role: string; }) => {
   return request("/workspace/add-member", {
     method: "POST",
     body: data,
   });
-}
+};
 
-export async function updateWorkspaceMemberRole(email: string, role: string) {
+export const updateWorkspaceMemberRole = async (email: string, role: string) => {
   return request("/workspace/members/role", {
     method: "PATCH",
     body: { email, role },
   });
-}
+};
 
-export async function getWorkspaceMembers() {
+export const getWorkspaceMembers = async () => {
   const response = await request("/workspace/members");
   return response?.members || response?.data || response || [];
-}
+};
 
-export async function deleteWorkspaceMember(userId: string) {
+export const deleteWorkspaceMember = async (userId: string) => {
   return request(`/workspace/members/${userId}`, {
     method: "DELETE",
   });
-}
+};
 
 /* =========================================================
 MCP
 ========================================================= */
 
-export async function getMcpTools() {
+export const getMcpTools = async () => {
   const response = await request("/mcp/tools");
   return response?.tools || response?.data || response || [];
-}
+};
 
-export async function executeMcp(data: unknown) {
+export const executeMcp = async (data: unknown) => {
   return request("/mcp/execute", {
     method: "POST",
     body: data,
   });
-}
+};
 
 /* =========================================================
 LIVE WEBSOCKET
@@ -713,3 +712,91 @@ export function logout() {
     window.location.href = "/login";
   }
 }
+
+/* =========================================================
+NEW: RAG DOCUMENT MANAGEMENT INTERFACES
+========================================================= */
+
+export const documentsApi = {
+  /**
+   * Upload raw files (TXT, PDF) securely to the background processing gateway.
+   */
+  uploadDocument: async (file: File, agentId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
+
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { "workspace-id": workspaceId } : {}),
+    };
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const queryParams = new URLSearchParams();
+    if (agentId && agentId.trim() !== "") {
+      queryParams.append("agent_id", agentId.trim());
+    }
+
+    const queryString = queryParams.toString();
+    const endpoint = `/documents/upload${queryString ? `?${queryString}` : ""}`;
+
+    return request(endpoint, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+  },
+
+  /**
+   * List all ingested secure text vectors stub instances.
+   */
+  listDocuments: async (agentId?: string | null) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { "workspace-id": workspaceId } : {}),
+    };
+
+    const queryParams = new URLSearchParams();
+    if (agentId && agentId.trim() !== "") {
+      queryParams.append("agent_id", agentId.trim());
+    }
+
+    const queryString = queryParams.toString();
+    const endpoint = `/documents/list${queryString ? `?${queryString}` : ""}`;
+
+    return request(endpoint, {
+      method: "GET",
+      headers,
+    });
+  }
+};
+
+/* =========================================================
+NEW: AGENT TASKS DETAILED TELEMETRY (RAG TRACKING)
+========================================================= */
+
+export const agentTasksApi = {
+  /**
+   * Fetch complete multi-tenant, dynamic task trace parameters and match scores.
+   */
+  getTaskTelemetry: async (stepId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { "workspace-id": workspaceId } : {}),
+    };
+
+    return request(`/info/${stepId}`, {
+      method: "GET",
+      headers,
+    });
+  }
+};
