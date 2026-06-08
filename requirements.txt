@@ -28,3 +28,4 @@ grpcio
 protobuf
 
 pypdf
+python-multipart
