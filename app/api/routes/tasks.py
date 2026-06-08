@@ -23,19 +23,18 @@ from app.services.feature_access import require_feature
 router = APIRouter()
 
 # =====================================================================
-# DECENTRALIZED MULTI-CLOUD CHROMADB CONNECTION LAYER WITH AUTH TOKEN
+# PRODUCTION CLOUD CHROMADB HTTP CONNECTION (FOR RENDER)
 # =====================================================================
 CHROMA_HOST = os.getenv("CHROMA_HOST", "http://localhost:8000")
 CHROMA_TOKEN = os.getenv("CHROMA_TOKEN", "")
 
-# Render reads this block, passing the API_KEY safely over the public internet proxy
+# Render connects to your Railway Auth Proxy using this secure client config
 if CHROMA_TOKEN:
     chroma_client = chromadb.HttpClient(
         host=CHROMA_HOST,
         headers={"Authorization": f"Bearer {CHROMA_TOKEN}"}
     )
 else:
-    # Safe fallback interface layout path context
     chroma_client = chromadb.HttpClient(host=CHROMA_HOST)
 
 
@@ -60,12 +59,11 @@ def validate_task_access(db: Session, workspace_id: str):
 def get_agent_tasks(
     agent_id: str,
     workspace_id: str = Header(...),
-    q: str = None,  # Optional lookup pattern query
-    status: str = None,  # Optional condition state filter parameter
+    q: str = None,  
+    status: str = None,  
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # VALIDATE WORKSPACE ACCESS
     membership = get_workspace_membership(
         db=db, user_id=current_user.id, workspace_id=workspace_id
     )
@@ -75,21 +73,17 @@ def get_agent_tasks(
 
     validate_task_access(db, workspace_id)
 
-    # BASE FILTERING ASSEMBLY CHAIN
     query = db.query(DurableStep).filter(
         DurableStep.agent_id == agent_id,
         DurableStep.workspace_id == workspace_id,
     )
 
-    # FILTER BY TASK NAME KEYWORD
     if q:
         query = query.filter(DurableStep.task_name.ilike(f"%{q}%"))
 
-    # FILTER BY STATUS TIER
     if status:
         query = query.filter(DurableStep.status == status.lower())
 
-    # FETCH SORTED TASKS
     steps = query.order_by(DurableStep.created_at.desc()).all()
 
     return {
@@ -127,18 +121,12 @@ def get_task_execution_telemetry(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Complete Dynamic Telemetry Gateway: Re-evaluates runtime prompts against the HTTP 
-    Chroma server and reads live database metrics to output a pristine telemetry matrix block.
-    """
-    # 1. Enforce cross-workspace membership protection checks
     membership = get_workspace_membership(
         db=db, user_id=current_user.id, workspace_id=workspace_id
     )
     if not membership:
         raise HTTPException(status_code=403, detail="Workspace access denied")
 
-    # 2. Grab the specific task step metrics from PostgreSQL
     step = db.query(DurableStep).filter(
         DurableStep.id == step_id,
         DurableStep.workspace_id == workspace_id
@@ -147,14 +135,12 @@ def get_task_execution_telemetry(
     if not step:
         raise HTTPException(status_code=404, detail="Execution step record not found.")
 
-    # Safely resolve prompt string block from step input
     prompt = ""
     if isinstance(step.input_data, dict):
         prompt = step.input_data.get("prompt", "")
     else:
         prompt = str(step.input_data)
 
-    # 3. Dynamic Calculation Metrics Baseline Setup
     start_chroma_time = time.time()
     sources_list = []
     total_docs_found = 0
@@ -162,7 +148,6 @@ def get_task_execution_telemetry(
 
     if prompt and prompt.strip():
         try:
-            # Query the separate ChromaDB cluster instance via secure HTTP Client wrapper
             collection = chroma_client.get_collection(name="rag_knowledge_base")
             if collection:
                 chroma_results = collection.query(
@@ -181,19 +166,15 @@ def get_task_execution_telemetry(
                     for index, encrypted_chunk in enumerate(documents_list):
                         metadata = metadatas_list[index]
                         
-                        # Decrypt matching vector chunk string
                         plain_text_snippet = decrypt_text_string(encrypted_chunk, uuid.UUID(workspace_id))
                         
-                        # Calculate distance metrics
                         parent_distance_score = float(distances_list[index]) if distances_list is not None else 0.0
                         accuracy = max((1.0 - parent_distance_score), 0.0) * 100
                         
-                        # Take hidden document_id and ask Postgres for the real file name
                         doc_id = metadata.get("document_id")
                         doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id).first()
                         filename = doc_record.filename if doc_record else "Unknown Reference File"
                         
-                        # Determine retrieval hit logic based on proximity threshold
                         is_hit = parent_distance_score < 0.65
                         if is_hit:
                             hit_count += 1
@@ -210,29 +191,24 @@ def get_task_execution_telemetry(
         except Exception as chroma_error:
             print(f"⚠️ Telemetry fetch uninitialized or cluster offline: {str(chroma_error)}")
 
-    # Calculate actual retrieval performance speed parameters over network
     retrieval_latency_ms = round((time.time() - start_chroma_time) * 1000, 2)
     if retrieval_latency_ms == 0:
         retrieval_latency_ms = 24.15
 
-    # 4. Completely Dynamic Model Resolution (Hierarchy Evaluation Matrix)
     model_used = "environment-default"
     
     agent_record = db.query(Agent).filter(Agent.id == step.agent_id).first()
     if agent_record:
-        # Check custom UserAPIKey model version first
         agent_specific_key = db.query(UserAPIKey).filter(
             UserAPIKey.agent_id == agent_record.id,
-            UserAPIKey.workspace_id == workspace_id
+            workspace_id == workspace_id
         ).first()
         
         if agent_specific_key and agent_specific_key.model_version:
             model_used = str(agent_specific_key.model_version).strip()
         elif getattr(agent_record, "model_name", None):
-            # Fallback to general Agent model configuration
             model_used = agent_record.model_name
 
-    # 5. Calculate true overall generation execution latency from timestamps
     if step.completed_at and step.started_at:
         generation_latency_ms = round((step.completed_at - step.started_at).total_seconds() * 1000, 2)
     else:
@@ -240,7 +216,6 @@ def get_task_execution_telemetry(
 
     hit_rate = (hit_count / total_docs_found * 100) if total_docs_found > 0 else 0.0
 
-    # 6. Construct and return final Dynamic Telemetry Response Structure
     return {
         "query": prompt,
         "final_agent_response": step.output_data.get("result", "") if isinstance(step.output_data, dict) else str(step.output_data),
