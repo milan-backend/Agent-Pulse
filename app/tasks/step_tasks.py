@@ -240,7 +240,7 @@ def process_step(self, step_id: str):
                 # Base structure matching your observability requirements without ID noise
                 rag_telemetry_node = {
                     "event_name": "KNOWLEDGE_RETRIEVAL",
-                    "collection_human_name": "rag_knowledge_base",
+                    "collection_human_name": "rag_knowledge_vectors",
                     "similarity_threshold_used": 0.55,  # 55% similarity boundary cutoff line
                     "query_embedding_time_ms": 0.0,
                     "vector_search_time_ms": 0.0,

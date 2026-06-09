@@ -182,7 +182,7 @@ def get_task_execution_telemetry(
             # 🎯 FIXED: ENFORCE THE COSINE DISTANCE SPACE SPECIFICATION MATRIX LINK
             # =====================================================================
             collection = chroma_client.get_collection(
-                name="rag_knowledge_vectors",
+                name="_knowledge_ragvectors",
                 embedding_function=default_ef
             )
             
@@ -275,7 +275,7 @@ def get_task_execution_telemetry(
                 "event_name": "KNOWLEDGE_RETRIEVAL",
                 "status": "SUCCESS" if total_docs_found > 0 else "SKIPPED",
                 "meta": {
-                    "collection_human_name": "rag_knowledge_base",
+                    "collection_human_name": "rag_knowledge_vectors",
                     "similarity_threshold_used": similarity_threshold_configured,
                     "query_embedding_time_ms": query_embedding_time_ms,  # Isolated Embedding Speed Latency
                     "vector_search_time_ms": vector_search_time_ms,      # Isolated Database Query Speed Latency
