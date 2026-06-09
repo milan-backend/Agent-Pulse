@@ -2,22 +2,40 @@ from celery import shared_task
 from datetime import datetime
 import uuid
 import chromadb
+from chromadb.utils import embedding_functions  
 import os
 
 from app.db.session import SessionLocal
 from app.models.durable_step import DurableStep
 from app.models.agent import Agent
 from app.models.agent_policy import AgentPolicy
-from app.models.user_api_key import UserAPIKey  # Imported safely for hierarchical routing
-from app.core.rag_crypto import decrypt_text_string  # Secure decryption utility for database text
+from app.models.user_api_key import UserAPIKey  
+from app.core.rag_crypto import decrypt_text_string  
 
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
 from app.services.usage_service import create_usage_event
 
-# Initialize standard ChromaDB Client instance to scan vector arrays
-CHROMA_DIR = os.path.join(os.getcwd(), "chroma_storage")
-chroma_client = chromadb.PersistentClient(path=CHROMA_DIR)
+# ====================================================================
+# SECURE DYNAMIC CHROMA HTTP CLIENT HELPER (NO HARDCODED GITHUB LINKS)
+# ====================================================================
+def get_chroma_client():
+    """Initializes a clean, cloud-native HTTP client strictly via environment variables."""
+    # Reads directly from your Railway dashboard settings dynamically
+    chroma_host = os.getenv("CHROMA_HOST")
+    chroma_token = os.getenv("CHROMA_TOKEN")
+    
+    if not chroma_host:
+        raise ValueError("CRITICAL: CHROMA_HOST environment variable is missing on this server container")
+    
+    # Strip any trailing slashes cleanly from the environment string
+    chroma_host = str(chroma_host).strip().rstrip("/")
+    
+    # Securely wrap connections passing the token via authorization headers
+    return chromadb.HttpClient(
+        host=chroma_host,
+        headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
+    )
 
 @shared_task(bind=True, max_retries=5)
 def process_step(self, step_id: str):
@@ -50,7 +68,7 @@ def process_step(self, step_id: str):
         # =========================================
         agent = db.query(Agent).filter(
             Agent.id == step.agent_id,
-            Agent.workspace_id == current_workspace_id  # Enforces cross-workspace isolation protection
+            Agent.workspace_id == current_workspace_id  
         ).first()
 
         if not agent:
@@ -193,7 +211,7 @@ def process_step(self, step_id: str):
                 if not active_model_target and agent_model and str(agent_model).strip():
                     active_model_target = str(agent_model).strip()
 
-                # 3. Fallback to Workspace Level Settings (Read directly from your user-configured column row)
+                # 3. Fallback to Workspace Level Settings 
                 if not active_model_target:
                     default_key = db.query(UserAPIKey).filter(
                         UserAPIKey.workspace_id == current_workspace_id,
@@ -204,7 +222,6 @@ def process_step(self, step_id: str):
                     if default_key and default_key.model_version:
                         active_model_target = default_key.model_version
                     else:
-                        # Fallback directly to the last configured key model version for this workspace
                         any_workspace_key = db.query(UserAPIKey).filter(
                             UserAPIKey.workspace_id == current_workspace_id,
                             UserAPIKey.agent_id == None
@@ -218,8 +235,17 @@ def process_step(self, step_id: str):
                 # ========================================================
                 context_fragments = []
                 try:
-                    # Fetch database collection bucket if it exists
-                    collection = chroma_client.get_collection(name="rag_knowledge_base")
+                    print("🚀 Executing dynamic runtime cloud-link with Chroma Engine...")
+                    chroma_client = get_chroma_client()
+                    
+                    # Instantiate explicit standard embedding calculations locally to prevent unhandled background calls
+                    default_ef = embedding_functions.DefaultEmbeddingFunction()
+                    
+                    # Target collection explicitly matching validation layer hooks
+                    collection = chroma_client.get_collection(
+                        name="rag_knowledge_base",
+                        embedding_function=default_ef
+                    )
                     
                     if collection:
                         # TIER 1: Query Chroma strictly matching this custom Agent's UUID first
@@ -234,14 +260,13 @@ def process_step(self, step_id: str):
                             }
                         )
                         
-                        # Unpack encrypted text responses if surfaced directly
                         if agent_results and agent_results.get("documents") and agent_results["documents"][0]:
                             for encrypted_chunk in agent_results["documents"][0]:
                                 plain_chunk = decrypt_text_string(encrypted_chunk, uuid.UUID(current_workspace_id))
                                 if plain_chunk:
                                     context_fragments.append(plain_chunk)
                         
-                        # TIER 2: Fall back to general Workspace data if Agent context was clean
+                        # TIER 2: Fall back to general Workspace data if Agent context was empty
                         if not context_fragments:
                             workspace_results = collection.query(
                                 query_texts=[prompt],
@@ -259,8 +284,7 @@ def process_step(self, step_id: str):
                                     if plain_chunk:
                                         context_fragments.append(plain_chunk)
                 except Exception as chroma_err:
-                    # Graceful non-blocking degradation if Chroma isn't completely indexed yet
-                    print(f"⚠️ Vector search bypassed or uninitialized: {str(chroma_err)}")
+                    print(f"⚠️ Vector search bypassed or uninitialized safely: {str(chroma_err)}")
 
                 # Inject decoded context pieces natively into the instruction system prompt block
                 final_prompt_payload = prompt
@@ -292,24 +316,20 @@ def process_step(self, step_id: str):
         except Exception as llm_error:
             error_message = str(llm_error)
 
-            # 1. Handle explicit 429 Rate Limits using Celery exponential backoff infrastructure
             if "429" in error_message:
                 retry_count = self.request.retries
                 countdown = 2 ** retry_count
                 raise self.retry(exc=llm_error, countdown=countdown)
 
-            # 2. Handle general exceptions matching the user's policy max_retries budget
             current_retries = getattr(step, "retry_count", 0) or 0
             max_allowed_retries = policy.max_retries if policy else 0
 
             if policy and policy.enable_retry_control and current_retries < max_allowed_retries:
-                # Increment the database tracking counter attribute safely
                 step.retry_count = current_retries + 1
                 step.status = "pending"
                 step.error_message = f"Execution failed, attempting automatic retry ({step.retry_count}/{max_allowed_retries}): {error_message}"
                 db.commit()
 
-                # Re-queue the exact same task instance step execution wrapper block smoothly
                 process_step.delay(str(step.id))
                 
                 return {
@@ -317,7 +337,6 @@ def process_step(self, step_id: str):
                     "message": f"Step execution failed. Automatic retry tracking re-queued background loop."
                 }
 
-            # 3. If retries are disabled or exhausted, permanently fail the tracking node gracefully
             step.status = "failed"
             step.error_message = f"LLM execution failed and retries exhausted: {error_message}"
             step.output_data = {
