@@ -11,8 +11,10 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RefreshCw,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
+import { toast } from "sonner";
 import { documentsApi } from "@/components/api";
 
 interface DocumentStub {
@@ -32,6 +34,7 @@ export default function AgentKnowledgePage() {
   const [documents, setDocuments] = useState<DocumentStub[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [errorLog, setErrorLog] = useState<string | null>(null);
   const [successLog, setSuccessLog] = useState<string | null>(null);
@@ -51,7 +54,7 @@ export default function AgentKnowledgePage() {
       }
     } catch (err: any) {
       console.error("Failed to parse agent file list data:", err);
-      setErrorLog(err?.message || "Operational layer sandbox handshake failure.");
+      setErrorLog(err?.message || "Operational layer sandbox data handshake failure.");
     } finally {
       if (!silent) setLoadingList(false);
     }
@@ -61,6 +64,7 @@ export default function AgentKnowledgePage() {
     if (agentId) {
       fetchInventory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
   // 2. Continuous 4-second polling loops if background worker extraction is active
@@ -73,6 +77,7 @@ export default function AgentKnowledgePage() {
     }, 4000);
 
     return () => clearInterval(poolTimer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documents]);
 
   const handleDrag = (e: React.DragEvent) => {
@@ -107,6 +112,31 @@ export default function AgentKnowledgePage() {
     }
   };
 
+  // 4. NEW METHOD: Synchronized Document Purging Cluster Call Execution Trigger
+  const executePurge = async (documentId: string, fileName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently purge '${fileName}' from storage matrix environments?`)) {
+      return;
+    }
+
+    setDeletingId(documentId);
+    setErrorLog(null);
+    setSuccessLog(null);
+
+    try {
+      // Connects cleanly to your database extraction layer endpoint
+      await documentsApi.deleteDocument(documentId);
+      toast.success("Document purged successfully");
+      setSuccessLog(`Document '${fileName}' has been cleanly un-indexed from all backend vector buckets.`);
+      await fetchInventory(true);
+    } catch (err: any) {
+      console.error("Storage network boundary dropped deletion workflow:", err);
+      setErrorLog(err?.message || "Purge protocol aborted. Security contextual access verification mismatch.");
+      toast.error("Failed to delete document");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -131,42 +161,52 @@ export default function AgentKnowledgePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#071018] text-white p-8 space-y-10 font-sans animate-fadeIn">
+    /* FIXED: Adjusted page background tint seamlessly to rich dark blue option theme */
+    <div className="min-h-screen bg-[#020817] text-white p-8 space-y-10 font-sans animate-fadeIn">
       
-      {/* HEADER MATRIX MATCHING YOUR THEME */}
-      <div className="flex items-start justify-between gap-6 flex-wrap border-b border-cyan-500/10 pb-6 w-full">
+      {/* HEADER MATRIX ALIGNED WITH SYSTEM COMPONENT ACTIONS LAYOUT */}
+      <div className="flex items-center justify-between gap-6 flex-wrap border-b border-cyan-500/10 pb-6 w-full">
         <div>
-          <Link href={`/agent/${agentId}`} className="text-xs font-mono text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 transition-colors group mb-2 font-bold uppercase tracking-wider">
-            <ChevronLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" /> Back To Agent Dashboard
-          </Link>
           <h1 className="text-6xl font-black text-cyan-400 tracking-tight flex items-center gap-3">
             <FileText className="text-emerald-400" size={44} />
             Agent Knowledge Vault
           </h1>
-          <p className="mt-2 text-gray-400 max-w-3xl">
+          <p className="mt-3 text-gray-400 max-w-3xl text-md leading-relaxed">
             Inject contextual documentation strictly locked to this individual agent's private sandbox scope. Assets uploaded here stay isolated from other processes.
           </p>
         </div>
         
-        <button 
-          onClick={() => fetchInventory(false)}
-          disabled={loadingList || uploading}
-          className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-4 font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all disabled:opacity-30"
-        >
-          <RefreshCw size={18} className={loadingList ? "animate-spin text-cyan-400" : ""} />
-        </button>
+        {/* FIXED: Repositioned uniform styled box controllers rightward to match design patterns */}
+        <div className="flex items-center gap-4 flex-wrap shrink-0">
+          <button 
+            onClick={() => fetchInventory(false)}
+            disabled={loadingList || uploading}
+            className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all disabled:opacity-30 inline-flex items-center gap-2"
+          >
+            <RefreshCw size={16} className={loadingList ? "animate-spin text-cyan-400" : ""} />
+            <span>Refresh Base</span>
+          </button>
+
+          <Link 
+            href={`/agent/${agentId}`} 
+            className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-5 py-3 font-bold text-cyan-300 hover:bg-cyan-500/20 transition-all inline-flex items-center gap-1.5"
+          >
+            <ChevronLeft size={16} />
+            <span>Back To Agent</span>
+          </Link>
+        </div>
       </div>
 
       {/* EMERGENCY ERROR & FEEDBACK ALERTS */}
       {errorLog && (
-        <div className="p-5 rounded-2xl border border-red-500/30 bg-[#1a0507] text-red-300 text-sm flex items-start gap-3 shadow-md">
+        <div className="p-5 rounded-2xl border border-red-500/30 bg-[#1a0507] text-red-300 text-sm flex items-start gap-3 shadow-md animate-fadeIn">
           <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-400" />
           <div className="font-mono">{errorLog}</div>
         </div>
       )}
 
       {successLog && (
-        <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-300 text-sm flex items-start gap-3 shadow-md">
+        <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-300 text-sm flex items-start gap-3 shadow-md animate-fadeIn">
           <CheckCircle2 size={18} className="shrink-0 mt-0.5 text-emerald-400" />
           <div>{successLog}</div>
         </div>
@@ -182,7 +222,7 @@ export default function AgentKnowledgePage() {
         className={`w-full border-2 border-dashed rounded-3xl p-14 text-center flex flex-col items-center justify-center gap-4 transition-all duration-200 cursor-pointer ${
           dragActive 
             ? "border-emerald-400 bg-emerald-500/5 shadow-[0_0_25px_rgba(16,185,129,0.05)]" 
-            : "border-cyan-500/20 bg-[#09131f] hover:border-cyan-400/30"
+            : "border-cyan-500/20 bg-[#08111f] hover:border-cyan-400/30"
         }`}
       >
         <input 
@@ -197,7 +237,7 @@ export default function AgentKnowledgePage() {
         <div className={`h-16 w-16 rounded-2xl border flex items-center justify-center transition-all ${
           uploading 
             ? "bg-cyan-500/20 border-cyan-500/30 text-cyan-300 animate-pulse" 
-            : dragActive ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 scale-105" : "bg-black border-cyan-500/10 text-zinc-500"
+            : dragActive ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400 scale-105" : "bg-black/40 border-cyan-500/10 text-zinc-500"
         }`}>
           {uploading ? (
             <Loader2 className="animate-spin" size={28} />
@@ -217,8 +257,8 @@ export default function AgentKnowledgePage() {
       </div>
 
       {/* LEDGER CONTENT MATRIX */}
-      <div className="w-full rounded-3xl border border-cyan-500/30 bg-[#09131f] overflow-hidden">
-        <div className="p-6 border-b border-cyan-500/20 bg-black/40">
+      <div className="w-full rounded-3xl border border-cyan-500/10 bg-[#08111f] overflow-hidden">
+        <div className="p-6 border-b border-cyan-500/10 bg-black/20">
           <h2 className="text-lg font-mono tracking-wider text-cyan-400 uppercase font-black">Private Knowledge Base Ledger</h2>
         </div>
 
@@ -237,17 +277,19 @@ export default function AgentKnowledgePage() {
           <div className="overflow-x-auto w-full">
             <table className="w-full text-left font-sans text-sm border-collapse">
               <thead>
-                <tr className="border-b border-cyan-500/20 text-zinc-400 font-mono tracking-widest uppercase font-black bg-black/20 text-xs">
+                <tr className="border-b border-cyan-500/10 text-zinc-400 font-mono tracking-widest uppercase font-black bg-black/20 text-xs">
                   <th className="p-5">Asset Descriptor String</th>
                   <th className="p-5">Mime Target</th>
                   <th className="p-5">Memory Allocation</th>
                   <th className="p-5">Operator Clearances</th>
-                  <th className="p-5 text-right">Cluster Status</th>
+                  <th className="p-5">Cluster Status</th>
+                  {/* Action row column matching delete system updates */}
+                  <th className="p-5 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-cyan-500/10 font-medium text-zinc-300">
                 {documents.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-black/20 transition-colors">
+                  <tr key={doc.id} className="hover:bg-black/10 transition-colors">
                     <td className="p-5 font-bold text-white max-w-xs truncate">
                       {doc.filename}
                     </td>
@@ -257,11 +299,11 @@ export default function AgentKnowledgePage() {
                     <td className="p-5 font-mono text-zinc-400">
                       {formatBytes(doc.file_size)}
                     </td>
-                    <td className="p-5 text-zinc-400 font-mono text-xs">
+                    <td className="p-5 text-zinc-400 font-mono text-xs max-w-[180px] truncate" title={doc.uploaded_by_user}>
                       {doc.uploaded_by_user}
                     </td>
-                    <td className="p-5 text-right">
-                      <div className="flex items-center justify-end">
+                    <td className="p-5">
+                      <div className="flex items-center">
                         {doc.status === "ready" && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 font-mono text-xs uppercase font-bold tracking-wider">
                             <CheckCircle2 size={12} /> SECURED READY
@@ -269,7 +311,7 @@ export default function AgentKnowledgePage() {
                         )}
                         {doc.status === "processing" && (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-xs uppercase font-bold tracking-wider animate-pulse">
-                            <Clock size={12} className="animate-spin" /> RUNNING VECTOR SYNC
+                            <Clock size={12} className="animate-spin text-cyan-400" /> RUNNING VECTOR SYNC
                           </span>
                         )}
                         {doc.status === "failed" && (
@@ -278,6 +320,21 @@ export default function AgentKnowledgePage() {
                           </span>
                         )}
                       </div>
+                    </td>
+                    {/* FIXED/ADDED: Integrated explicit document destruction trash link row layout */}
+                    <td className="p-5 text-center">
+                      <button
+                        onClick={() => executePurge(doc.id, doc.filename)}
+                        disabled={deletingId === doc.id || doc.status === "processing"}
+                        className="p-2 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                        title="Purge record from cluster"
+                      >
+                        {deletingId === doc.id ? (
+                          <Loader2 size={14} className="animate-spin text-red-400" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

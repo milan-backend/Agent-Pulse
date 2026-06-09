@@ -10,8 +10,10 @@ import {
   CheckCircle2, 
   AlertCircle, 
   RefreshCw,
-  Clock
+  Clock,
+  Trash2
 } from "lucide-react";
+import { toast } from "sonner";
 import { documentsApi } from "@/components/api";
 
 interface DocumentStub {
@@ -28,6 +30,7 @@ export default function WorkspaceKnowledgePage() {
   const [documents, setDocuments] = useState<DocumentStub[]>([]);
   const [loadingList, setLoadingList] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [errorLog, setErrorLog] = useState<string | null>(null);
   const [successLog, setSuccessLog] = useState<string | null>(null);
@@ -98,6 +101,30 @@ export default function WorkspaceKnowledgePage() {
     } finally {
       setUploading(false);
       setDragActive(false);
+    }
+  };
+
+  // 5. NEW METHOD ADDED: Safely trigger global document destruction loops inside storage matrix bounds
+  const executePurge = async (documentId: string, fileName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently purge '${fileName}' from workspace storage matrices?`)) {
+      return;
+    }
+
+    setDeletingId(documentId);
+    setErrorLog(null);
+    setSuccessLog(null);
+
+    try {
+      await documentsApi.deleteDocument(documentId);
+      toast.success("Document purged from workspace");
+      setSuccessLog(`Document '${fileName}' has been cleanly dropped from the workspace knowledge base schema.`);
+      await fetchInventory(true);
+    } catch (err: any) {
+      console.error("Storage cluster dropped workspace deletion request:", err);
+      setErrorLog(err?.message || "Purge tracking layer rejected request parameters.");
+      toast.error("Failed to delete document");
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -238,7 +265,9 @@ export default function WorkspaceKnowledgePage() {
                   <th className="p-4 font-semibold">Format</th>
                   <th className="p-4 font-semibold">Payload Weight</th>
                   <th className="p-4 font-semibold">Uploader Profile</th>
-                  <th className="p-4 font-semibold text-right">Extraction Sync Status</th>
+                  <th className="p-4 font-semibold">Extraction Sync Status</th>
+                  {/* Action row column added for clear matrix parity */}
+                  <th className="p-4 font-semibold text-center">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60 font-medium text-zinc-300">
@@ -253,11 +282,11 @@ export default function WorkspaceKnowledgePage() {
                     <td className="p-4 font-mono text-zinc-400">
                       {formatBytes(doc.file_size)}
                     </td>
-                    <td className="p-4 text-zinc-400 font-mono text-[11px]">
+                    <td className="p-4 text-zinc-400 font-mono text-[11px] max-w-[150px] truncate" title={doc.uploaded_by_user}>
                       {doc.uploaded_by_user}
                     </td>
-                    <td className="p-4 text-right shrink-0">
-                      <div className="flex items-center justify-end">
+                    <td className="p-4">
+                      <div className="flex items-center">
                         {doc.status === "ready" && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-mono text-[10px] uppercase font-bold tracking-wider">
                             <CheckCircle2 size={10} /> INDEXED READY
@@ -274,6 +303,21 @@ export default function WorkspaceKnowledgePage() {
                           </span>
                         )}
                       </div>
+                    </td>
+                    {/* INTEGRATED WORKSPACE TRASH PURGE ROW TRIGGER BUTTON BUTTON */}
+                    <td className="p-4 text-center">
+                      <button
+                        onClick={() => executePurge(doc.id, doc.filename)}
+                        disabled={deletingId === doc.id || doc.status === "processing"}
+                        className="p-1.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition-all disabled:opacity-30"
+                        title="Purge asset index record"
+                      >
+                        {deletingId === doc.id ? (
+                          <Loader2 size={12} className="animate-spin text-red-400" />
+                        ) : (
+                          <Trash2 size={12} />
+                        )}
+                      </button>
                     </td>
                   </tr>
                 ))}

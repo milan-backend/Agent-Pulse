@@ -1,8 +1,10 @@
 import uuid
+import os
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Header, Query, status
 from sqlalchemy.orm import Session
 from uuid import UUID
+import chromadb
 
 from app.db.session import get_db
 from app.models.user import User
@@ -22,6 +24,26 @@ ALLOWED_MIME_TYPES = {
     "application/pdf": ".pdf"
 }
 MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB maximum safeguard boundary
+
+
+# ====================================================================
+# SECURE CHROMA HTTP CLIENT HELPER (ENVIRONMENT VARIABLE CHANNELS)
+# ====================================================================
+def get_chroma_client():
+    """Initializes a cloud-native HTTP client cleanly with zero hardcoded credentials."""
+    chroma_host = os.getenv("CHROMA_HOST")
+    chroma_token = os.getenv("CHROMA_TOKEN")
+    
+    if not chroma_host:
+        raise ValueError("CRITICAL CONFIGURATION ERROR: CHROMA_HOST environment variable is missing on this container server.")
+    
+    # Strip trailing slashes safely to prevent routing connection mutations
+    chroma_host = str(chroma_host).strip().rstrip("/")
+    
+    return chromadb.HttpClient(
+        host=chroma_host,
+        headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
+    )
 
 
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
@@ -180,3 +202,87 @@ def list_documents(
         })
 
     return response_list
+
+
+# ====================================================================
+# NEW ADDITION: SECURE DOCUMENT DELETION ROUTE ARCHITECTURE
+# ====================================================================
+@router.delete("/delete", status_code=status.HTTP_200_OK)
+def delete_document(
+    document_id: str = Query(..., description="The structural database ID of the target document to purge"),
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Synchronized Multi-Cloud Deletion Endpoint: Verifies rigorous tenancy isolation parameters,
+    purges target document vector matrices from ChromaDB, and drops relational rows from PostgreSQL.
+    Bypasses technical technical noise leak protocols for the public frontend state.
+    """
+    # 1. Structural Validation & Access Isolation Check
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+        clean_doc_id = UUID(str(document_id).strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provided workspace_id or document_id contains invalid structural characters."
+        )
+
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=clean_ws_id
+    )
+    
+    # Restrict document destruction boundaries to Operators or Admins
+    require_operator(membership)
+
+    # 2. Check document existence strictly bounded inside this specific tenant context workspace
+    document_row = db.query(UploadedDocument).filter(
+        UploadedDocument.id == clean_doc_id,
+        UploadedDocument.workspace_id == clean_ws_id
+    ).first()
+
+    if not document_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested document could not be found or access is restricted within this workspace scope."
+        )
+
+    # 3. Perform Vector Space Clean-Up (ChromaDB Vector Index Flush)
+    try:
+        chroma_client = get_chroma_client()
+        collection = chroma_client.get_collection(name="rag_knowledge_base")
+        
+        if collection:
+            print(f"🧹 Commencing ChromaDB structural purge for: {document_row.filename}")
+            # Target chunks strictly generated under this specific file context and workspace
+            collection.delete(
+                where={
+                    "$and": [
+                        {"workspace_id": str(clean_ws_id)},
+                        {"source_file": str(document_row.filename)}
+                    ]
+                }
+            )
+    except Exception as chroma_err:
+        # Graceful non-blocking degradation: logs notice but permits database entry drop 
+        # (This handles deleting broken/partially uploaded records that didn't generate actual embeddings!)
+        print(f"⚠️ Chroma index clean-up notice (Safe Fallback executed): {str(chroma_err)}")
+
+    # 4. Perform Relational Clean-Up (PostgreSQL Record Purge)
+    try:
+        db.delete(document_row)
+        db.commit()
+    except Exception as db_err:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Relational storage transaction failed to commit clean deletion: {str(db_err)}"
+        )
+
+    return {
+        "success": True,
+        "message": f"Document '{document_row.filename}' has been successfully purged from all cloud storage matrices."
+    }

@@ -528,7 +528,7 @@ export const pauseAgentMission = async (agentId: string) => {
 };
 
 export const resumeAgentMission = async (agentId: string) => {
-  return request(`/mission-control/resume/${agentId}`, {
+  return request(`/mission-control/pause/${agentId}`, {
     method: "POST",
   });
 };
@@ -714,7 +714,7 @@ export function logout() {
 }
 
 /* =========================================================
-NEW: RAG DOCUMENT MANAGEMENT INTERFACES
+NEW: RAG DOCUMENT MANAGEMENT INTERFACES (SYNCHRONIZED WITH DELETE)
 ========================================================= */
 
 export const documentsApi = {
@@ -771,6 +771,26 @@ export const documentsApi = {
 
     return request(endpoint, {
       method: "GET",
+      headers,
+    });
+  },
+
+  /**
+   * NEW METHOD: Safely execute document destruction workflows inside multi-cloud networks.
+   * Passes the workspace context securely within the custom tracking header map.
+   */
+  deleteDocument: async (documentId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(workspaceId ? { "workspace-id": workspaceId } : {}),
+    };
+
+    return request(`/documents/delete?document_id=${documentId}`, {
+      method: "DELETE",
       headers,
     });
   }
