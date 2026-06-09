@@ -1,5 +1,6 @@
 import os
 from google import genai
+from google.genai import types # Added to handle formal configuration class allocations
 from openai import OpenAI
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -99,13 +100,20 @@ def generate_llm_response(
         client = OpenAI(api_key=active_key)
         response = client.chat.completions.create(
             model=target_model,
-            messages=[{"role": "user", "content": prompt}]
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=4096, # 🎯 FIXED: Explicit ceiling prevents cutoffs on OpenAI generation routes
+            temperature=0.2
         )
         return response.choices[0].message.content
     else:
         client = genai.Client(api_key=active_key)
+        # 🎯 FIXED: Initialize official config properties matching Google GenAI SDK rules
         response = client.models.generate_content(
             model=target_model,
-            contents=prompt
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=4096, # 🎯 FIXED: Explicit ceiling prevents cutoffs on Google GenAI routes
+                temperature=0.2
+            )
         )
         return response.text
