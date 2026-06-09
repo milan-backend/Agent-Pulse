@@ -1,6 +1,6 @@
 import os
 from google import genai
-from google.genai import types # Added to handle formal configuration class allocations
+from google.genai import types  # Imported to handle unconstrained configuration profiles
 from openai import OpenAI
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -75,7 +75,7 @@ def generate_llm_response(
             target_model = key_record.model_version
     else:
         # PIPELINE TIER 3: Absolute Last Resort Server Environment Fallback (Render variables)
-        model_str_check = str(model_name).lower() if model_name else ""
+        model_str_check = str(model_name).lower().strip() if model_name else ""
         
         if "openai" in model_str_check or "gpt" in model_str_check:
             active_key = os.getenv("OPENAI_API_KEY")
@@ -91,15 +91,6 @@ def generate_llm_response(
     if not active_key:
         raise ValueError(f"No valid API credentials found for Agent, Workspace {clean_workspace_id}, or Server Environment configurations.")
 
-    # -----------------------------------------------------------------
-    # 🎯 SYSTEM INSTRUCTION: CRISP, ACCURATE, SHORT SUMMARIES ALWAYS
-    # -----------------------------------------------------------------
-    system_instruction = (
-        "You are a concise engineering core assistant. When the user queries technical details from "
-        "the injected context, do not write a massive textbook or repeat everything line-by-line. "
-        "Provide a short, direct, high-impact technical response using clean markdown bullet points."
-    )
-
     # --------------------------------------------
     # EXECUTE CLIENT HANDSHAKE BASED ON PROVIDER
     # --------------------------------------------
@@ -107,12 +98,8 @@ def generate_llm_response(
         client = OpenAI(api_key=active_key)
         response = client.chat.completions.create(
             model=target_model,
-            messages=[
-                {"role": "system", "content": system_instruction}, # Enforces short responses
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=2048,
-            temperature=0.2
+            messages=[{"role": "user", "content": prompt}]
+            # No max_tokens limit passed here: OpenAI defaults to its maximum possible window return size
         )
         return response.choices[0].message.content
     else:
@@ -120,10 +107,9 @@ def generate_llm_response(
         response = client.models.generate_content(
             model=target_model,
             contents=prompt,
+            # Explicitly configuration assigned to clear out Gemini constraints
             config=types.GenerateContentConfig(
-                system_instruction=system_instruction, # Enforces short responses on Gemini
-                max_output_tokens=2048,
-                temperature=0.2
+                max_output_tokens=8192  # Setting this explicitly large guarantees the full text prints entirely
             )
         )
         return response.text
