@@ -262,7 +262,7 @@ def process_step(self, step_id: str):
                     # 🎯 FIXED: PASSED EXPLICIT METADATA Space SPACE KEY MATCHING THE WORKING DISTANCES
                     # ========================================================
                     collection = chroma_client.get_collection(
-                        name="rag_knowledge_base",
+                        name="rag_knowledge_vectors",
                         embedding_function=default_ef
                     )
                     
