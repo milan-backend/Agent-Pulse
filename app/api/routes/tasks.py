@@ -183,8 +183,7 @@ def get_task_execution_telemetry(
             # =====================================================================
             collection = chroma_client.get_collection(
                 name="rag_knowledge_base",
-                embedding_function=default_ef,
-                metadata={"hnsw:space": "cosine"}
+                embedding_function=default_ef
             )
             
             if collection:
