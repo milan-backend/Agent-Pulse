@@ -75,13 +75,11 @@ def generate_llm_response(
             target_model = key_record.model_version
     else:
         # PIPELINE TIER 3: Absolute Last Resort Server Environment Fallback (Render variables)
-        # It reads the fallback model name string to decide which key structure to pull
         model_str_check = str(model_name).lower() if model_name else ""
         
         if "openai" in model_str_check or "gpt" in model_str_check:
             active_key = os.getenv("OPENAI_API_KEY")
             provider_type = "openai"
-            # Dynamic recovery check: if no explicit model version passed, use standard fallback string
             if not target_model:
                 target_model = "gpt-4o-mini"
         else:
@@ -93,6 +91,15 @@ def generate_llm_response(
     if not active_key:
         raise ValueError(f"No valid API credentials found for Agent, Workspace {clean_workspace_id}, or Server Environment configurations.")
 
+    # -----------------------------------------------------------------
+    # 🎯 SYSTEM INSTRUCTION: CRISP, ACCURATE, SHORT SUMMARIES ALWAYS
+    # -----------------------------------------------------------------
+    system_instruction = (
+        "You are a concise engineering core assistant. When the user queries technical details from "
+        "the injected context, do not write a massive textbook or repeat everything line-by-line. "
+        "Provide a short, direct, high-impact technical response using clean markdown bullet points."
+    )
+
     # --------------------------------------------
     # EXECUTE CLIENT HANDSHAKE BASED ON PROVIDER
     # --------------------------------------------
@@ -100,19 +107,22 @@ def generate_llm_response(
         client = OpenAI(api_key=active_key)
         response = client.chat.completions.create(
             model=target_model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=4096, # 🎯 FIXED: Explicit ceiling prevents cutoffs on OpenAI generation routes
+            messages=[
+                {"role": "system", "content": system_instruction}, # Enforces short responses
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=2048,
             temperature=0.2
         )
         return response.choices[0].message.content
     else:
         client = genai.Client(api_key=active_key)
-        # 🎯 FIXED: Initialize official config properties matching Google GenAI SDK rules
         response = client.models.generate_content(
             model=target_model,
             contents=prompt,
             config=types.GenerateContentConfig(
-                max_output_tokens=4096, # 🎯 FIXED: Explicit ceiling prevents cutoffs on Google GenAI routes
+                system_instruction=system_instruction, # Enforces short responses on Gemini
+                max_output_tokens=2048,
                 temperature=0.2
             )
         )
