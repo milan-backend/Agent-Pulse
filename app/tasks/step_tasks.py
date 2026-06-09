@@ -318,7 +318,7 @@ def process_step(self, step_id: str):
                             raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                             
                             # Normalize distance into intuitive confidence percentage based on cosine parameters
-                            normalized_similarity = round(max(0.0, (1.0 - (raw_distance / 2.0))) * 100, 2)
+                            normalized_similarity = round(max(0.0, (1.0 - float(raw_distance))) * 100, 2)
                             
                             # Evaluate contextual contribution matching threshold configuration
                             passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)

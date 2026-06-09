@@ -208,7 +208,7 @@ def get_task_execution_telemetry(
                         raw_distance_score = float(distances_list[index]) if index < len(distances_list) else 1.0
                         
                         # Normalize distance coordinates safely into confidence metrics (Fixes 0% math bug)
-                        normalized_similarity = round(max(0.0, (1.0 - (raw_distance_score / 2.0))) * 100, 2)
+                        normalized_similarity = round(max(0.0, (1.0 - float(raw_distance_score))) * 100, 2)
                         
                         # Decrypt secure chunks string metrics
                         plain_text_snippet = decrypt_text_string(encrypted_chunk, uuid.UUID(str(clean_ws_id)))
