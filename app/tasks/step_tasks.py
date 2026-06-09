@@ -258,9 +258,13 @@ def process_step(self, step_id: str):
                     query_vector = default_ef([prompt])[0]
                     rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
                     
+                    # ========================================================
+                    # 🎯 FIXED: PASSED EXPLICIT METADATA Space SPACE KEY MATCHING THE WORKING DISTANCES
+                    # ========================================================
                     collection = chroma_client.get_collection(
                         name="rag_knowledge_base",
-                        embedding_function=default_ef
+                        embedding_function=default_ef,
+                        metadata={"hnsw:space": "cosine"}
                     )
                     
                     if collection:
@@ -314,8 +318,7 @@ def process_step(self, step_id: str):
                             meta_data = metas_list[idx] if idx < len(metas_list) else {}
                             raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                             
-                            # Normalize distance into intuitive confidence percentage (Fixes the 0% bug)
-                            # Distance 0.0 means identical vector alignment (100% Match)
+                            # Normalize distance into intuitive confidence percentage based on cosine parameters
                             normalized_similarity = round(max(0.0, (1.0 - (raw_distance / 2.0))) * 100, 2)
                             
                             # Evaluate contextual contribution matching threshold configuration

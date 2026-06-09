@@ -102,6 +102,7 @@ def process_document_embedding(document_id: str):
         # 3. Extract text content string based on target MIME Type extension variations, capturing local page coordinates
         processed_chunks_pool = []
         
+        # SUPPORTED FILE TYPE 1: Plain Text (.txt) Ingestion Gateway Handler
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
             # Plain text files naturally fall into a singular global page layer boundary
@@ -109,6 +110,8 @@ def process_document_embedding(document_id: str):
                 chunk_text_by_page(text=extracted_text, page_num=1, source_filename=doc.filename)
             )
             
+        # FIXED DETECTED SYNTAX DECORATOR TYPO TRAP -> REVERTED SAFELY TO ELIF COMPLIANCE
+        # SUPPORTED FILE TYPE 2: Multi-page Portable Documents (.pdf) Ingestion Gateway Handler
         elif doc.mime_type == "application/pdf":
             # Stream the file bytes seamlessly inside memory arrays
             pdf_stream = io.BytesIO(raw_file_bytes)
@@ -127,7 +130,14 @@ def process_document_embedding(document_id: str):
 
         # 4. Initialize Cloud-Native Vector Engine Connection Dynamic Link
         chroma_client = get_chroma_client()
-        collection = chroma_client.get_or_create_collection(name="rag_knowledge_base")
+        
+        # =====================================================================
+        # 🎯 ENFORCED: DISTANCE METRIC SPACE LOCK TO COSINE SIMILARITY MATH
+        # =====================================================================
+        collection = chroma_client.get_or_create_collection(
+            name="rag_knowledge_base",
+            metadata={"hnsw:space": "cosine"}
+        )
         
         ids = []
         documents = []

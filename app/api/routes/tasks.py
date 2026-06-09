@@ -178,7 +178,15 @@ def get_task_execution_telemetry(
             query_vector = default_ef([prompt])[0]
             query_embedding_time_ms = round((time.time() - embed_start_time) * 1000, 2)
 
-            collection = chroma_client.get_collection(name="rag_knowledge_base")
+            # =====================================================================
+            # 🎯 FIXED: ENFORCE THE COSINE DISTANCE SPACE SPECIFICATION MATRIX LINK
+            # =====================================================================
+            collection = chroma_client.get_collection(
+                name="rag_knowledge_base",
+                embedding_function=default_ef,
+                metadata={"hnsw:space": "cosine"}
+            )
+            
             if collection:
                 # 2. Trace Pure Vector Search Latency Time Isolation
                 search_start_time = time.time()
