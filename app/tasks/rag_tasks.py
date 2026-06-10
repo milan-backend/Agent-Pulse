@@ -6,10 +6,11 @@ import chromadb
 from celery import Celery
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
+from google import genai  # 🎯 Added for the official Google GenAI SDK interface
 
 from app.db.session import get_db
 from app.models.uploaded_document import UploadedDocument
-from app.models.user import User  # Added to safely resolve uploader email references
+from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
 # Initialize Celery app matching your system's setup instance configuration
@@ -72,8 +73,8 @@ def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_siz
 @celery_app.task(name="app.tasks.rag_tasks.process_document_embedding")
 def process_document_embedding(document_id: str):
     """
-    Celery Background Task Worker: Extracts, chunks, encrypts text fragments, 
-    and loads semantic identifiers with rich audit trail metadata into the cloud-native ChromaDB server.
+    Celery Background Task Worker: Extracts, chunks, generates native vectors from plain text,
+    encrypts payload text fragments, and loads semantic identifiers with metadata into ChromaDB.
     """
     db: Session = next(get_db())
     doc = None
@@ -105,22 +106,18 @@ def process_document_embedding(document_id: str):
         # SUPPORTED FILE TYPE 1: Plain Text (.txt) Ingestion Gateway Handler
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
-            # Plain text files naturally fall into a singular global page layer boundary
             processed_chunks_pool.extend(
                 chunk_text_by_page(text=extracted_text, page_num=1, source_filename=doc.filename)
             )
             
-        # FIXED DETECTED SYNTAX DECORATOR TYPO TRAP -> REVERTED SAFELY TO ELIF COMPLIANCE
         # SUPPORTED FILE TYPE 2: Multi-page Portable Documents (.pdf) Ingestion Gateway Handler
         elif doc.mime_type == "application/pdf":
-            # Stream the file bytes seamlessly inside memory arrays
             pdf_stream = io.BytesIO(raw_file_bytes)
             reader = PdfReader(pdf_stream)
             
             for page_index, page in enumerate(reader.pages):
                 text_content = page.extract_text()
                 if text_content and text_content.strip():
-                    # Map the actual human-readable page numbers dynamically (1-indexed mapping)
                     processed_chunks_pool.extend(
                         chunk_text_by_page(text=text_content, page_num=page_index + 1, source_filename=doc.filename)
                     )
@@ -139,49 +136,73 @@ def process_document_embedding(document_id: str):
             metadata={"hnsw:space": "cosine"}
         )
         
+        # 🎯 INITIALIZE OFFICIAL GEMINI CLIENT FOR PLAIN TEXT EMBEDDINGS
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY environment variable is missing on Celery worker node context.")
+            
+        ai_client = genai.Client(api_key=gemini_api_key)
+        
         ids = []
+        embeddings = []  # 🎯 FIXED: Explicit vector tracking store array
         documents = []
         metadatas = []
         
         current_timestamp_iso = datetime.utcnow().strftime("%Y-%m-%d")
 
-        # 5. Encrypt each chunk text explicitly before streaming into Chroma metadata vectors
+        # 5. Process each plain text chunk: Generate true vectors first, then encrypt text data
         for index, chunk_payload in enumerate(processed_chunks_pool):
+            plain_text_content = chunk_payload["text"]
+            if not plain_text_content.strip():
+                continue
+                
             chunk_id = f"{doc.id}_chunk_{index}"
             
-            # Run Tier 2 Security Cryptographic Masking Protection Layer
+            # -----------------------------------------------------------------
+            # 🚀 STEP A: Generate high-fidelity vector embedding from PLAIN TEXT
+            # -----------------------------------------------------------------
+            vector_response = ai_client.models.embed_content(
+                model="text-embedding-004",
+                contents=plain_text_content
+            )
+            raw_vector_array = vector_response.embeddings[0].values
+            embeddings.append(raw_vector_array)
+            
+            # -----------------------------------------------------------------
+            # 🔒 STEP B: Run Tier 2 Security Cryptographic Masking Protection Layer
+            # -----------------------------------------------------------------
             masked_payload_string = encrypt_text_string(
-                plain_text=chunk_payload["text"], 
+                plain_text=plain_text_content, 
                 workspace_id=doc.workspace_id
             )
             
             ids.append(chunk_id)
-            # We save the unreadable cipher text into Chroma's core documents matrix column channel
             documents.append(masked_payload_string) 
             
-            # Plain analytics numbers and metadata parameters stay unencrypted for fast semantic target lookups
+            # Metadata indices remain plaintext for fast conditional scoping
             metadatas.append({
                 "workspace_id": str(doc.workspace_id),
                 "agent_id": str(doc.agent_id) if doc.agent_id else "None",
                 "document_id": str(doc.id),
-                "source_file": str(chunk_payload["source_file"]),          # Required for Rank & Source References
-                "page_number": int(chunk_payload["page_number"]),          # Required for Document Page Numbers UI log
-                "last_updated": current_timestamp_iso,                    # Required to detect stale files dynamically
-                "uploaded_by": uploader_email                              # Required for team operational footprint tracking
+                "source_file": str(chunk_payload["source_file"]),          
+                "page_number": int(chunk_payload["page_number"]),          
+                "last_updated": current_timestamp_iso,                    
+                "uploaded_by": uploader_email                              
             })
             
-        # 6. Push vector mappings over secure HTTP channel to ChromaDB
+        # 6. Push custom embeddings along with masked documents over to ChromaDB
         if ids:
             collection.add(
                 ids=ids,
-                documents=documents,
+                embeddings=embeddings,  # ✅ FIXED PERMANENTLY: Chroma uses real text vectors for search
+                documents=documents,     # ✅ SECURE: The raw stored field strictly contains your encrypted string
                 metadatas=metadatas
             )
             
         # 7. Mark processing execution transaction as ready inside PostgreSQL
         doc.status = "ready"
         db.commit()
-        print(f"🚀 Success: Cloud server ingestion complete for '{doc.filename}'. Loaded {len(ids)} masked text vectors into production schema space.")
+        print(f"🚀 Success: Cloud server ingestion complete for '{doc.filename}'. Loaded {len(ids)} text embeddings with secure ciphertext records.")
         return True
         
     except Exception as error:
