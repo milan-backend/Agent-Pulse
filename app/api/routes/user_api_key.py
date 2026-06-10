@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Header, Query
 from sqlalchemy.orm import Session
 from google import genai
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from app.db.session import get_db
@@ -19,7 +19,7 @@ router = APIRouter()
 
 
 # ============================================
-# CONNECT API KEY
+# CONNECT API KEY / REGISTER WORKSPACE PROVIDER
 # ============================================
 @router.post("/connect", response_model=UserAPIKeyResponse, status_code=status.HTTP_201_CREATED)
 def connect_provider_key(
@@ -31,6 +31,7 @@ def connect_provider_key(
 ):
     """
     Endpoint to validate, encrypt, and save an AI Provider API Key securely.
+    Supports individual agent overrides and multi-tenant workspace setups.
     """
     raw_provider = payload.provider.strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
@@ -51,7 +52,7 @@ def connect_provider_key(
     membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
     require_operator(membership)
 
-    # 4. Google GenAI SDK Verification Handshake - FIXED: Uses minimal generation request to avoid 501 Unimplemented
+    # Google GenAI SDK Verification Handshake
     if target_provider == "gemini":
         try:
             test_client = genai.Client(api_key=payload.api_key)
@@ -66,25 +67,44 @@ def connect_provider_key(
             )
 
     try:
-        saved_key = UserAPIKeyService.store_key(
-            db=db,
-            provider=target_provider, 
-            raw_key=payload.api_key,
-            user_id=current_user.id,
-            workspace_id=clean_ws_id,
-            agent_id=clean_agent_id,          
-            model_version=payload.model_version
-        )
+        # ROUTING DELEGATION LAYER:
+        if clean_agent_id:
+            # Route to classic Tier-1 Agent-Specific storage logic
+            saved_key = UserAPIKeyService.store_key(
+                db=db,
+                provider=target_provider, 
+                raw_key=payload.api_key,
+                user_id=current_user.id,
+                workspace_id=clean_ws_id,
+                agent_id=clean_agent_id,          
+                model_version=payload.model_version
+            )
+        else:
+            # Route to the upgraded workspace multi-provider layout context
+            saved_key = UserAPIKeyService.store_workspace_provider(
+                db=db,
+                workspace_id=clean_ws_id,
+                provider_name=payload.provider_name,
+                provider_type=target_provider,
+                raw_key=payload.api_key,
+                model_name=payload.model_version,
+                assigned_agents=payload.assigned_agents,
+                is_global_default=payload.is_global_default or False,
+                user_id=current_user.id
+            )
         
-        return {
-            "id": saved_key.id,
-            "provider": saved_key.provider,
-            "message": f"Successfully validated and connected credentials for {saved_key.provider}.",
-            "model_version": saved_key.model_version,
-            "workspace_id": saved_key.workspace_id,
-            "agent_id": saved_key.agent_id,
-            "is_default": saved_key.is_default
-        }
+        return UserAPIKeyResponse(
+            id=saved_key.id,
+            provider=saved_key.provider,
+            message=f"Successfully validated and connected credentials for {saved_key.provider_name or saved_key.provider}.",
+            model_version=saved_key.model_version,
+            workspace_id=saved_key.workspace_id,
+            agent_id=saved_key.agent_id,
+            is_default=saved_key.is_default,
+            provider_name=saved_key.provider_name,
+            assigned_agents=saved_key.assigned_agents,
+            is_global_default=saved_key.is_global_default
+        )
     except ValueError as val_err:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(val_err))
     except Exception as e:
@@ -95,7 +115,48 @@ def connect_provider_key(
 
 
 # ============================================
-# GET KEY CONFIGURATION STATUS METADATA (FIXED STATUS BUG)
+# LIST WORKSPACE CONFIGURATIONS
+# ============================================
+@router.get("/", response_model=List[UserAPIKeyResponse])
+def list_workspace_providers(
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns all configurable workspace keys configured within the target workspace.
+    """
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
+    # Access security gating validation check
+    get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
+
+    records = db.query(UserAPIKey).filter(
+        UserAPIKey.workspace_id == clean_ws_id,
+        UserAPIKey.agent_id == None
+    ).all()
+
+    return [
+        UserAPIKeyResponse(
+            id=r.id,
+            provider=r.provider,
+            message="Workspace Provider Entry Fetched.",
+            model_version=r.model_version,
+            workspace_id=r.workspace_id,
+            agent_id=r.agent_id,
+            is_default=r.is_default,
+            provider_name=r.provider_name,
+            assigned_agents=r.assigned_agents,
+            is_global_default=r.is_global_default
+        ) for r in records
+    ]
+
+
+# ============================================
+# GET KEY CONFIGURATION STATUS METADATA
 # ============================================
 @router.get("/status", status_code=status.HTTP_200_OK)
 def get_key_status(
@@ -134,8 +195,6 @@ def get_key_status(
         UserAPIKey.workspace_id == clean_ws_id
     )
     
-    # CRITICAL FIX HERE: If agent_id is requested, force matching agent row ONLY. 
-    # Do not leak or fall back to the workspace row during status checks.
     if clean_agent_id:
         query = query.filter(UserAPIKey.agent_id == clean_agent_id)
     else:
@@ -176,12 +235,15 @@ def get_key_status(
         "is_default": key_record.is_default,
         "workspace_id": key_record.workspace_id,
         "agent_id": key_record.agent_id,
-        "owner_context": "Agent Overridden" if key_record.agent_id else "Workspace Managed"
+        "owner_context": "Agent Overridden" if key_record.agent_id else "Workspace Managed",
+        "provider_name": key_record.provider_name,
+        "assigned_agents": key_record.assigned_agents,
+        "is_global_default": key_record.is_global_default
     }
 
 
 # ============================================
-# DISCONNECT API KEY
+# DISCONNECT API KEY / REMOVE PROVIDER
 # ============================================
 @router.delete("/disconnect", status_code=status.HTTP_200_OK)
 def disconnect_provider_key(
@@ -189,16 +251,32 @@ def disconnect_provider_key(
     workspace_id: str = Header(...),         
     agent_id: Optional[str] = Query(None),
     model_version: Optional[str] = Query(None),
+    provider_id: Optional[str] = Query(None), # Added to safely remove keys via structural Unique IDs
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    raw_provider = provider.strip().lower()
-    target_provider = "openai" if "openai" in raw_provider else "gemini"
-
     try:
         clean_ws_id = UUID(str(workspace_id).strip())
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
+    membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
+    require_operator(membership)
+
+    # Advanced deletion block to allow targeted workspace key removal using its Unique ID
+    if provider_id and str(provider_id).strip() not in ["", "null", "None"]:
+        record = db.query(UserAPIKey).filter(
+            UserAPIKey.id == UUID(str(provider_id).strip()),
+            UserAPIKey.workspace_id == clean_ws_id
+        ).first()
+        if record:
+            db.delete(record)
+            db.commit()
+            return {"message": "Successfully removed specified workspace configuration item."}
+
+    # Backward compatible logic fallback block
+    raw_provider = provider.strip().lower()
+    target_provider = "openai" if "openai" in raw_provider else "gemini"
 
     clean_agent_id = None
     if agent_id and str(agent_id).strip() not in ["", "null", "None"]:
@@ -206,9 +284,6 @@ def disconnect_provider_key(
             clean_agent_id = UUID(str(agent_id).strip())
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
-
-    membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
-    require_operator(membership)
 
     success = UserAPIKeyService.remove_key(
         db=db,
@@ -228,14 +303,15 @@ def disconnect_provider_key(
 
 
 # ============================================
-# SET DEFAULT PROVIDER CONFIGURATION (FIXED FOR AGENT SCOPES)
+# SET DEFAULT PROVIDER CONFIGURATION
 # ============================================
 @router.patch("/set-default", status_code=status.HTTP_200_OK)
 def set_default_provider(
     provider: str,
     workspace_id: str = Header(...),         
-    agent_id: Optional[str] = Query(None),   # Added to allow private agent-level default selections
+    agent_id: Optional[str] = Query(None),   
     model_version: Optional[str] = Query(None),
+    provider_id: Optional[str] = Query(None), # Added to set specific configurations as defaults easily
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -244,13 +320,6 @@ def set_default_provider(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
 
-    clean_agent_id = None
-    if agent_id and str(agent_id).strip() not in ["", "null", "None"]:
-        try:
-            clean_agent_id = UUID(str(agent_id).strip())
-        except ValueError:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid agent_id UUID format.")
-
     # Validate action authorizations
     membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
     require_operator(membership)
@@ -258,21 +327,36 @@ def set_default_provider(
     raw_provider = str(provider).strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
 
-    # CRITICAL FIX HERE: Dynamically scope the default updates to the active view pane
-    if clean_agent_id:
-        # Clear out default markers only for alternative keys belonging to THIS specific agent
-        base_query = db.query(UserAPIKey).filter(
-            UserAPIKey.agent_id == clean_agent_id,
-            UserAPIKey.workspace_id == clean_ws_id
-        )
-    else:
-        # Clear out default workspace tracking keys
-        base_query = db.query(UserAPIKey).filter(
-            UserAPIKey.agent_id == None,
-            UserAPIKey.workspace_id == clean_ws_id
-        )
+    if provider_id and str(provider_id).strip() not in ["", "null", "None"]:
+        # Reset previous workspace default toggles for this engine type
+        db.query(UserAPIKey).filter(
+            UserAPIKey.workspace_id == clean_ws_id,
+            UserAPIKey.provider == target_provider,
+            UserAPIKey.agent_id == None
+        ).update({"is_default": False}, synchronize_session=False)
 
-    # Clear active default toggles for the scoped block
+        target_record = db.query(UserAPIKey).filter(
+            UserAPIKey.id == UUID(str(provider_id).strip()),
+            UserAPIKey.workspace_id == clean_ws_id
+        ).first()
+
+        if not target_record:
+            raise HTTPException(status_code=404, detail="Target workspace provider configuration not found.")
+        
+        target_record.is_default = True
+        db.commit()
+        return {"status": "success", "message": f"Designated '{target_record.provider_name}' as global default."}
+
+    # Backward compatible fallback
+    clean_agent_id = None
+    if agent_id and str(agent_id).strip() not in ["", "null", "None"]:
+        clean_agent_id = UUID(str(agent_id).strip())
+
+    if clean_agent_id:
+        base_query = db.query(UserAPIKey).filter(UserAPIKey.agent_id == clean_agent_id, UserAPIKey.workspace_id == clean_ws_id)
+    else:
+        base_query = db.query(UserAPIKey).filter(UserAPIKey.agent_id == None, UserAPIKey.workspace_id == clean_ws_id)
+
     base_query.update({"is_default": False}, synchronize_session=False)
 
     target_query = base_query.filter(UserAPIKey.provider == target_provider)

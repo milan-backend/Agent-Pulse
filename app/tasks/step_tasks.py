@@ -17,6 +17,7 @@ from app.core.rag_crypto import decrypt_text_string
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
 from app.services.usage_service import create_usage_event
+from app.services.user_api_key_service import UserAPIKeyService
 
 # Initialize Celery app broker bindings
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
@@ -201,42 +202,36 @@ def process_step(self, step_id: str):
                 active_model_target = "gemini-2.5-flash-lite"
                 rag_telemetry_node = {}
             else:
-                # --- DYNAMIC STRUCTURAL MODEL TARGET RESOLUTION ---
+                # ========================================================
+                # UPGRADED MULTI-PROVIDER MODEL & CREDENTIAL LOOKUP ENGINE
+                # ========================================================
                 agent_id_raw = agent.id if agent else None
                 agent_model = getattr(agent, "model_name", None)
                 active_model_target = None
+                
+                # Identify engine provider target requested by agent row configuration
+                agent_model_clean = str(agent_model).lower().strip() if agent_model else ""
+                requested_engine = "openai" if ("gpt" in agent_model_clean or "openai" in agent_model_clean) else "gemini"
 
-                # 1. Check for custom Agent-specific Dropdown Setup
                 if agent_id_raw:
-                    agent_specific_key = db.query(UserAPIKey).filter(
-                        UserAPIKey.agent_id == agent_id_raw,
-                        UserAPIKey.workspace_id == current_workspace_id
-                    ).first()
-                    if agent_specific_key and agent_specific_key.model_version:
-                        active_model_target = str(agent_specific_key.model_version).strip()
+                    # Run the recursive priority check: Agent-Specific -> Assigned Workspace -> Global Workspace -> System
+                    resolved_key_record = UserAPIKeyService.resolve_agent_api_key(
+                        db=db,
+                        workspace_id=uuid.UUID(current_workspace_id),
+                        agent_id=agent_id_raw,
+                        provider_type=requested_engine
+                    )
 
-                # 2. Fallback to General Agent Row Metadata Choice
+                    if resolved_key_record and resolved_key_record.model_name:
+                        active_model_target = str(resolved_key_record.model_name).strip()
+
+                # Fallback to Agent Meta Configuration Choice if resolver did not explicitly lock model names
                 if not active_model_target and agent_model and str(agent_model).strip():
                     active_model_target = str(agent_model).strip()
 
-                # 3. Fallback to Workspace Level Settings 
+                # Absolute baseline structural fallback if completely unconfigured
                 if not active_model_target:
-                    default_key = db.query(UserAPIKey).filter(
-                        UserAPIKey.workspace_id == current_workspace_id,
-                        UserAPIKey.is_default == True,
-                        UserAPIKey.agent_id == None
-                    ).first()
-
-                    if default_key and default_key.model_version:
-                        active_model_target = default_key.model_version
-                    else:
-                        any_workspace_key = db.query(UserAPIKey).filter(
-                            UserAPIKey.workspace_id == current_workspace_id,
-                            UserAPIKey.agent_id == None
-                        ).order_by(UserAPIKey.updated_at.desc()).first()
-                        
-                        if any_workspace_key and any_workspace_key.model_version:
-                            active_model_target = any_workspace_key.model_version
+                    active_model_target = "gpt-4o-mini" if requested_engine == "openai" else "gemini-2.5-flash-lite"
 
                 # ========================================================
                 # ADVANCED HIERARCHICAL CONTEXT RETRIEVAL (RAG LOOKUP)

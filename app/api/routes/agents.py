@@ -74,7 +74,7 @@ def create_agent(
 @router.post(
     "/regenerate-key/{agent_id}"
 )
-def regenerate_api_key(
+def require_api_key(
     agent_id: str,
     workspace_id: str = Header(...),  # STRICT BOUNDARY: Mandatory Header
     db: Session = Depends(get_db),
@@ -148,8 +148,8 @@ def update_agent_settings(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Endpoint for updating core agent basic metadata (like names/descriptions) safely.
-    All infrastructure provider keys are now handled securely by the dedicated user_api_key routing system.
+    Endpoint for updating core agent basic metadata (like names/descriptions/model dropdown values) safely.
+    All infrastructure provider keys are handled securely by the dedicated user_api_key routing system.
     """
     try:
         clean_ws_id = UUID(str(workspace_id).strip())
@@ -166,10 +166,11 @@ def update_agent_settings(
     # REQUIRE OPERATOR
     require_operator(membership)
 
-    # 2. FETCH THE REAL AGENT OBJECT (Ensuring it belongs strictly to this workspace)
+    # 2. FETCH THE REAL AGENT OBJECT 
+    # Self-Healing Type-Cast Check: Supports database string representations or direct UUID structural formats safely.
     agent = db.query(Agent).filter(
         Agent.id == agent_id,
-        Agent.workspace_id == clean_ws_id
+        Agent.workspace_id.in_([clean_ws_id, str(clean_ws_id).strip()])
     ).first()
 
     if not agent:

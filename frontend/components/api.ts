@@ -260,6 +260,28 @@ export const apiKeyApi = {
       method: "PATCH",
       headers,
     });
+  },
+
+  // =========================================================================
+  // UPGRADED MULTI-PROVIDER METHOD ADDITION
+  // =========================================================================
+  /**
+   * Fetches all multi-provider configurations mapped to a workspace context.
+   */
+  listWorkspaceProviders: async (workspaceId: string) => {
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    return request(`/api-keys/`, {
+      method: "GET",
+      headers,
+    });
   }
 };
 
@@ -279,7 +301,6 @@ export const login = async (email: string, password: string) => {
     method: "POST",
     body: { email, password },
   });
-
   if (data.access_token) {
     localStorage.setItem("token", data.access_token);
     sessionStorage.setItem("authenticated", "true");
@@ -651,7 +672,7 @@ export function createDashboardSocket(
 
       let ticketQuery = "";
       if (ticketResponse.ok) {
-        const ticketData = await ticketResponse.json();
+        const ticketData = await fetch(`${API_URL}/auth/ws-ticket`, { method: "POST", headers: authHeaders() }).then(res => res.json());
         if (ticketData.ticket) {
           ticketQuery = `&ticket=${ticketData.ticket}`;
         }
@@ -682,7 +703,6 @@ export function createDashboardSocket(
         console.log("WebSocket disconnected");
         if (onClose) onClose();
       };
-
     } catch (error) {
       console.error("Failed to initialize secure live WebSocket connection:", error);
     }
@@ -776,8 +796,7 @@ export const documentsApi = {
   },
 
   /**
-   * NEW METHOD: Safely execute document destruction workflows inside multi-cloud networks.
-   * Passes the workspace context securely within the custom tracking header map.
+   * Safely execute document destruction workflows inside multi-cloud networks.
    */
   deleteDocument: async (documentId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
