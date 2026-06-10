@@ -213,28 +213,33 @@ export default function WorkspaceProvidersPage() {
     }
   }
 
-  async function handleDisconnectWorkspaceKey(providerId: string) {
-    if (!activeWorkspaceId) return;
-    if (!window.confirm("Permanently disconnect and clear this targeted provider configuration instance variables?")) return;
+  // ✅ Change from this:
+// async function handleDisconnectWorkspaceKey(providerId: string)
 
-    try {
-      setSubmittingKey(true);
-      
-      await apiKeyApi.disconnectKey(
-        "gemini", 
-        activeWorkspaceId,
-        null,
-        null
-      );
+// ✅ To this dynamic definition:
+async function handleDisconnectWorkspaceKey(providerId: string, providerType: "gemini" | "openai") {
+  if (!activeWorkspaceId) return;
+  if (!window.confirm("Permanently disconnect and clear this targeted provider configuration instance variables?")) return;
 
-      toast.success("Provider configuration parameters scrubbed cleanly.");
-      await fetchWorkspaceProvidersMatrix(activeWorkspaceId);
-    } catch (err: any) {
-      toast.error(err.message || "Failed to disconnect target.");
-    } finally {
-      setSubmittingKey(false);
-    }
+  try {
+    setSubmittingKey(true);
+    
+    // Pass the real provider type dynamically down to your api.ts method
+    await apiKeyApi.disconnectKey(
+      providerType, 
+      activeWorkspaceId,
+      null,
+      null
+    );
+
+    toast.success(`${providerType === "gemini" ? "Google Gemini" : "OpenAI Platform"} token cleared cleanly.`);
+    await fetchWorkspaceProvidersMatrix(activeWorkspaceId);
+  } catch (err: any) {
+    toast.error(err.message || "Failed to disconnect target.");
+  } finally {
+    setSubmittingKey(false);
   }
+}
 
   async function handleSetDefaultProvider(providerId: string, engineType: string) {
     if (!activeWorkspaceId) return;
@@ -494,7 +499,7 @@ export default function WorkspaceProvidersPage() {
                     <button 
                       type="button" 
                       disabled={submittingKey}
-                      onClick={() => handleDisconnectWorkspaceKey(prov.id)} 
+                      onClick={() => handleDisconnectWorkspaceKey(prov.id, prov.provider)}
                       className="px-3 h-9 rounded-xl border border-red-500/10 bg-red-500/5 hover:bg-red-500/10 text-red-400/80 font-bold flex items-center justify-center gap-1 transition-all"
                       title="Revoke and wipe token settings rows entirely"
                     >
