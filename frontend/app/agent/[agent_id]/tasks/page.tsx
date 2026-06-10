@@ -236,7 +236,7 @@ export default function AgentTasksPage() {
                   <h3 className="text-xl font-black">Input Data</h3>  
                 </div>  
                 <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
-                  {JSON.stringify(task.input_data || {}, null, 2).slice(0, 10000)}  
+                  {JSON.stringify(task.input_data || {}, null, 2)}  
                 </pre>  
               </div>  
 
@@ -246,7 +246,7 @@ export default function AgentTasksPage() {
                   <h3 className="text-xl font-black">Output Data</h3>  
                 </div>  
                 <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
-                  {JSON.stringify(task.output_data || {}, null, 2).slice(0, 10000)}  
+                  {JSON.stringify(task.output_data || {}, null, 2)}  
                 </pre>  
               </div>  
 
