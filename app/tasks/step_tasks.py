@@ -247,7 +247,7 @@ def process_step(self, step_id: str):
                 # Base structure matching your observability requirements without ID noise
                 rag_telemetry_node = {
                     "event_name": "KNOWLEDGE_RETRIEVAL",
-                    "collection_human_name": "rag_knowledge_vectors",
+                    "collection_human_name": "rag_enterprise_vectors_v1",
                     "similarity_threshold_used": 0.45,  # 🎯 Lowered to 45% production gate to accept dense matches
                     "query_embedding_time_ms": 0.0,
                     "vector_search_time_ms": 0.0,
@@ -297,7 +297,7 @@ def process_step(self, step_id: str):
                     # 🚀 STEP B: Connect to Chroma DB Collection Space
                     # -----------------------------------------------------------------
                     chroma_client = get_chroma_client()
-                    collection = chroma_client.get_collection(name="rag_knowledge_vectors")
+                    collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
                     
                     if collection:
                         search_start_time = time.time()
