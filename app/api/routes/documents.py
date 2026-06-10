@@ -76,10 +76,8 @@ async def upload_document(
     )
 
     if clean_agent_id:
-        # If adding to a specific agent, operator privileges are sufficient
         require_operator(membership)
     else:
-        # Workspace-global document uploads are restricted strictly to Admins
         require_admin(membership)
 
     # 3. Fetch Workspace & Validate Subscription Quota Gates
@@ -90,7 +88,6 @@ async def upload_document(
             detail="Target workspace context not found."
         )
 
-    # Trigger premium tier billing validation guard from feature_access
     require_rag_access(workspace=workspace, db=db)
 
     # 4. File Format & Size Verifications
@@ -169,17 +166,14 @@ def list_documents(
             detail="Invalid workspace_id tracking header mapping."
         )
 
-    # Enforce basic workspace membership checking block before fetching list
     get_workspace_membership(
         db=db,
         user_id=current_user.id,
         workspace_id=clean_ws_id
     )
 
-    # Base query looking inside workspace
     query = db.query(UploadedDocument).filter(UploadedDocument.workspace_id == clean_ws_id)
 
-    # Route filter sorting out global vs agent scopes
     if agent_id:
         query = query.filter(UploadedDocument.agent_id == UUID(str(agent_id).strip()))
     else:
@@ -205,7 +199,7 @@ def list_documents(
 
 
 # ====================================================================
-# NEW ADDITION: SECURE DOCUMENT DELETION ROUTE ARCHITECTURE
+# FIXED: SECURE SYNCHRONIZED DOCUMENT DELETION ROUTE ARCHITECTURE
 # ====================================================================
 @router.delete("/delete", status_code=status.HTTP_200_OK)
 def delete_document(
@@ -217,7 +211,6 @@ def delete_document(
     """
     Synchronized Multi-Cloud Deletion Endpoint: Verifies rigorous tenancy isolation parameters,
     purges target document vector matrices from ChromaDB, and drops relational rows from PostgreSQL.
-    Bypasses technical technical noise leak protocols for the public frontend state.
     """
     # 1. Structural Validation & Access Isolation Check
     try:
@@ -235,7 +228,6 @@ def delete_document(
         workspace_id=clean_ws_id
     )
     
-    # Restrict document destruction boundaries to Operators or Admins
     require_operator(membership)
 
     # 2. Check document existence strictly bounded inside this specific tenant context workspace
@@ -253,22 +245,17 @@ def delete_document(
     # 3. Perform Vector Space Clean-Up (ChromaDB Vector Index Flush)
     try:
         chroma_client = get_chroma_client()
-        collection = chroma_client.get_collection(name="rag_knowledge_base")
+        # 🎯 FIX 1: Point to the actual enterprise collection holding the 3072 dimension vectors
+        collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
         
         if collection:
-            print(f"🧹 Commencing ChromaDB structural purge for: {document_row.filename}")
-            # Target chunks strictly generated under this specific file context and workspace
+            print(f"清 🧹 Commencing ChromaDB structural purge for file ID: {str(clean_doc_id)} ({document_row.filename})")
+            
+            # 🎯 FIX 2: Clear vectors using a unique document_id filter condition rather than ambiguous filenames
             collection.delete(
-                where={
-                    "$and": [
-                        {"workspace_id": str(clean_ws_id)},
-                        {"source_file": str(document_row.filename)}
-                    ]
-                }
+                where={"document_id": str(clean_doc_id)}
             )
     except Exception as chroma_err:
-        # Graceful non-blocking degradation: logs notice but permits database entry drop 
-        # (This handles deleting broken/partially uploaded records that didn't generate actual embeddings!)
         print(f"⚠️ Chroma index clean-up notice (Safe Fallback executed): {str(chroma_err)}")
 
     # 4. Perform Relational Clean-Up (PostgreSQL Record Purge)
@@ -284,5 +271,5 @@ def delete_document(
 
     return {
         "success": True,
-        "message": f"Document '{document_row.filename}' has been successfully purged from all cloud storage matrices."
+        "message": f"Document '{document_row.filename}' has been successfully purged from all storage layers."
     }
