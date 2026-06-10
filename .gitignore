@@ -112,3 +112,4 @@ update_plan_limits.py
 inject_refresh_tokens.py
 locustfile.py
 safe_cleanup.py
+chroma_db_check.py
