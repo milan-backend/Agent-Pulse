@@ -265,6 +265,13 @@ def process_step(self, step_id: str):
                         name="rag_knowledge_vectors",
                         embedding_function=default_ef
                     )
+
+                    sample = collection.get(limit=1)
+                    
+                    print("=" * 50)
+                    print("Document Sample")
+                    print(sample["documents"][0][:500])
+                    print("=" * 50)
                     
                     if collection:
                         # B. Trace Pure Vector Search Subsystem Latency Time
