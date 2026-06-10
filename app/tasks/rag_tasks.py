@@ -162,7 +162,7 @@ def process_document_embedding(document_id: str):
             # 🚀 STEP A: Generate high-fidelity vector embedding from PLAIN TEXT
             # -----------------------------------------------------------------
             vector_response = ai_client.models.embed_content(
-                model="text-embedding-004",
+                model="text-embedding-005",
                 contents=plain_text_content
             )
             raw_vector_array = vector_response.embeddings[0].values
