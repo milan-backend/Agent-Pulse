@@ -40,7 +40,7 @@ def get_chroma_client():
     # Securely wrap connections passing the token via authorization headers
     return chromadb.HttpClient(
         host=chroma_host,
-        headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if chroma_token else None
+        headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
     )
 
 

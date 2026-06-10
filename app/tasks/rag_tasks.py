@@ -132,7 +132,7 @@ def process_document_embedding(document_id: str):
         # 🎯 ENFORCED: DISTANCE METRIC SPACE LOCK TO COSINE SIMILARITY MATH
         # =====================================================================
         collection = chroma_client.get_or_create_collection(
-            name="rag_knowledge_vectors",
+            name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
         )
         

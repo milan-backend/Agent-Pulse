@@ -182,7 +182,7 @@ def get_task_execution_telemetry(
             # 🎯 FIXED: ENFORCE THE COSINE DISTANCE SPACE SPECIFICATION MATRIX LINK
             # =====================================================================
             collection = chroma_client.get_collection(
-                name="rag_knowledge_vectors",
+                name="rag_enterprise_vectors_v1",
                 embedding_function=default_ef
             )
             
