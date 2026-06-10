@@ -319,6 +319,15 @@ def process_step(self, step_id: str):
                             
                             # Normalize distance into intuitive confidence percentage based on cosine parameters
                             normalized_similarity = round(max(0.0, (1.0 - float(raw_distance))) * 100, 2)
+
+                            print("=" * 50)
+                            print("SOURCE FILE:", meta_data.get("source_file"))
+                            print("RAW DISTANCE:", raw_distance)
+                            print("NORMALIZED SIMILARITY:", normalized_similarity)
+                            print("THRESHOLD:", rag_telemetry_node["similarity_threshold_used"] * 100)
+                            print("PASS:", normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100))
+                            print("=" * 50)
+
                             
                             # Evaluate contextual contribution matching threshold configuration
                             passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)
