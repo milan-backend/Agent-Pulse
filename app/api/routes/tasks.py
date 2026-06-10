@@ -2,11 +2,8 @@ import uuid
 import os
 import time
 import chromadb
-from chromadb.utils import embedding_functions
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from sqlalchemy import or_
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List, Optional
 from uuid import UUID
 
 # --- CORE PROJECT IMPORTS ---
@@ -137,7 +134,7 @@ def get_task_execution_telemetry(
     try:
         clean_ws_id = UUID(str(workspace_id).strip())
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid workspace_id structure mapping header.")
+        raise HTTPException(status_code=404, detail="Invalid workspace_id structure mapping header.")
 
     membership = get_workspace_membership(
         db=db, user_id=current_user.id, workspace_id=clean_ws_id
@@ -159,35 +156,58 @@ def get_task_execution_telemetry(
     else:
         prompt = str(step.input_data)
 
-    # --- INITIALIZE TRACKING SCHEMAS MATCHING CHECKLIST REQUIREMENTS ---
     sources_list = []
     documents_influencing_list = []
     total_docs_found = 0
     successful_hits_count = 0
     
-    similarity_threshold_configured = 0.55  # 55% similarity boundary cutoff line
+    similarity_threshold_configured = 0.45  # 🎯 Lowered to 45% to align with working step_tasks parameters
     query_embedding_time_ms = 0.0
     vector_search_time_ms = 0.0
+    error_log_report = None
 
     if prompt and prompt.strip():
         try:
+            # 🎯 LAZY INITIALIZATION: Official Google GenAI SDK configuration setup
+            from google import genai
+            gemini_api_key = os.getenv("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise ValueError("GEMINI_API_KEY environment token lookup variable is missing.")
+            ai_client = genai.Client(api_key=gemini_api_key)
+
             # 1. Trace Query Embedding Latency Time Isolation
             embed_start_time = time.time()
-            chroma_client = get_chroma_client()
-            default_ef = embedding_functions.DefaultEmbeddingFunction()
-            query_vector = default_ef([prompt])[0]
+            query_vector = None
+            
+            # Multi-model dynamic lookup fallback loop to guarantee 3,072 dimensions matching ingestion
+            try:
+                query_vector_resp = ai_client.models.embed_content(
+                    model="gemini-embedding-2",
+                    contents=prompt
+                )
+                query_vector = query_vector_resp.embeddings[0].values
+            except Exception:
+                try:
+                    query_vector_resp = ai_client.models.embed_content(
+                        model="text-embedding-004",
+                        contents=prompt
+                    )
+                    query_vector = query_vector_resp.embeddings[0].values
+                except Exception:
+                    query_vector_resp = ai_client.models.embed_content(
+                        model="text-embedding-005",
+                        contents=prompt
+                    )
+                    query_vector = query_vector_resp.embeddings[0].values
+
             query_embedding_time_ms = round((time.time() - embed_start_time) * 1000, 2)
 
-            # =====================================================================
-            # 🎯 FIXED: ENFORCE THE COSINE DISTANCE SPACE SPECIFICATION MATRIX LINK
-            # =====================================================================
-            collection = chroma_client.get_collection(
-                name="rag_enterprise_vectors_v1",
-                embedding_function=default_ef
-            )
+            # 2. Connect to Chroma DB Collection Space
+            chroma_client = get_chroma_client()
+            collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")  # ✅ Freed from default_ef binding!
             
             if collection:
-                # 2. Trace Pure Vector Search Latency Time Isolation
+                # 3. Trace Pure Vector Search Latency Time Isolation
                 search_start_time = time.time()
                 chroma_results = collection.query(
                     query_embeddings=[query_vector],
@@ -207,13 +227,15 @@ def get_task_execution_telemetry(
                         metadata = metadatas_list[index] if index < len(metadatas_list) else {}
                         raw_distance_score = float(distances_list[index]) if index < len(distances_list) else 1.0
                         
-                        # Normalize distance coordinates safely into confidence metrics (Fixes 0% math bug)
+                        # Normalize distance metrics properly based on true Cosine space inversion parameters
                         normalized_similarity = round(max(0.0, (1.0 - float(raw_distance_score))) * 100, 2)
                         
-                        # Decrypt secure chunks string metrics
+                        # Decrypt secure chunks string metrics back into plaintext snippet
                         plain_text_snippet = decrypt_text_string(encrypted_chunk, uuid.UUID(str(clean_ws_id)))
-                        
-                        # Resolve human-readable filenames from SQL record metadata caches mapping
+                        if not plain_text_snippet:
+                            plain_text_snippet = "Decryption Handshake Suppressed"
+
+                        # Resolve clean filenames from PostgreSQL relational schemas matching cache layers
                         doc_id = metadata.get("document_id")
                         filename = "Unknown Reference File"
                         if doc_id:
@@ -228,20 +250,21 @@ def get_task_execution_telemetry(
                             if filename not in documents_influencing_list:
                                 documents_influencing_list.append(filename)
 
-                        # Build response block completely stripped of backend technical engine identifiers noise
+                        # Append clean payload profile mapping tracking items
                         sources_list.append({
-                            "chunk_rank": index + 1,  # Retrieved Chunk Rank Badge (#1, #2...)
-                            "source_file": filename,  # Clean Source File Name string reference
-                            "page_number": int(metadata.get("page_number", 1)),  # Page Number from Ingestion task
-                            "last_updated": metadata.get("last_updated", "2026-06-01"),  # Document Refresh Date
-                            "uploaded_by_user": metadata.get("uploaded_by", "System Workspace Admin"),  # Uploader Email
+                            "chunk_rank": index + 1,  
+                            "source_file": filename,  
+                            "page_number": int(metadata.get("page_number", 1)),  
+                            "last_updated": metadata.get("last_updated", "2026-06-10"),  
+                            "uploaded_by_user": metadata.get("uploaded_by", "Workspace Administrator"),  
                             "raw_semantic_distance": round(raw_distance_score, 4),
-                            "similarity_confidence_percentage": normalized_similarity,  # True Confidence Metric
-                            "context_contribution_indicator": passes_cutoff,  # Included in LLM Final Context Prompt
-                            "content_snippet": plain_text_snippet[:250] + "..." if plain_text_snippet and len(plain_text_snippet) > 250 else plain_text_snippet
+                            "similarity_confidence_percentage": normalized_similarity,  
+                            "context_contribution_indicator": passes_cutoff,  
+                            "content_snippet": plain_text_snippet[:250] + "..." if len(plain_text_snippet) > 250 else plain_text_snippet
                         })
         except Exception as chroma_error:
-            print(f"⚠️ Telemetry fetch uninitialized or cluster offline: {str(chroma_error)}")
+            print(f"⚠️ Telemetry fetch exception caught: {str(chroma_error)}")
+            error_log_report = str(chroma_error)
 
     # Calculate real similarity hit rates based on valid qualifying thresholds
     hit_rate = (successful_hits_count / total_docs_found * 100) if total_docs_found > 0 else 0.0
@@ -277,12 +300,13 @@ def get_task_execution_telemetry(
                 "meta": {
                     "collection_human_name": "rag_knowledge_vectors",
                     "similarity_threshold_used": similarity_threshold_configured,
-                    "query_embedding_time_ms": query_embedding_time_ms,  # Isolated Embedding Speed Latency
-                    "vector_search_time_ms": vector_search_time_ms,      # Isolated Database Query Speed Latency
-                    "candidate_chunks_evaluated": total_docs_found * 2,
+                    "query_embedding_time_ms": query_embedding_time_ms,  
+                    "vector_search_time_ms": vector_search_time_ms,      
+                    "candidate_chunks_evaluated": total_docs_found, # ✅ Cleaned up legacy fake multiplier
                     "chunks_returned_count": total_docs_found,
-                    "retrieval_similarity_hit_rate_percent": round(hit_rate, 2), # Corrected Hit Rate Percentage
-                    "documents": sources_list
+                    "retrieval_similarity_hit_rate_percent": round(hit_rate, 2), 
+                    "documents": sources_list,
+                    **({"error_log_report": error_log_report} if error_log_report else {})
                 }
             },
             {
@@ -295,7 +319,7 @@ def get_task_execution_telemetry(
                     "prompt_tokens_consumed": getattr(step, "prompt_tokens", 0) or 0,
                     "completion_tokens_consumed": getattr(step, "completion_tokens", 0) or 0,
                     "total_tokens_consumed": getattr(step, "total_tokens", 0) or 0,
-                    "documents_influencing_final_answer": documents_influencing_list  # Exposes list of Source File Names
+                    "documents_influencing_final_answer": documents_influencing_list  
                 }
             }
         ]
