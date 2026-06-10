@@ -6,7 +6,7 @@ import chromadb
 from celery import Celery
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
-from google import genai  # 🎯 Added for the official Google GenAI SDK interface
+from google import genai  # 🎯 Official Google GenAI SDK interface
 
 from app.db.session import get_db
 from app.models.uploaded_document import UploadedDocument
@@ -22,7 +22,7 @@ celery_app = Celery("rag_tasks", broker=CELERY_BROKER)
 
 
 # =====================================================================
-# ✅ FIXED: LAZY INITIALIZATION HELPER (NO HARDCODED PAYLOAD LINKS)
+# ✅ LAZY INITIALIZATION HELPER (NO HARDCODED PAYLOAD LINKS)
 # =====================================================================
 def get_chroma_client():
     """
@@ -136,7 +136,7 @@ def process_document_embedding(document_id: str):
             metadata={"hnsw:space": "cosine"}
         )
         
-        # 🎯 INITIALIZE OFFICIAL GEMINI CLIENT FOR PLAIN TEXT EMBEDDINGS
+        # INITIALIZE OFFICIAL GEMINI CLIENT FOR PLAIN TEXT EMBEDDINGS
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY environment variable is missing on Celery worker node context.")
@@ -144,7 +144,7 @@ def process_document_embedding(document_id: str):
         ai_client = genai.Client(api_key=gemini_api_key)
         
         ids = []
-        embeddings = []  # 🎯 FIXED: Explicit vector tracking store array
+        embeddings = []  # 🎯 Explicit vector tracking store array
         documents = []
         metadatas = []
         
@@ -159,13 +159,37 @@ def process_document_embedding(document_id: str):
             chunk_id = f"{doc.id}_chunk_{index}"
             
             # -----------------------------------------------------------------
-            # 🚀 STEP A: Generate high-fidelity vector embedding from PLAIN TEXT
+            # 🚀 STEP A: Self-Healing Multi-Model Fallback Ingestion Loop
             # -----------------------------------------------------------------
-            vector_response = ai_client.models.embed_content(
-                model="text-embedding-005",
-                contents=plain_text_content
-            )
-            raw_vector_array = vector_response.embeddings[0].values
+            raw_vector_array = None
+            
+            # Try Option 1: Mainline target identifier string
+            try:
+                vector_response = ai_client.models.embed_content(
+                    model="gemini-embedding-2",
+                    contents=plain_text_content
+                )
+                raw_vector_array = vector_response.embeddings[0].values
+            except Exception as e1:
+                print(f"⚠️ 'gemini-embedding-2' route failed, falling back to legacy paths: {str(e1)}")
+                
+                # Try Option 2: Stable fallback version profile
+                try:
+                    vector_response = ai_client.models.embed_content(
+                        model="text-embedding-004",
+                        contents=plain_text_content
+                    )
+                    raw_vector_array = vector_response.embeddings[0].values
+                except Exception as e2:
+                    print(f"⚠️ 'text-embedding-004' route failed, attempting baseline recovery: {str(e2)}")
+                    
+                    # Try Option 3: Absolute baseline fallback string
+                    vector_response = ai_client.models.embed_content(
+                        model="text-embedding-005",
+                        contents=plain_text_content
+                    )
+                    raw_vector_array = vector_response.embeddings[0].values
+
             embeddings.append(raw_vector_array)
             
             # -----------------------------------------------------------------
@@ -194,7 +218,7 @@ def process_document_embedding(document_id: str):
         if ids:
             collection.add(
                 ids=ids,
-                embeddings=embeddings,  # ✅ FIXED PERMANENTLY: Chroma uses real text vectors for search
+                embeddings=embeddings,  # ✅ Chroma uses real text vectors for search
                 documents=documents,     # ✅ SECURE: The raw stored field strictly contains your encrypted string
                 metadatas=metadatas
             )
