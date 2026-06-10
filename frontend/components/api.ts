@@ -499,7 +499,7 @@ export const getAgent = async (agentId: string) => {
 
 // Upgraded authorized runtime route to safely pull all workspace active agents
 export const getWorkspaceAgents = async (workspaceId: string) => {
-  return request(`/agents/?workspace_id=${workspaceId}`, {
+  return request(`/dashboard/agents/?workspace_id=${workspaceId}`, {
     method: "GET"
   });
 };
