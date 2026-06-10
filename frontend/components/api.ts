@@ -262,11 +262,8 @@ export const apiKeyApi = {
     });
   },
 
-  // =========================================================================
-  // UPGRADED MULTI-PROVIDER METHOD ADDITION
-  // =========================================================================
   /**
-   * Fetches all multi-provider configurations mapped to a workspace context.
+   * Upgraded Multi-Provider Collector: Lists all named configurations inside a workspace.
    */
   listWorkspaceProviders: async (workspaceId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -274,6 +271,7 @@ export const apiKeyApi = {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
+
     if (workspaceId) {
       headers["workspace-id"] = workspaceId;
     }
@@ -499,6 +497,13 @@ export const getAgent = async (agentId: string) => {
   return response?.data || response;
 };
 
+// Upgraded authorized runtime route to safely pull all workspace active agents
+export const getWorkspaceAgents = async (workspaceId: string) => {
+  return request(`/agents/?workspace_id=${workspaceId}`, {
+    method: "GET"
+  });
+};
+
 export const getAgentTasks = async (agentId: string, q?: string, status?: string) => {
   const queryParams = new URLSearchParams();
   if (q) queryParams.append("q", q);
@@ -672,7 +677,7 @@ export function createDashboardSocket(
 
       let ticketQuery = "";
       if (ticketResponse.ok) {
-        const ticketData = await fetch(`${API_URL}/auth/ws-ticket`, { method: "POST", headers: authHeaders() }).then(res => res.json());
+        const ticketData = await ticketResponse.json();
         if (ticketData.ticket) {
           ticketQuery = `&ticket=${ticketData.ticket}`;
         }

@@ -16,7 +16,7 @@ import {
   HelpCircle,
   Users
 } from "lucide-react";
-import { getCurrentUser, getWorkspaceMembers, apiKeyApi } from "@/components/api";
+import { getCurrentUser, getWorkspaceMembers, getWorkspaceAgents, apiKeyApi } from "@/components/api";
 import { toast } from "sonner";
 
 // Type definition matching the structural database models natively
@@ -73,7 +73,6 @@ export default function WorkspaceProvidersPage() {
   // Syncs all active workspace items directly via the updated backend architecture layout
   async function fetchWorkspaceProvidersMatrix(workspaceId: string) {
     try {
-      // ✅ FIX: Uses your clean api.ts wrapper function natively instead of raw browser fetch
       const data = await apiKeyApi.listWorkspaceProviders(workspaceId);
       
       if (Array.isArray(data)) {
@@ -118,12 +117,14 @@ export default function WorkspaceProvidersPage() {
   // Fetch available workspace-isolated agents dynamically to assemble selection grids safely
   async function fetchWorkspaceAgentsRoster(workspaceId: string) {
     try {
-      // ✅ FIX: Swapped with your project's native authorized API module
-      const roster = await getWorkspaceMembers();
-      if (roster && Array.isArray(roster)) {
-        setAvailableAgents(roster.map((a: any) => ({ 
-          id: String(a.id || a.user_id || ""), 
-          name: String(a.name || a.user_name || "Agent Asset") 
+      // ✅ FIXED: Calls the new authorized getWorkspaceAgents endpoint from api.ts
+      const agentsData = await getWorkspaceAgents(workspaceId);
+      const agentsArray = agentsData?.agents || agentsData?.data || agentsData || [];
+      
+      if (Array.isArray(agentsArray)) {
+        setAvailableAgents(agentsArray.map((a: any) => ({ 
+          id: String(a.id), 
+          name: String(a.name || "Unnamed Agent") 
         })));
       }
     } catch (err) {
@@ -187,7 +188,6 @@ export default function WorkspaceProvidersPage() {
     try {
       setSubmittingKey(true);
 
-      // ✅ FIX: Clean execution via your standard api.ts layout methods!
       await apiKeyApi.connectKey(
         activeProviderForm,
         inputKey.trim(),
@@ -220,7 +220,6 @@ export default function WorkspaceProvidersPage() {
     try {
       setSubmittingKey(true);
       
-      // ✅ FIX: Cleans the row config natively using your updated unique ID disconnect router
       await apiKeyApi.disconnectKey(
         "gemini", 
         activeWorkspaceId,
@@ -242,7 +241,6 @@ export default function WorkspaceProvidersPage() {
     try {
       setTogglingDefault(true);
       
-      // ✅ FIX: Dispatches clean toggle states using your native api.ts endpoint helper
       await apiKeyApi.setDefaultProvider(
         engineType,
         activeWorkspaceId,
