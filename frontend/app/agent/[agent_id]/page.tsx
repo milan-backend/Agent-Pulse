@@ -67,7 +67,7 @@ export default function AgentRuntimePage() {
     } catch (error) {  
       console.error(error);  
       toast.error("Failed to load agent");
-    } finally {  
+    } finally {
       setLoading(false);  
     }
   }
@@ -76,7 +76,7 @@ export default function AgentRuntimePage() {
     if (agentId) {
       fetchAgent();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId]);
 
   async function pauseAgent() {
@@ -117,12 +117,13 @@ export default function AgentRuntimePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#020817] text-white flex">
+    /* 🎯 FIX 1: Locked down screen layout viewport from breaking layout sizes under heavy content stacks */
+    <div className="h-screen w-screen bg-[#020817] text-white flex overflow-hidden select-none">
       
       {/* =====================================================================
           FIXED SIDEBAR: REMOVED GHOST BOX OVERLAPS & ALIGNED UI PATTERNS
           ===================================================================== */}
-      <aside className="w-[300px] shrink-0 border-r border-cyan-500/10 bg-[#040b18] p-6 flex flex-col justify-between h-screen sticky top-0">
+      <aside className="w-[300px] shrink-0 border-r border-cyan-500/10 bg-[#040b18] p-6 flex flex-col justify-between h-full sticky top-0 overflow-y-auto scrollbar-none">
         <div className="space-y-10">
           <div>
             <h1 className="text-5xl font-black">
@@ -166,39 +167,44 @@ export default function AgentRuntimePage() {
           </div>  
         </div>
 
-        <div className="mb-2 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-6">  
+        <div className="mt-8 mb-2 rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-6 flex-shrink-0">  
           <p className="text-zinc-400 text-sm">Runtime Status</p>  
-          <div className="mt-4 flex items-center justify-between">  
-            <h2 className={`text-4xl font-black ${agent.is_active ? "text-green-300" : "text-red-300"}`}>{agent.is_active ? "ACTIVE" : "PAUSED"}</h2>  
-            <div className={`h-4 w-4 rounded-full ${agent.is_active ? "bg-green-400 shadow-[0_0_20px_#4ade80]" : "bg-red-400 shadow-[0_0_20px_#f87171]"}`} />  
+          <div className="mt-4 flex items-center justify-between gap-2">  
+            <h2 className={`text-3xl xl:text-4xl font-black ${agent.is_active ? "text-green-300" : "text-red-300"}`}>{agent.is_active ? "ACTIVE" : "PAUSED"}</h2>  
+            <div className={`h-4 w-4 rounded-full shrink-0 ${agent.is_active ? "bg-green-400 shadow-[0_0_20px_#4ade80]" : "bg-red-400 shadow-[0_0_20px_#f87171]"}`} />  
           </div>  
         </div>  
       </aside>  
 
       {/* MAIN CONTAINER */}  
-      <main className="flex-1 p-8 overflow-y-auto">  
-        <div className="flex items-center justify-between gap-6 flex-wrap">  
-          <div className="flex items-center gap-6">  
-            <div className="h-24 w-24 rounded-3xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shadow-[0_0_35px_rgba(34,211,238,0.15)]">  
+      {/* 🎯 FIX 2: Isolated right-side scroll layout workspace with flex flex-col and min-w-0 to block column compression bugs */}
+      <main className="flex-1 p-8 overflow-y-auto h-full flex flex-col min-w-0 bg-[#020817] scrollbar-thin scrollbar-thumb-zinc-900">  
+        
+        {/* TOP AGENT TITLE CONTAINER BOX */}
+        {/* 🎯 FIX 3: Added flex-shrink-0 so the main agent description header container box doesn't collapse horizontally on low display resolutions */}
+        <div className="flex items-center justify-between gap-6 flex-wrap flex-shrink-0 w-full bg-[#08111f]/30 border border-cyan-500/5 p-6 rounded-3xl">  
+          <div className="flex items-center gap-6 min-w-0">  
+            <div className="h-24 w-24 rounded-3xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shadow-[0_0_35px_rgba(34,211,238,0.15)] shrink-0">  
               <Cpu size={48} className="text-cyan-300" />  
             </div>  
-            <div>  
-              <h1 className="text-6xl xl:text-7xl font-black tracking-tight break-words">{agent.name}</h1>  
-              <p className="mt-2 text-zinc-400 text-xl">AI Runtime Agent</p>  
+            <div className="min-w-0">  
+              <h1 className="text-4xl md:text-5xl xl:text-6xl font-black tracking-tight text-white truncate max-w-full" title={agent.name}>{agent.name}</h1>  
+              <p className="mt-2 text-zinc-400 text-xl font-medium">AI Runtime Agent</p>  
             </div>  
           </div>  
 
-          <div className={`rounded-3xl border px-10 py-6 ${agent.is_active ? "border-green-500/20 bg-green-500/10" : "border-red-500/20 bg-red-500/10"}`}>  
+          <div className={`rounded-3xl border px-10 py-6 shrink-0 ${agent.is_active ? "border-green-500/20 bg-green-500/10" : "border-red-500/20 bg-red-500/10"}`}>  
             <p className="text-zinc-400 text-sm">Runtime Status</p>  
             <div className="mt-3 flex items-center gap-3">  
               <ShieldCheck className={agent.is_active ? "text-green-300" : "text-red-300"} />  
-              <span className={`text-5xl font-black ${agent.is_active ? "text-green-300" : "text-red-300"}`}>{agent.is_active ? "ACTIVE" : "PAUSED"}</span>  
+              <span className={`text-4xl font-black ${agent.is_active ? "text-green-300" : "text-red-300"}`}>{agent.is_active ? "ACTIVE" : "PAUSED"}</span>  
             </div>  
           </div>  
         </div>  
 
         {/* METRICS CARD GRID */}  
-        <div className="mt-10 grid gap-6 grid-cols-1 md:grid-cols-2 2xl:grid-cols-4">  
+        {/* 🎯 FIX 4: Implemented explicit grid flow boundaries with flex-shrink-0 to prevent boxes from hiding under other panels */}
+        <div className="mt-10 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 flex-shrink-0 w-full">  
           <Card title="Missions" value={Number(agent.mission_count || 0).toLocaleString()} icon={<Activity size={22} strokeWidth={2.5} />} />  
           <Card title="Total Cost" value={`$${Number(agent.total_cost || 0).toLocaleString()}`} icon={<DollarSign size={22} strokeWidth={2.5} />} />  
           <Card title="Max Cost" value={`$${Number(agent.max_cost || 0).toLocaleString()}`} icon={<DollarSign size={22} strokeWidth={2.5} />} />  
@@ -209,15 +215,16 @@ export default function AgentRuntimePage() {
         </div>  
 
         {/* METADATA TIMESTAMPS BAR */}  
-        <div className="mt-8 grid gap-6 md:grid-cols-2">  
-          <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8">  
+        {/* 🎯 FIX 5: Locked the bottom telemetry boxes from squishing on scroll actions */}
+        <div className="mt-8 grid gap-6 md:grid-cols-2 flex-shrink-0 w-full mb-4">  
+          <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 min-w-0">  
             <p className="text-zinc-400 text-sm">Agent ID</p>  
-            <h2 className="mt-4 text-2xl font-black break-all text-cyan-300">{agent.id}</h2>  
+            <h2 className="mt-4 text-2xl font-black break-all text-cyan-300 font-mono tracking-tight">{agent.id}</h2>  
           </div>  
 
-          <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8">  
+          <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 min-w-0">  
             <p className="text-zinc-400 text-sm">Agent Created</p>  
-            <h2 className="mt-4 text-2xl font-black">  
+            <h2 className="mt-4 text-2xl font-black tracking-tight">  
               {agent.created_at  
                 ? new Date(agent.created_at + "Z").toLocaleString(undefined, { hour12: true })  
                 : "Not Available"}  
@@ -231,7 +238,7 @@ export default function AgentRuntimePage() {
 
 function Card({ title, value, icon }: { title: string; value: string | number; icon: React.ReactNode; }) {
   return (
-    <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-6 transition-all hover:border-cyan-400/30 hover:bg-[#0b1728] overflow-hidden min-w-0">
+    <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-6 transition-all hover:border-cyan-400/30 hover:bg-[#0b1728] overflow-hidden min-w-0 shadow-lg">
       <div className="flex items-start justify-between gap-5">
         <div className="flex-1 min-w-0 overflow-hidden">
           <p className="text-sm font-medium tracking-wide text-zinc-400 truncate">{title}</p>

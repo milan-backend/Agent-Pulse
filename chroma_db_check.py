@@ -1,31 +1,40 @@
 import os
 import chromadb
 
-def force_purge_old_collections():
+def purge_all_stale_vectors():
+    # 1. Grab environmental variables matching your production cluster
     chroma_host = os.getenv("CHROMA_HOST", "https://chroma-production-2690.up.railway.app")
     chroma_token = os.getenv("CHROMA_TOKEN")
     
-    print(f"🧹 Connecting to ChromaDB server at: {chroma_host}")
+    print(f"🧹 Connecting to ChromaDB instance: {chroma_host}")
     client = chromadb.HttpClient(
         host=chroma_host.strip().rstrip("/"),
         headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
     )
     
-    # List all active collections on the server instance
-    all_collections = client.list_collections()
-    print(f"🔍 Found {len(all_collections)} active collections in memory.")
-    
-    # 🎯 FORCE DELETE BOTH STALE COLLECTIONS
-    collections_to_delete = ["rag_knowledge_vectors", "rag_enterprise_vectors_v1"]
-    
-    for col_name in collections_to_delete:
-        try:
-            client.delete_collection(name=col_name)
-            print(f"🗑️ Successfully deleted corrupted collection: '{col_name}'")
-        except Exception as e:
-            print(f"⚠️ Collection '{col_name}' could not be deleted (might already be empty): {str(e)}")
-
-    print("✅ Database volume successfully cleaned. Ready for fresh 3072 dimension matching!")
+    try:
+        # 2. Fetch our active dense 3072-dimension collection box
+        collection = client.get_collection(name="rag_enterprise_vectors_v1")
+        
+        if collection:
+            # Check total items currently sitting in the collection
+            before_count = collection.count()
+            print(f"📊 Current total chunks inside collection BEFORE purge: {before_count}")
+            
+            # 🎯 THE TRICK: Purge everything by recreating or deleting the collection cleanly
+            client.delete_collection(name="rag_enterprise_vectors_v1")
+            print("🗑️ Successfully wiped out the collection volume from disk.")
+            
+            # Recreate it instantly fresh, empty, and clean
+            client.get_or_create_collection(
+                name="rag_enterprise_vectors_v1",
+                metadata={"hnsw:space": "cosine"}
+            )
+            print("🆕 Recreated a pristine, empty 'rag_enterprise_vectors_v1' collection box!")
+            print("✅ All old stale 'undefined' files have been completely blasted from disk memory!")
+            
+    except Exception as error:
+        print(f"❌ Error encountered during dynamic database reset loop: {str(error)}")
 
 if __name__ == "__main__":
-    force_purge_old_collections()
+    purge_all_stale_vectors()
