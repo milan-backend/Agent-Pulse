@@ -21,6 +21,8 @@ class UserAPIKeyService:
         """
         EXISTING CORRECT LOGIC (UNTOUCHED):
         Encrypts the raw API key from the frontend dropdown/input and saves it.
+        If a key record already exists under the matching hierarchical constraints 
+        (Agent-specific or Workspace-default), it cleanly updates it in place.
         """
         if not workspace_id:
             raise ValueError("Security Violation: workspace_id is strictly mandatory for storing credentials.")
@@ -81,7 +83,8 @@ class UserAPIKeyService:
     ) -> Optional[str]:
         """
         EXISTING CORRECT LOGIC (UNTOUCHED):
-        Fetches the encrypted API key from the database using explicit hierarchical scopes.
+        Fetches the encrypted API key from the database using explicit hierarchical scopes
+        and returns the fully decrypted plain text token string ready for client initialization.
         """
         if not workspace_id:
             raise ValueError("Security Violation: workspace_id is strictly mandatory for retrieving credentials.")
@@ -177,6 +180,7 @@ class UserAPIKeyService:
     ) -> UserAPIKey:
         """
         Stores or updates an advanced, multi-tenant Workspace provider configuration.
+        Ensures strict separation and supports unlimited keys from the same provider engine type.
         """
         if not workspace_id:
             raise ValueError("Security Violation: workspace_id is required to register workspace providers.")
@@ -184,13 +188,22 @@ class UserAPIKeyService:
         provider_clean = provider_type.lower().strip()
         clean_name = provider_name.strip() if provider_name else "Workspace Provider"
 
+        # =========================================================================
+        # ✅ FIXED: SWITCHED BULK UPDATE TO OBJECT LOOP TO BYPASS PROPERTY FAULTS
+        # This completely resolves the '_bulk_update_tuples' internal crash error.
+        # =========================================================================
         if is_global_default:
-            db.query(UserAPIKey).filter(
+            existing_defaults = db.query(UserAPIKey).filter(
                 UserAPIKey.workspace_id == workspace_id,
                 UserAPIKey.provider == provider_clean,
                 UserAPIKey.agent_id == None
-            ).update({"is_global_default": False}, synchronize_session=False)
+            ).all()
+            
+            for old_default in existing_defaults:
+                old_default.is_global_default = False
+                
             db.commit()
+        # =========================================================================
 
         existing_record = None
         if provider_id:
@@ -245,7 +258,11 @@ class UserAPIKeyService:
         provider_type: str
     ) -> Tuple[Optional[UserAPIKey], str]:
         """
-        Executes the blueprint hierarchy rules and labels attribution tracking.
+        Executes the blueprint hierarchy rules adapted for comma-separated Strings:
+        Rule 1: Look for Agent-Specific Override Key.
+        Rule 2: Look for Workspace Key exclusively assigned to this specific agent.
+        Rule 3: Look for Workspace Key designated for ALL agents (assigned_agents is truly empty).
+        
         Returns a Tuple of: (UserAPIKey object or None, "agent" | "workspace" | "system")
         """
         p_type = provider_type.lower().strip()
@@ -258,7 +275,7 @@ class UserAPIKeyService:
             UserAPIKey.provider == p_type
         ).first()
         if agent_specific:
-            return agent_specific, "agent"  # 🎯 Tagged as Agent-Specific Private Key
+            return agent_specific, "agent"
 
         # Fetch all workspace-level providers for this engine
         workspace_keys = db.query(UserAPIKey).filter(
@@ -271,14 +288,16 @@ class UserAPIKeyService:
         for w_key in workspace_keys:
             current_assignments = w_key.assigned_agents
             if current_assignments and ag_id_str in current_assignments:
-                return w_key, "workspace"  # 🎯 Tagged as Workspace-Assigned Key
+                return w_key, "workspace"
 
         # --- RULE 3: Check Workspace Key Open for ALL Agents (Strict Fallback Guard) ---
         for w_key in workspace_keys:
             current_assignments = w_key.assigned_agents
+            
+            # A key can ONLY be used as a general fallback if it has NO agent exclusions listed at all,
+            # or if it is explicitly designated as the primary workspace global default flag item.
             if not current_assignments or w_key.is_global_default:
-                return w_key, "workspace"  # 🎯 Tagged as Workspace Global Fallback Key
+                return w_key, "workspace"
 
-        # --- TIER 4: Complete Absence of Database Records ---
-        # If no custom keys exist anywhere in PostgreSQL, it shifts down to your Server Process Variables
-        return None, "system"  # 🎯 Tagged as System Environment Key (Your Master Wallet!)
+        # Return None to signify complete authorization isolation boundaries matching Agent 3
+        return None, "system"
