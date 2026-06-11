@@ -213,6 +213,7 @@ def process_step(self, step_id: str):
                 agent_model_clean = str(agent_model).lower().strip() if agent_model else ""
                 requested_engine = "openai" if ("gpt" in agent_model_clean or "openai" in agent_model_clean) else "gemini"
 
+                resolved_key_record = None
                 if agent_id_raw:
                     # Run the recursive priority check: Agent-Specific -> Assigned Workspace -> Global Workspace -> System
                     resolved_key_record = UserAPIKeyService.resolve_agent_api_key(
@@ -232,6 +233,15 @@ def process_step(self, step_id: str):
                 # Absolute baseline structural fallback if completely unconfigured
                 if not active_model_target:
                     active_model_target = "gpt-4o-mini" if requested_engine == "openai" else "gemini-2.5-flash-lite"
+
+                # 🛡️ SECURITY CONTROL UPGRADE BLOCK: ENFORCE ZERO-TRUST TASK ISOLATION BOUNDARY
+                # If a specific agent task execution loop is running, and the database tracking resolver returns None,
+                # and no server system variables are present, we must block the loop right here before calling generation.
+                if not resolved_key_record and not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
+                    raise ValueError(
+                        f"Zero-Trust Violation: Agent '{agent_id_raw}' is not explicitly assigned to any valid keys "
+                        f"in the workspace provider array list, and no system environment variables are active. Execution denied."
+                    )
 
                 # ========================================================
                 # ADVANCED HIERARCHICAL CONTEXT RETRIEVAL (RAG LOOKUP)
@@ -255,6 +265,12 @@ def process_step(self, step_id: str):
                 try:
                     # Initialize the official Google GenAI SDK client for the query vector match
                     gemini_api_key = os.getenv("GEMINI_API_KEY")
+                    
+                    # Fallback to the resolved database credential string if the environment is empty for RAG lookups
+                    if not gemini_api_key and resolved_key_record:
+                        from app.core.crypto import decrypt_api_key
+                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+
                     if not gemini_api_key:
                         raise ValueError("GEMINI_API_KEY is completely missing on worker container environment")
                         
@@ -314,7 +330,7 @@ def process_step(self, step_id: str):
                         metas_list = agent_results.get("metadatas", [[]])[0] if agent_results.get("metadatas") else []
                         dists_list = agent_results.get("distances", [[]])[0] if agent_results.get("distances") else []
                         
-                        rag_telemetry_node["candidate_chunks_evaluated"] = len(docs_list) # 🎯 FIXED: Removed fake *2 multiplier
+                        rag_telemetry_node["candidate_chunks_evaluated"] = len(docs_list)
                         successful_hits_count = 0
 
                         # Check general fallback workspace pool if agent query returned zero records
@@ -343,10 +359,7 @@ def process_step(self, step_id: str):
                             meta_data = metas_list[idx] if idx < len(metas_list) else {}
                             raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                             
-                            # 🎯 FIXED COSINE SIMILARITY MATH (No /2.0 compression error!)
                             normalized_similarity = round(max(0.0, (1.0 - float(raw_distance))) * 100, 2)
-                            
-                            # Evaluate context match clearing threshold parameter configuration
                             passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)
                             
                             plain_chunk = "Decryption Suppressed"
@@ -374,7 +387,6 @@ def process_step(self, step_id: str):
 
                         rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
                         
-                        # Calculate high-relevance hit ratios dynamically
                         if rag_telemetry_node["chunks_returned_count"] > 0:
                             rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
                                 (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
