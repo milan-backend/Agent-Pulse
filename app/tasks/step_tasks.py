@@ -409,7 +409,7 @@ def process_step(self, step_id: str):
                     )
 
                 # Run Handshake via the updated hierarchical engine layer 
-                output = generate_llm_response(
+                output, tier_status_msg = generate_llm_response(
                     prompt=final_prompt_payload,
                     db=db,
                     workspace_id=current_workspace_id,
@@ -553,6 +553,7 @@ def process_step(self, step_id: str):
         result = {
             "success": True,
             "result": output,
+            "tier_notification": tier_status_msg,
             "last_executed_step": "generation_completed",
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }

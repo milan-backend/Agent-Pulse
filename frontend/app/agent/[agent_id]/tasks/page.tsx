@@ -22,7 +22,8 @@ import {
   User,
   Calendar,
   Layers,
-  Timer
+  Timer,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import { getAgentTasks, agentTasksApi } from "@/components/api";
@@ -198,88 +199,115 @@ export default function AgentTasksPage() {
         </div>  
       ) : (  
         <div className="mt-6 space-y-6">  
-          {tasks.map((task) => (  
-            <div key={task.step_id} className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 relative overflow-hidden group">  
-              <div className="flex items-start justify-between gap-6 flex-wrap">  
-                <div>  
-                  <h2 className="text-3xl font-black text-cyan-300">{task.task_name}</h2>  
-                  <p className="mt-3 break-all text-sm text-zinc-500">{task.step_id}</p>  
-                </div>  
-                
-                {/* RE-ARCHITECTED STATUS CONTAINER BAR ADDING TELEMETRY DRAWER LINK */}
-                <div className="flex items-center gap-3 flex-wrap">
-                  {/* NEW: PREMIUM OBSERVE ACCELERATOR TELEMETRY TRACE LAUNCH BUTTON ACTION */}
-                  <button
-                    onClick={() => viewTelemetryTrace(task.step_id)}
-                    className="flex items-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-950/40 hover:bg-cyan-400/20 px-5 py-3 font-bold text-sm text-cyan-400 transition-all shadow-[0_0_15px_rgba(34,211,238,0.02)]"
-                  >
-                    <Gauge size={14} />
-                    <span>View More Information</span>
-                  </button>
+          {tasks.map((task) => {
+            const isSystemTier = task.output_data?.tier_notification?.includes("Notice:");
 
-                  <div className={`flex items-center gap-3 rounded-2xl border px-5 py-3 font-bold ${getStatusColor(task.status)}`}>  
-                    {task.status === "completed" ? <CheckCircle2 size={18} /> : task.status === "failed" ? <XCircle size={18} /> : <Clock3 size={18} />}  
-                    {task.status}  
+            return (  
+              <div key={task.step_id} className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 relative overflow-hidden group">  
+                <div className="flex items-start justify-between gap-6 flex-wrap">  
+                  <div>  
+                    <h2 className="text-3xl font-black text-cyan-300">{task.task_name}</h2>  
+                    <p className="mt-3 break-all text-sm text-zinc-500">{task.step_id}</p>  
                   </div>  
-                </div>
-              </div>  
+                  
+                  {/* RE-ARCHITECTED STATUS CONTAINER BAR ADDING TELEMETRY DRAWER LINK */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {/* NEW: PREMIUM OBSERVE ACCELERATOR TELEMETRY TRACE LAUNCH BUTTON ACTION */}
+                    <button
+                      onClick={() => viewTelemetryTrace(task.step_id)}
+                      className="flex items-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-950/40 hover:bg-cyan-400/20 px-5 py-3 font-bold text-sm text-cyan-400 transition-all shadow-[0_0_15px_rgba(34,211,238,0.02)]"
+                    >
+                      <Gauge size={14} />
+                      <span>View More Information</span>
+                    </button>
 
-              <div className="mt-8 grid gap-5 md:grid-cols-3">  
-                <InfoCard title="Retry Count" value={task.retry_count} />  
-                <InfoCard title="Cache Hit" value={task.cache_hit ? "YES" : "NO"} />  
-                <InfoCard title="Event Type" value={task.event_type || "N/A"} />  
-              </div>  
-
-              <div className="mt-8 rounded-3xl border border-white/10 bg-black/30 p-6">  
-                <div className="flex items-center gap-3">  
-                  <Database size={18} className="text-cyan-300" />  
-                  <h3 className="text-xl font-black">Input Data</h3>  
+                    <div className={`flex items-center gap-3 rounded-2xl border px-5 py-3 font-bold ${getStatusColor(task.status)}`}>  
+                      {task.status === "completed" ? <CheckCircle2 size={18} /> : task.status === "failed" ? <XCircle size={18} /> : <Clock3 size={18} />}  
+                      {task.status}  
+                    </div>  
+                  </div>
                 </div>  
-                <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
-                  {JSON.stringify(task.input_data || {}, null, 2)}  
-                </pre>  
-              </div>  
 
-              <div className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-6">  
-                <div className="flex items-center gap-3">  
-                  <Cpu size={18} className="text-green-300" />  
-                  <h3 className="text-xl font-black">Output Data</h3>  
+                {/* ✅ NEW FULL-STACK INJECTION: DYNAMIC BILLING ROUTING NOTIFICATION ALERT BANNER */}
+                {task.output_data?.tier_notification && (
+                  <div className={`mt-6 p-4 rounded-2xl border text-xs leading-relaxed font-sans flex items-center justify-between gap-4 animate-fadeIn ${
+                    isSystemTier 
+                      ? "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                      : "bg-cyan-500/10 border-cyan-500/20 text-cyan-300"
+                  }`}>
+                    <div className="flex items-center gap-2.5">
+                      <AlertTriangle size={15} className={isSystemTier ? "text-amber-400 shrink-0" : "text-cyan-400 shrink-0"} />
+                      <span>{task.output_data.tier_notification}</span>
+                    </div>
+                    {isSystemTier && (
+                      <button 
+                        type="button"
+                        onClick={() => window.location.href = "/dashboard/workspace-providers"}
+                        className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-[10px] uppercase tracking-wide hover:bg-amber-400 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        Connect Key
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-8 grid gap-5 md:grid-cols-3">  
+                  <InfoCard title="Retry Count" value={task.retry_count} />  
+                  <InfoCard title="Cache Hit" value={task.cache_hit ? "YES" : "NO"} />  
+                  <InfoCard title="Event Type" value={task.event_type || "N/A"} />  
                 </div>  
-                <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
-                  {JSON.stringify(task.output_data || {}, null, 2)}  
-                </pre>  
-              </div>  
 
-              {task.error_message && (  
-                <div className="mt-6 rounded-3xl border border-red-500/20 bg-red-500/10 p-6">  
-                  <h3 className="text-xl font-black text-red-300">Error Message</h3>  
-                  <p className="mt-4 text-red-200">{task.error_message}</p>  
+                <div className="mt-8 rounded-3xl border border-white/10 bg-black/30 p-6">  
+                  <div className="flex items-center gap-3">  
+                    <Database size={18} className="text-cyan-300" />  
+                    <h3 className="text-xl font-black">Input Data</h3>  
+                  </div>  
+                  <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
+                    {JSON.stringify(task.input_data || {}, null, 2)}  
+                  </pre>  
                 </div>  
-              )}  
 
-              {/* DYNAMIC BROWSER USER TIMESTAMPS GENERATION GRID */}  
-              <div className="mt-8 grid gap-5 md:grid-cols-3">  
-                <InfoCard   
-                  title="Started At"   
-                  value={task.started_at && task.started_at !== "None"   
-                    ? new Date(task.started_at + "Z").toLocaleString(undefined, { hour12: true })   
-                    : "N/A"}   
-                />  
-                <InfoCard   
-                  title="Created At"   
-                  value={task.created_at && task.created_at !== "None"   
-                    ? new Date(task.created_at + "Z").toLocaleString(undefined, { hour12: true })   
-                    : "N/A"}   
-                />  
-                <InfoCard   
-                  title="Updated At"   
-                  value={task.updated_at && task.updated_at !== "None"   
-                    ? new Date(task.updated_at + "Z").toLocaleString(undefined, { hour12: true })   
-                    : "N/A"}   
-                />  
+                <div className="mt-6 rounded-3xl border border-white/10 bg-black/30 p-6">  
+                  <div className="flex items-center gap-3">  
+                    <Cpu size={18} className="text-green-300" />  
+                    <h3 className="text-xl font-black">Output Data</h3>  
+                  </div>  
+                  <pre className="mt-5 max-h-[400px] overflow-y-auto overflow-x-auto whitespace-pre-wrap break-all text-sm text-zinc-300 font-mono">  
+                    {JSON.stringify(task.output_data || {}, null, 2)}  
+                  </pre>  
+                </div>  
+
+                {task.error_message && (  
+                  <div className="mt-6 rounded-3xl border border-red-500/20 bg-red-500/10 p-6">  
+                    <h3 className="text-xl font-black text-red-300">Error Message</h3>  
+                    <p className="mt-4 text-red-200 leading-relaxed font-sans text-sm">{task.error_message}</p>  
+                  </div>  
+                )}  
+
+                {/* DYNAMIC BROWSER USER TIMESTAMPS GENERATION GRID */}  
+                <div className="mt-8 grid gap-5 md:grid-cols-3">  
+                  <InfoCard  
+                    title="Started At"  
+                    value={task.started_at && task.started_at !== "None"  
+                      ? new Date(task.started_at + "Z").toLocaleString(undefined, { hour12: true })  
+                      : "N/A"}  
+                  />  
+                  <InfoCard  
+                    title="Created At"  
+                    value={task.created_at && task.created_at !== "None"  
+                      ? new Date(task.created_at + "Z").toLocaleString(undefined, { hour12: true })  
+                      : "N/A"}  
+                  />  
+                  <InfoCard  
+                    title="Updated At"  
+                    value={task.updated_at && task.updated_at !== "None"  
+                      ? new Date(task.updated_at + "Z").toLocaleString(undefined, { hour12: true })  
+                      : "N/A"}  
+                  />  
+                </div>  
               </div>  
-            </div>  
-          ))}  
+            );
+          })}  
         </div>  
       )}  
 
@@ -340,6 +368,29 @@ export default function AgentTasksPage() {
                     </div>
                   </div>
 
+                  {/* ✅ TELEMETRY-LEVEL ALLOCATION DISPLAY NOTICE */}
+                  {telemetryData.tier_notification && (
+                    <div className={`p-5 rounded-2xl border text-xs font-sans leading-relaxed flex items-center justify-between gap-4 ${
+                      telemetryData.tier_notification.includes("Notice:") 
+                        ? "bg-amber-500/10 border-amber-500/20 text-amber-300"
+                        : "bg-cyan-500/10 border-cyan-500/20 text-cyan-300"
+                    }`}>
+                      <div className="flex items-center gap-2.5">
+                        <Sparkles size={15} className={telemetryData.tier_notification.includes("Notice:") ? "text-amber-400" : "text-cyan-400"} />
+                        <span>{telemetryData.tier_notification}</span>
+                      </div>
+                      {telemetryData.tier_notification.includes("Notice:") && (
+                        <button 
+                          type="button"
+                          onClick={() => window.location.href = "/dashboard/workspace-providers"}
+                          className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-[10px] uppercase tracking-wide hover:bg-amber-400 transition-colors"
+                        >
+                          Connect Key
+                        </button>
+                      )}
+                    </div>
+                  )}
+
                   {/* TELEMETRY LOOP PIPELINE TIMELINE STEP GRID */}
                   <div className="space-y-8">
                     <h3 className="text-sm font-mono uppercase tracking-widest text-cyan-400 font-black flex items-center gap-2">
@@ -364,9 +415,7 @@ export default function AgentTasksPage() {
                           )}
                         </div>
 
-                        {/* =================================================================
-                            UPGRADED RETRIEVAL METRICS BLOCK: DISPLAYING ALL NEW ADVANCED FIELDS
-                            ================================================================= */}
+                        {/* UPGRADED RETRIEVAL METRICS BLOCK */}
                         {step.event_name === "KNOWLEDGE_RETRIEVAL" && step.meta && (
                           <div className="bg-[#09131f]/80 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
                             
@@ -416,10 +465,8 @@ export default function AgentTasksPage() {
                                     doc.context_contribution_indicator ? "border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.03)]" : "border-slate-800/80 opacity-60"
                                   } space-y-4`}>
                                     
-                                    {/* Big Metric Badges Grid Inside Document Cards */}
                                     <div className="flex items-center justify-between gap-4 flex-wrap text-xs font-mono">
                                       <div className="flex items-center gap-2.5 truncate max-w-md">
-                                        {/* Chunk Rank Badge Badge */}
                                         <span className="bg-cyan-500 text-black px-2 py-0.5 rounded font-black text-[11px]">
                                           #{doc.chunk_rank || dIdx + 1}
                                         </span>
@@ -443,7 +490,6 @@ export default function AgentTasksPage() {
                                       </div>
                                     </div>
 
-                                    {/* Sub Heading Metadata Block Strings */}
                                     <div className="grid grid-cols-2 gap-4 text-[11px] font-mono text-zinc-500 border-t border-slate-900 pt-2">
                                       <div className="flex items-center gap-1">
                                         <User size={12} /> Uploaded By: <span className="text-zinc-400 ml-1">{doc.uploaded_by_user || "Workspace Admin"}</span>
@@ -453,7 +499,6 @@ export default function AgentTasksPage() {
                                       </div>
                                     </div>
 
-                                    {/* Large Font Snippet Block */}
                                     <p className="text-zinc-300 leading-relaxed text-md font-sans bg-black/30 p-4 border border-slate-900 rounded-xl italic break-all max-h-48 overflow-y-auto">
                                       "{doc.content_snippet}"
                                     </p>
@@ -464,9 +509,7 @@ export default function AgentTasksPage() {
                           </div>
                         )}
 
-                        {/* =================================================================
-                            UPGRADED GENERATION BLOCK: REFRACTORED TO SHOW REAL INFLUENCING FILES
-                            ================================================================= */}
+                        {/* UPGRADED GENERATION BLOCK */}
                         {step.event_name.includes("Response Generation") && step.meta && (
                           <div className="bg-[#09131f]/80 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
                             <div className="flex items-center justify-between gap-4 border-b border-slate-800/60 pb-4 flex-wrap">
@@ -479,7 +522,6 @@ export default function AgentTasksPage() {
                               </span>
                             </div>
 
-                            {/* Token weights charts */}
                             <div className="grid grid-cols-3 gap-4 font-mono text-center text-xs">
                               <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
                                 <span className="text-zinc-500 block mb-1">Prompt Weight</span>
@@ -495,7 +537,6 @@ export default function AgentTasksPage() {
                               </div>
                             </div>
                             
-                            {/* FIXED: Formatted to map over arrays of influencing source document string file names natively */}
                             <div className="space-y-3">
                               <span className="text-xs font-mono uppercase text-zinc-400 block font-black tracking-wider">Verified Source Files Influencing Final Generated Answer:</span>
                               
