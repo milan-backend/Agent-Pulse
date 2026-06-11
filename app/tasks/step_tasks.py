@@ -185,11 +185,13 @@ def process_step(self, step_id: str):
         # REAL AI EXECUTION
         # =========================================
         try:
-            prompt = ""
             if isinstance(step.input_data, dict):
                 prompt = step.input_data.get("prompt", "")
             else:
                 prompt = str(step.input_data)
+
+            # ✅ FIXED FOR BLANK BOUNDARIES: Pre-initialize fallback status token tags to prevent UnboundLocalError
+            tier_status_msg = "Notice: Running on System Shared Sandbox Tier."
 
             if not prompt or not str(prompt).strip():
                 output = "No prompt provided. LLM execution skipped"
@@ -201,6 +203,7 @@ def process_step(self, step_id: str):
                 }
                 active_model_target = "gemini-2.5-flash-lite"
                 rag_telemetry_node = {}
+                tier_status_msg = "Notice: Empty execution payload string dropped safely."
             else:
                 # ========================================================
                 # UPGRADED MULTI-PROVIDER MODEL & CREDENTIAL LOOKUP ENGINE
@@ -214,9 +217,11 @@ def process_step(self, step_id: str):
                 requested_engine = "openai" if ("gpt" in agent_model_clean or "openai" in agent_model_clean) else "gemini"
 
                 resolved_key_record = None
+                tier_source = "system" # Base tracking identifier placeholder
+
                 if agent_id_raw:
-                    # Run the recursive priority check: Agent-Specific -> Assigned Workspace -> Global Workspace -> System
-                    resolved_key_record = UserAPIKeyService.resolve_agent_api_key(
+                    # ✅ FIXED FOR TUPLE ATTRIBUTE FAULTS: Unpack both variables from your new Tuple signature smoothly
+                    resolved_key_record, tier_source = UserAPIKeyService.resolve_agent_api_key(
                         db=db,
                         workspace_id=uuid.UUID(current_workspace_id),
                         agent_id=agent_id_raw,
@@ -235,8 +240,6 @@ def process_step(self, step_id: str):
                     active_model_target = "gpt-4o-mini" if requested_engine == "openai" else "gemini-2.5-flash-lite"
 
                 # 🛡️ SECURITY CONTROL UPGRADE BLOCK: ENFORCE ZERO-TRUST TASK ISOLATION BOUNDARY
-                # If a specific agent task execution loop is running, and the database tracking resolver returns None,
-                # and no server system variables are present, we must block the loop right here before calling generation.
                 if not resolved_key_record and not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
                     raise ValueError(
                         f"Zero-Trust Violation: Agent '{agent_id_raw}' is not explicitly assigned to any valid keys "
@@ -408,7 +411,7 @@ def process_step(self, step_id: str):
                         f"USER INSTRUCTION TASK: {prompt}"
                     )
 
-                # Run Handshake via the updated hierarchical engine layer 
+                # ✅ RUN HANDSHAKE: Safely unpacking both properties from your refactored LLM Service file tuple
                 output, tier_status_msg = generate_llm_response(
                     prompt=final_prompt_payload,
                     db=db,
@@ -417,6 +420,7 @@ def process_step(self, step_id: str):
                     model_name=active_model_target
                 )
                 
+                # ✅ PURE TOKENIZER MAP: Passing the extracted text string to prevent usage calculation faults
                 completion_usage = calculate_usage(
                    prompt=final_prompt_payload,
                    completion=output,
@@ -550,10 +554,11 @@ def process_step(self, step_id: str):
             }
         }
 
+        # ✅ NEW SCHEMA COUPLING: Bind tier notification metadata properties down to step context maps
         result = {
             "success": True,
             "result": output,
-            "tier_notification": tier_status_msg,
+            "tier_notification": tier_status_msg, # Connects cleanly to your Next.js toast/card banner component
             "last_executed_step": "generation_completed",
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
