@@ -167,13 +167,17 @@ export const apiKeyApi = {
   /**
    * Connect and live-verify an AI console token string.
    * Passes workspace_id in mandatory header context.
+   * ✅ FIXED SIGNATURE: Fully maps labels, selected agent arrays, and global defaults to backend fields
    */
   connectKey: async (
     provider: string, 
     apiKey: string, 
     workspaceId?: string | null,
     agentId?: string | null,
-    modelVersion?: string | null
+    modelVersion?: string | null,
+    providerName?: string | null,
+    assignedAgents?: string[] | null,
+    isGlobalDefault: boolean = false
   ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
@@ -197,14 +201,16 @@ export const apiKeyApi = {
       body: { 
         provider: provider.toLowerCase().trim(), 
         api_key: apiKey,
-        model_version: modelVersion || null
+        model_version: modelVersion || null,
+        provider_name: providerName || null,
+        assigned_agents: assignedAgents || [],
+        is_global_default: isGlobalDefault
       },
     });
   },
 
   /**
    * Completely erase configuration rows from backend storage tables.
-   * ✅ FIXED: Enforces exact mapping support for providerId route parsing layers
    */
   disconnectKey: async (
     provider: string, 
@@ -237,7 +243,6 @@ export const apiKeyApi = {
 
   /**
    * Designate a provider key as the scoped primary default target.
-   * ✅ FIXED: Included safe providerId parsing parameter parameters map contexts
    */
   setDefaultProvider: async (
     provider: string, 
@@ -358,7 +363,7 @@ RESET PASSWORD
 export const resetPassword = async (token: string, new_password: string) => {
   return request("/auth/reset-password", {
     method: "POST",
-    body: { token, new_password },
+                body: { token, new_password },
   });
 };
 

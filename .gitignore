@@ -114,3 +114,4 @@ locustfile.py
 safe_cleanup.py
 chroma_db_check.py
 migrate_db.py
+check_dbb.py

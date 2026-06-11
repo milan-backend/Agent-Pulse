@@ -187,12 +187,16 @@ export default function WorkspaceProvidersPage() {
     try {
       setSubmittingKey(true);
 
+      // ✅ FIXED: Now correctly attaching labels, selection lists, and default flags straight into payload hooks
       await apiKeyApi.connectKey(
         activeProviderForm,
         inputKey.trim(),
         activeWorkspaceId,
         null, 
-        targetModelVersion
+        targetModelVersion,
+        finalProviderLabel,
+        selectedAgentsToAssign,
+        isGlobalDefaultCheck
       );
 
       toast.success(`Successfully initialized and routed provider instance: "${finalProviderLabel}"`);
@@ -212,7 +216,6 @@ export default function WorkspaceProvidersPage() {
     }
   }
 
-  // ✅ UPGRADED: Dynamic definition matching backend's /disconnect requirements perfectly
   async function handleDisconnectWorkspaceKey(providerId: string, providerType: "gemini" | "openai") {
     if (!activeWorkspaceId) return;
     if (!window.confirm(`Permanently disconnect and clear this targeted ${providerType === "gemini" ? "Google Gemini" : "OpenAI Platform"} provider configuration instance?`)) return;
@@ -220,7 +223,6 @@ export default function WorkspaceProvidersPage() {
     try {
       setSubmittingKey(true);
       
-      // Enforces passing the providerId column string straight into the query string parameters array
       await apiKeyApi.disconnectKey(
         providerType, 
         activeWorkspaceId,
@@ -238,7 +240,6 @@ export default function WorkspaceProvidersPage() {
     }
   }
 
-  // ✅ UPGRADED: Connects your primary global default engine selections safely passing row identification IDs
   async function handleSetDefaultProvider(providerId: string, engineType: string) {
     if (!activeWorkspaceId) return;
     try {
@@ -463,7 +464,7 @@ export default function WorkspaceProvidersPage() {
                       {/* TEAM ASSIGNED ROUTING FOOTPRINT METADATA */}
                       <div className="pt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
                         <span className="text-zinc-500 font-mono font-medium">Assigned Routing Access Scopes:</span>
-                        {prov.assigned_agents.length > 0 ? (
+                        {prov.assigned_agents && prov.assigned_agents.length > 0 ? (
                           prov.assigned_agents.map((agId) => {
                             const foundAgentName = availableAgents.find(a => a.id === agId)?.name || agId;
                             return (
