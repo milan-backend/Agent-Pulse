@@ -59,18 +59,19 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
 # COOKIE MANAGEMENT HELPER
 # ============================================
 def set_secure_refresh_cookie(response: Response, token_string: str):
-
     expire_time = datetime.now(timezone.utc) + timedelta(days=7)
 
+    # ✅ FIXED FOR CROSS-SITE PRODUCTION ECOSYSTEMS:
+    # Setting samesite="none" allows your Vercel frontend to pass cookies back to your Render backend safely.
     response.set_cookie(
         key="refresh_token",
         value=token_string,
         httponly=True,
-        secure=True,        # Requires HTTPS production domain layer paths
-        samesite="lax",     # Cross-Site Request Forgery (CSRF) protection boundary
-        max_age=604800,     # 7 Days in seconds execution lifespan
-        expires=expire_time, # Explicitly forces browser to persist cookie when closed
-        path="/"            # Global path availability across your whole custom api domain
+        secure=True,         # strictly required when samesite is declared as none
+        samesite="none",     # Allows cross-domain cookie context transportation pipelines
+        max_age=604800,      # 7 Days lifespan
+        expires=expire_time, 
+        path="/"            
     )
 
 # ============================================
@@ -220,7 +221,8 @@ def login_user(db: Session, request, response: Response):
     db_refresh_token = RefreshToken(
         user_id=user.id,
         token_id=refresh_token_string,
-        expires_at=refresh_expiry
+        expires_at=refresh_expiry,
+        created_at=datetime.utcnow() # Guarantees base metrics tracking hooks are available
     )
     db.add(db_refresh_token)
     db.commit()
@@ -253,15 +255,33 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
     if not token_record:
         raise HTTPException(status_code=401, detail="Refresh token invalid or missing")
 
+    # ✅ FIXED FOR DASHBOARD CONCURRENCY RACE CONDITIONS:
+    # If a token has already been revoked, check if it happened in the last 10 seconds.
+    # If yes, treat this as a safe concurrent dashboard loading request and pass it through smoothly.
     if token_record.revoked:
-        db.query(RefreshToken).filter(RefreshToken.user_id == token_record.user_id).update({"revoked": True})
-        db.commit()
-        raise HTTPException(status_code=401, detail="Security Warning: Token reuse detected. Session revoked.")
+        updated_time = getattr(token_record, "updated_at", None) or getattr(token_record, "created_at", datetime.utcnow())
+        if datetime.utcnow() - updated_time > timedelta(seconds=10):
+            db.query(RefreshToken).filter(RefreshToken.user_id == token_record.user_id).update({"revoked": True})
+            db.commit()
+            raise HTTPException(status_code=401, detail="Security Warning: Token reuse detected. Session revoked.")
+        
+        # Safe Pass-Through Loop: Query and return a fresh access payload mapping to the same user credentials
+        new_access_payload = {
+            "sub": str(token_record.user_id),
+            "exp": datetime.utcnow() + timedelta(minutes=15)
+        }
+        return {
+            "access_token": jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM),
+            "token_type": "bearer"
+        }
 
     if token_record.expires_at < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Refresh token expired")
 
+    # Update active record states cleanly
     token_record.revoked = True
+    if hasattr(token_record, "updated_at"):
+        token_record.updated_at = datetime.utcnow()
     db.flush()
 
     new_refresh_string = secrets.token_urlsafe(64)
@@ -270,7 +290,8 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
     new_db_token = RefreshToken(
         user_id=token_record.user_id,
         token_id=new_refresh_string,
-        expires_at=new_refresh_expiry
+        expires_at=new_refresh_expiry,
+        created_at=datetime.utcnow()
     )
     db.add(new_db_token)
     db.commit()
@@ -311,7 +332,13 @@ def logout_user(db: Session, refresh_token: str, response: Response):
             token_record.revoked = True
             db.commit()
 
-    response.delete_cookie(key="refresh_token", path="/")
+    # ✅ FIXED FOR LOGOUT SEPARATION: Clear using matching samesite configuration fields
+    response.delete_cookie(
+        key="refresh_token", 
+        path="/",
+        samesite="none",
+        secure=True
+    )
     return {"message": "Logged out successfully"}
 
 # ============================================
