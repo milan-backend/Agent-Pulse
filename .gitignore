@@ -122,3 +122,9 @@ chroma_db_check.py
 inject_refresh_tokens.py
 locustfile.py
 seed_plans.py
+agentpulse-labs
+check_steps.py
+chroma_db_check.py
+inject_refresh_tokens.py
+locustfile.py
+seed_plans.py
