@@ -186,25 +186,20 @@ class UserAPIKeyService:
             raise ValueError("Security Violation: workspace_id is required to register workspace providers.")
 
         provider_clean = provider_type.lower().strip()
-        
-        # Safe default label fallback
         clean_name = provider_name.strip() if provider_name else "Workspace Provider"
 
-        # Safe toggle update: Reset other defaults for this engine type if this row is the new global fallback choice
         if is_global_default:
             db.query(UserAPIKey).filter(
                 UserAPIKey.workspace_id == workspace_id,
                 UserAPIKey.provider == provider_clean,
                 UserAPIKey.agent_id == None
-            ).update({"is_default": False}, synchronize_session=False)
+            ).update({"is_global_default": False}, synchronize_session=False)
             db.commit()
 
         existing_record = None
-        # 1. Look up by ID if updating an existing record configuration
         if provider_id:
             existing_record = db.query(UserAPIKey).filter(UserAPIKey.id == provider_id).first()
         else:
-            # 2. Look up by unique combination string name to avoid duplication records
             existing_record = db.query(UserAPIKey).filter(
                 UserAPIKey.workspace_id == workspace_id,
                 UserAPIKey.provider_name == clean_name,
@@ -217,7 +212,7 @@ class UserAPIKeyService:
             if raw_key and raw_key.strip():
                 existing_record.encrypted_api_key = encrypt_api_key(raw_key)
             if model_name:
-                existing_record.model_name = model_name.strip()
+                existing_record.model_version = model_name.strip()
             existing_record.assigned_agents = assigned_agents or []
             existing_record.is_global_default = is_global_default
             
@@ -231,14 +226,14 @@ class UserAPIKeyService:
             new_provider = UserAPIKey(
                 user_id=user_id,
                 workspace_id=workspace_id,
-                agent_id=None,  # Dedicated workspace configuration instance shared tier
+                agent_id=None,
                 provider=provider_clean,
                 provider_name=clean_name,
                 encrypted_api_key=encrypt_api_key(raw_key),
                 is_global_default=is_global_default
             )
             if model_name:
-                new_provider.model_name = model_name.strip()
+                new_provider.model_version = model_name.strip()
             new_provider.assigned_agents = assigned_agents or []
             
             db.add(new_provider)
@@ -254,16 +249,15 @@ class UserAPIKeyService:
         provider_type: str
     ) -> Optional[UserAPIKey]:
         """
-        Executes the exact 4-Step Priority Resolution Engine:
-        Step 1: Check Agent-Specific API Provider Override.
-        Step 2: Check Workspace Providers explicitly assigned to this agent.
-        Step 3: Check Workspace Global Fallback Provider (assigned_agents is empty).
-        Step 4: Fallback to System Tier (returns None).
+        Executes the exact blueprint hierarchy rules:
+        Rule 1: Look for Agent-Specific Override Key.
+        Rule 2: Look for Workspace Key explicitly assigned to this specific agent.
+        Rule 3: Look for Workspace Key designated for ALL agents (assigned_agents empty or global default).
         """
         p_type = provider_type.lower().strip()
         ag_id_str = str(agent_id).strip()
 
-        # --- STEP 1: Check Agent-Specific API Provider Override ---
+        # --- RULE 1: Check Agent-Specific Override ---
         agent_specific = db.query(UserAPIKey).filter(
             UserAPIKey.agent_id == agent_id,
             UserAPIKey.workspace_id == workspace_id,
@@ -272,30 +266,23 @@ class UserAPIKeyService:
         if agent_specific:
             return agent_specific
 
-        # Fetch all Workspace-managed keys for this provider type
+        # Fetch workspace-level providers for this engine
         workspace_keys = db.query(UserAPIKey).filter(
             UserAPIKey.workspace_id == workspace_id,
             UserAPIKey.agent_id == None,
             UserAPIKey.provider == p_type
         ).all()
 
-        # --- STEP 2: Check Workspace Providers Assigned to this Agent ---
+        # --- RULE 2: Check Workspace Key matching Specific Agent List ---
         for w_key in workspace_keys:
-            if ag_id_str in w_key.assigned_agents:
+            if w_key.assigned_agents and ag_id_str in w_key.assigned_agents:
                 return w_key
 
-        # --- STEP 3: Check Workspace Global Provider (assigned_agents empty) ---
-        global_fallback = None
+        # --- RULE 3: Check Workspace Key open for ALL Agents (Empty Restrictions list) ---
         for w_key in workspace_keys:
-            # If explicitly marked as global default and has no specific agent constraints
-            if w_key.is_global_default and not w_key.assigned_agents:
+            # If the user didn't add any specific agent restrictions, it can be shared globally
+            if not w_key.assigned_agents or w_key.is_global_default:
                 return w_key
-            # Standby default fallback assignment tracker if row contains an empty assignment pool
-            if not w_key.assigned_agents:
-                global_fallback = w_key
 
-        if global_fallback:
-            return global_fallback
-
-        # --- STEP 4: Fallback to AgentPulse Free Tier Provider ---
+        # Return None to signal that Tier 1 and Tier 2 found nothing for this agent boundary
         return None

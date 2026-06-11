@@ -20,6 +20,13 @@ def generate_llm_response(
     agent_id: Optional[any] = None,          
     model_name: Optional[str] = None          # Completely dynamic dropdown selection passed from step_tasks
 ):
+    """
+    Hierarchical Resolution Engine:
+    1. Looks for an Agent-Specific API key override in the database.
+    2. Looks for a Workspace Key explicitly restricted to the active agent.
+    3. Looks for a Workspace Key open for ALL agents (empty assignment array list or global fallback flag).
+    4. Drops down last resort to Server Environment Variables (Render/Railway container processes context).
+    """
     if not prompt or not str(prompt).strip():
         return "No prompt provided. Generation skipped."
 
@@ -42,7 +49,7 @@ def generate_llm_response(
         requested_provider_type = "openai"
 
     # -----------------------------------------------------------------
-    # UPGRADED RESOLUTION PIPELINE: RUN 4-STEP RECURSIVE RESOLUTION ENGINE
+    # RUN ARCHITECTURAL BLUEPRINT HIERARCHICAL RESOLUTION LOOKUPS
     # -----------------------------------------------------------------
     key_record = None
     if clean_agent_id:
@@ -54,7 +61,7 @@ def generate_llm_response(
         )
 
     # -----------------------------------------------------------------
-    # CRYPTOGRAPHIC DECRYPTION OR DROP TO SYSTEM DEFAULT (ENVIRONMENT VARIABLES)
+    # EVALUATE CREDENTIAL SECURITY MATRIX AND COMPUTE DECRYPTION HOOKS
     # -----------------------------------------------------------------
     if key_record:
         from app.core.crypto import decrypt_api_key
@@ -62,10 +69,12 @@ def generate_llm_response(
         provider_type = str(key_record.provider).lower().strip() # Reads clean lowercase 'gemini' or 'openai'
         
         # If the database row explicitly holds a saved dropdown selection, prioritize it
-        if key_record.model_version and not target_model:
+        if hasattr(key_record, 'model_version') and key_record.model_version and not target_model:
             target_model = key_record.model_version
     else:
-        # PIPELINE STEP 4 FALLBACK: Absolute Last Resort Server Environment Fallback (Render variables)
+        # --- FINAL FALLBACK LAYER: System Environment Variables ---
+        # If Tier 1 and Tier 2 database searches return completely empty for this agent, 
+        # drop back to checking your worker/backend system variables last.
         provider_type = requested_provider_type
         if provider_type == "openai":
             active_key = os.getenv("OPENAI_API_KEY")
@@ -76,8 +85,13 @@ def generate_llm_response(
             if not target_model:
                 target_model = "gemini-2.5-flash-lite"
 
+    # 🛡️ SYSTEM SECURITY GUARD: If worker environment variables are also cleared for testing, 
+    # the fallback path finishes, throws an explicit exception, and forces the task to fail immediately.
     if not active_key:
-        raise ValueError(f"No valid API credentials found for Agent, Workspace {clean_workspace_id}, or Server Environment configurations.")
+        raise ValueError(
+            f"Credential Isolation Fault: Agent '{clean_agent_id}' is not authorized to use any workspace key "
+            f"allocations, and no baseline fallback keys were found inside the server environment configurations."
+        )
 
     # --------------------------------------------
     # EXECUTE CLIENT HANDSHAKE BASED ON PROVIDER
