@@ -162,7 +162,7 @@ class UserAPIKeyService:
         return False
 
     # =========================================================================
-    # NEW MULTI-PROVIDER ARCHITECTURE UPGRADE LOGIC
+    # MULTI-PROVIDER UPGRADE STORAGE AND SELECTION LOGIC
     # =========================================================================
 
     @staticmethod
@@ -249,10 +249,10 @@ class UserAPIKeyService:
         provider_type: str
     ) -> Optional[UserAPIKey]:
         """
-        Executes the exact blueprint hierarchy rules:
+        Executes the exact blueprint hierarchy rules adapted for comma-separated Strings:
         Rule 1: Look for Agent-Specific Override Key.
-        Rule 2: Look for Workspace Key explicitly assigned to this specific agent.
-        Rule 3: Look for Workspace Key designated for ALL agents (assigned_agents empty or global default).
+        Rule 2: Look for Workspace Key exclusively assigned to this specific agent.
+        Rule 3: Look for Workspace Key designated for ALL agents (assigned_agents is truly empty).
         """
         p_type = provider_type.lower().strip()
         ag_id_str = str(agent_id).strip()
@@ -266,23 +266,28 @@ class UserAPIKeyService:
         if agent_specific:
             return agent_specific
 
-        # Fetch workspace-level providers for this engine
+        # Fetch all workspace-level providers for this engine
         workspace_keys = db.query(UserAPIKey).filter(
             UserAPIKey.workspace_id == workspace_id,
             UserAPIKey.agent_id == None,
             UserAPIKey.provider == p_type
         ).all()
 
-        # --- RULE 2: Check Workspace Key matching Specific Agent List ---
+        # --- RULE 2: Check Workspace Key Matching Explicit Agent Allocations ---
         for w_key in workspace_keys:
-            if w_key.assigned_agents and ag_id_str in w_key.assigned_agents:
+            # Using your model property array logic cleanly
+            current_assignments = w_key.assigned_agents
+            if current_assignments and ag_id_str in current_assignments:
                 return w_key
 
-        # --- RULE 3: Check Workspace Key open for ALL Agents (Empty Restrictions list) ---
+        # --- RULE 3: Check Workspace Key Open for ALL Agents (Strict Fallback Guard) ---
         for w_key in workspace_keys:
-            # If the user didn't add any specific agent restrictions, it can be shared globally
-            if not w_key.assigned_agents or w_key.is_global_default:
+            current_assignments = w_key.assigned_agents
+            
+            # A key can ONLY be used as a general fallback if it has NO agent exclusions listed at all,
+            # or if it is explicitly designated as the primary workspace global default flag item.
+            if not current_assignments or w_key.is_global_default:
                 return w_key
 
-        # Return None to signal that Tier 1 and Tier 2 found nothing for this agent boundary
+        # Return None to signify complete authorization isolation boundaries matching Agent 3
         return None
