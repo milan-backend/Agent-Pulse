@@ -242,7 +242,7 @@ export default function AgentTasksPage() {
                     {isSystemTier && (
                       <button 
                         type="button"
-                        onClick={() => window.location.href = "/dashboard/workspace-providers"}
+                        onClick={() => { const targetPath = `/dashboard/workspace`; window.location.href = targetPath;}}
                         className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-[10px] uppercase tracking-wide hover:bg-amber-400 transition-colors whitespace-nowrap shrink-0"
                       >
                         Connect Key
@@ -382,7 +382,7 @@ export default function AgentTasksPage() {
                       {telemetryData.tier_notification.includes("Notice:") && (
                         <button 
                           type="button"
-                          onClick={() => window.location.href = "/dashboard/workspace-providers"}
+                          onClick={() => { const targetPath = `/dashboard/workspace`; window.location.href = targetPath;}}
                           className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-[10px] uppercase tracking-wide hover:bg-amber-400 transition-colors"
                         >
                           Connect Key
