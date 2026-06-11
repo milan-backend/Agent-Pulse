@@ -251,7 +251,7 @@ def disconnect_provider_key(
     workspace_id: str = Header(...),         
     agent_id: Optional[str] = Query(None),
     model_version: Optional[str] = Query(None),
-    provider_id: Optional[str] = Query(None), # Added to safely remove keys via structural Unique IDs
+    provider_id: Optional[str] = Query(None), # Safe targeted row isolation variable
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -263,18 +263,22 @@ def disconnect_provider_key(
     membership = get_workspace_membership(db=db, user_id=current_user.id, workspace_id=clean_ws_id)
     require_operator(membership)
 
-    # Advanced deletion block to allow targeted workspace key removal using its Unique ID
+    # STEP 1: Highly robust lookups by direct primary table configurations ID matching fields
     if provider_id and str(provider_id).strip() not in ["", "null", "None"]:
-        record = db.query(UserAPIKey).filter(
-            UserAPIKey.id == UUID(str(provider_id).strip()),
-            UserAPIKey.workspace_id == clean_ws_id
-        ).first()
-        if record:
-            db.delete(record)
-            db.commit()
-            return {"message": "Successfully removed specified workspace configuration item."}
+        try:
+            clean_prov_id = UUID(str(provider_id).strip())
+            record = db.query(UserAPIKey).filter(
+                UserAPIKey.id == clean_prov_id,
+                UserAPIKey.workspace_id == clean_ws_id
+            ).first()
+            if record:
+                db.delete(record)
+                db.commit()
+                return {"message": "Successfully removed specified workspace configuration item."}
+        except ValueError:
+            pass # Invalid UUID input strings skip into backup fallback query matching chains safely
 
-    # Backward compatible logic fallback block
+    # Backward compatible logic fallback block query checks parsing criteria
     raw_provider = provider.strip().lower()
     target_provider = "openai" if "openai" in raw_provider else "gemini"
 
@@ -311,7 +315,7 @@ def set_default_provider(
     workspace_id: str = Header(...),         
     agent_id: Optional[str] = Query(None),   
     model_version: Optional[str] = Query(None),
-    provider_id: Optional[str] = Query(None), # Added to set specific configurations as defaults easily
+    provider_id: Optional[str] = Query(None), 
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -328,7 +332,7 @@ def set_default_provider(
     target_provider = "openai" if "openai" in raw_provider else "gemini"
 
     if provider_id and str(provider_id).strip() not in ["", "null", "None"]:
-        # Reset previous workspace default toggles for this engine type
+        # ✅ FIXED: Removed double db.query filter syntax nesting error entirely
         db.query(UserAPIKey).filter(
             UserAPIKey.workspace_id == clean_ws_id,
             UserAPIKey.provider == target_provider,

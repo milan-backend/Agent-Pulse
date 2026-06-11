@@ -117,7 +117,6 @@ export default function WorkspaceProvidersPage() {
   // Fetch available workspace-isolated agents dynamically to assemble selection grids safely
   async function fetchWorkspaceAgentsRoster(workspaceId: string) {
     try {
-      // ✅ FIXED: Calls the new authorized getWorkspaceAgents endpoint from api.ts
       const agentsData = await getWorkspaceAgents(workspaceId);
       const agentsArray = agentsData?.agents || agentsData?.data || agentsData || [];
       
@@ -213,34 +212,33 @@ export default function WorkspaceProvidersPage() {
     }
   }
 
-  // ✅ Change from this:
-// async function handleDisconnectWorkspaceKey(providerId: string)
+  // ✅ UPGRADED: Dynamic definition matching backend's /disconnect requirements perfectly
+  async function handleDisconnectWorkspaceKey(providerId: string, providerType: "gemini" | "openai") {
+    if (!activeWorkspaceId) return;
+    if (!window.confirm(`Permanently disconnect and clear this targeted ${providerType === "gemini" ? "Google Gemini" : "OpenAI Platform"} provider configuration instance?`)) return;
 
-// ✅ To this dynamic definition:
-async function handleDisconnectWorkspaceKey(providerId: string, providerType: "gemini" | "openai") {
-  if (!activeWorkspaceId) return;
-  if (!window.confirm("Permanently disconnect and clear this targeted provider configuration instance variables?")) return;
+    try {
+      setSubmittingKey(true);
+      
+      // Enforces passing the providerId column string straight into the query string parameters array
+      await apiKeyApi.disconnectKey(
+        providerType, 
+        activeWorkspaceId,
+        null,
+        null,
+        providerId
+      );
 
-  try {
-    setSubmittingKey(true);
-    
-    // Pass the real provider type dynamically down to your api.ts method
-    await apiKeyApi.disconnectKey(
-      providerType, 
-      activeWorkspaceId,
-      null,
-      null
-    );
-
-    toast.success(`${providerType === "gemini" ? "Google Gemini" : "OpenAI Platform"} token cleared cleanly.`);
-    await fetchWorkspaceProvidersMatrix(activeWorkspaceId);
-  } catch (err: any) {
-    toast.error(err.message || "Failed to disconnect target.");
-  } finally {
-    setSubmittingKey(false);
+      toast.success(`${providerType === "gemini" ? "Google Gemini" : "OpenAI Platform"} token cleared cleanly.`);
+      await fetchWorkspaceProvidersMatrix(activeWorkspaceId);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to disconnect target.");
+    } finally {
+      setSubmittingKey(false);
+    }
   }
-}
 
+  // ✅ UPGRADED: Connects your primary global default engine selections safely passing row identification IDs
   async function handleSetDefaultProvider(providerId: string, engineType: string) {
     if (!activeWorkspaceId) return;
     try {
@@ -250,7 +248,8 @@ async function handleDisconnectWorkspaceKey(providerId: string, providerType: "g
         engineType,
         activeWorkspaceId,
         null,
-        null
+        null,
+        providerId
       );
 
       toast.success("Designated configuration instance as primary workspace fallback router choice.");

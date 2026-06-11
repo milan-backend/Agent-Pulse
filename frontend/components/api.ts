@@ -204,12 +204,14 @@ export const apiKeyApi = {
 
   /**
    * Completely erase configuration rows from backend storage tables.
+   * ✅ FIXED: Enforces exact mapping support for providerId route parsing layers
    */
   disconnectKey: async (
     provider: string, 
     workspaceId?: string | null,
     agentId?: string | null,
-    modelVersion?: string | null
+    modelVersion?: string | null,
+    providerId?: string | null
   ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
@@ -225,6 +227,7 @@ export const apiKeyApi = {
     queryParams.append("provider", provider.toLowerCase().trim());
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
     if (modelVersion) queryParams.append("model_version", modelVersion);
+    if (providerId && providerId.trim?.() !== "") queryParams.append("provider_id", providerId);
 
     return request(`/api-keys/disconnect?${queryParams.toString()}`, {
       method: "DELETE",
@@ -234,12 +237,14 @@ export const apiKeyApi = {
 
   /**
    * Designate a provider key as the scoped primary default target.
+   * ✅ FIXED: Included safe providerId parsing parameter parameters map contexts
    */
   setDefaultProvider: async (
     provider: string, 
     workspaceId?: string | null, 
     modelVersion?: string | null,
-    agentId?: string | null
+    agentId?: string | null,
+    providerId?: string | null
   ) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
@@ -255,6 +260,7 @@ export const apiKeyApi = {
     queryParams.append("provider", provider.toLowerCase().trim());
     if (modelVersion) queryParams.append("model_version", modelVersion);
     if (agentId && agentId.trim?.() !== "") queryParams.append("agent_id", agentId);
+    if (providerId && providerId.trim?.() !== "") queryParams.append("provider_id", providerId);
 
     return request(`/api-keys/set-default?${queryParams.toString()}`, {
       method: "PATCH",
