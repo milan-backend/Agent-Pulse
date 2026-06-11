@@ -115,3 +115,10 @@ safe_cleanup.py
 chroma_db_check.py
 migrate_db.py
 check_dbb.py
+agentpulse-labs
+chroma_storage
+check_steps.py
+chroma_db_check.py
+inject_refresh_tokens.py
+locustfile.py
+seed_plans.py
