@@ -59,7 +59,7 @@ def check_rate_limit(client_ip: str, limit_type: str, max_requests: int, window_
 # COOKIE MANAGEMENT HELPER
 # ============================================
 def set_secure_refresh_cookie(response: Response, token_string: str):
-    expire_time = datetime.now(timezone.utc) + timedelta(days=7)
+    expire_time = datetime.now(timezone.utc) + timedelta(minutes=5)
 
     # ✅ FIXED FOR CROSS-SITE PRODUCTION ECOSYSTEMS:
     # Setting samesite="none" allows your Vercel frontend to pass cookies back to your Render backend safely.
@@ -69,7 +69,7 @@ def set_secure_refresh_cookie(response: Response, token_string: str):
         httponly=True,
         secure=True,         # strictly required when samesite is declared as none
         samesite="none",     # Allows cross-domain cookie context transportation pipelines
-        max_age=604800,      # 7 Days lifespan
+        max_age=300,      # 7 Days lifespan
         expires=expire_time, 
         path="/"            
     )
@@ -211,12 +211,12 @@ def login_user(db: Session, request, response: Response):
 
     access_payload = {
         "sub": str(user.id),
-        "exp": datetime.utcnow() + timedelta(minutes=15)
+        "exp": datetime.utcnow() + timedelta(seconds=30)
     }
     access_token = jwt.encode(access_payload, SECRET_KEY, algorithm=ALGORITHM)
 
     refresh_token_string = secrets.token_urlsafe(64)
-    refresh_expiry = datetime.utcnow() + timedelta(days=7)
+    refresh_expiry = datetime.utcnow() + timedelta(minutes=5)
 
     db_refresh_token = RefreshToken(
         user_id=user.id,
@@ -268,7 +268,7 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
         # Safe Pass-Through Loop: Query and return a fresh access payload mapping to the same user credentials
         new_access_payload = {
             "sub": str(token_record.user_id),
-            "exp": datetime.utcnow() + timedelta(minutes=15)
+            "exp": datetime.utcnow() + timedelta(seconds=30)
         }
         return {
             "access_token": jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM),
@@ -285,7 +285,7 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
     db.flush()
 
     new_refresh_string = secrets.token_urlsafe(64)
-    new_refresh_expiry = datetime.utcnow() + timedelta(days=7)
+    new_refresh_expiry = datetime.utcnow() + timedelta(minutes=5)
 
     new_db_token = RefreshToken(
         user_id=token_record.user_id,
@@ -300,7 +300,7 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
 
     new_access_payload = {
         "sub": str(token_record.user_id),
-        "exp": datetime.utcnow() + timedelta(minutes=15)
+        "exp": datetime.utcnow() + timedelta(seconds=30)
     }
     return {
         "access_token": jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM),

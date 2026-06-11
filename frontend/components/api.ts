@@ -40,6 +40,7 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
       method: options.method || "GET",
       headers: finalHeaders,
       body: options.body instanceof FormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
+      credentials:"include",
     });
   };
 
