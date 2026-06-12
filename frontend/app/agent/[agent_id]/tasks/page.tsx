@@ -355,8 +355,8 @@ export default function AgentTasksPage() {
                     <div className="p-6 rounded-2xl bg-black/50 border border-slate-800/80">
                       <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 block font-bold">User Input Query Frame Size</span>
                       <span className="text-xl font-black text-white block mt-2 font-mono">
-                        {telemetryData.query?.length || 0} <span className="text-sm text-zinc-500 font-normal">characters</span>
-                      </span>
+                          {(telemetryData.query?.length || telemetryData.result?.length || 0)} <span className="text-sm text-zinc-500 font-normal">characters</span>
+                    </span>
                     </div>
                   </div>
 
