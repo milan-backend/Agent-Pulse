@@ -82,7 +82,7 @@ export default function AgentTasksPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [agentId, statusFilter]);
 
-  // Dynamic Telemetry Request Worker Hub
+  // ✅ FIXED: Restored state persistence loop worker hub
   async function viewTelemetryTrace(stepId: string) {
     setSelectedTaskId(stepId);
     setTelemetryData(null);
@@ -95,7 +95,7 @@ export default function AgentTasksPage() {
       toast.error(error?.message || "Telemetry handshake failed.");
       setSelectedTaskId(null);
     } finally {
-      setTelemetryData(null);
+      // 🟢 CRITICAL REPAIR: Removed 'setTelemetryData(null)' so your loaded JSON isn't instantly deleted!
       setLoadingTelemetry(false);
     }
   }
@@ -209,7 +209,6 @@ export default function AgentTasksPage() {
                     <p className="mt-3 break-all text-sm text-zinc-500">{task.step_id}</p>  
                   </div>  
                   
-                  {/* STATUS BAR WITH TELEMETRY TRAWER LAUNCH TOGGLE */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <button
                       onClick={() => viewTelemetryTrace(task.step_id)}
@@ -379,7 +378,6 @@ export default function AgentTasksPage() {
                   <div className="space-y-12">
                     {telemetryData.telemetry_timeline?.map((step: any, index: number) => {
                       
-                      // ✅ SYSTEM REPAIR ACCELERATOR FILTER: Self-healing object mapping tracker to unpack fields from both root-level or nested meta indices maps cleanly
                       const isKnowledgeStep = step.event_name === "KNOWLEDGE_RETRIEVAL" || step.collection_human_name;
                       const isGenerationStep = step.event_name?.toLowerCase().includes("generation") || step.meta?.model_utilized || step.model_utilized;
 
@@ -400,7 +398,7 @@ export default function AgentTasksPage() {
                             <div className="flex items-center justify-between gap-4 flex-wrap">
                               <h4 className="text-2xl font-black text-white tracking-wide">KNOWLEDGE_RETRIEVAL</h4>
                               <span className="text-sm font-mono font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1.5 border border-cyan-500/20 rounded-xl flex items-center gap-1.5">
-                                <Timer size={14} /> {embedTime + scanTime ? (embedTime + scanTime).toFixed(1) : "0.0"} ms
+                                <Timer size={14} /> {(embedTime + scanTime).toFixed(1)} ms
                               </span>
                             </div>
 
