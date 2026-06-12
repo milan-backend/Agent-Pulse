@@ -5,450 +5,443 @@ Agent-Pulse is an AI runtime orchestration, observability, governance, and execu
 The platform provides durable task execution, distributed orchestration, runtime telemetry, mission tracing, governance enforcement, agent management, RBAC-based workspace collaboration, budget controls, execution analytics, and real-time operational visibility.
 
 Built using FastAPI, Celery, Redis, PostgreSQL, WebSockets, Docker, and Next.js, Agent-Pulse focuses on solving one of the biggest operational challenges in modern AI systems:
-
 Running AI agents reliably, observably, controllably, and safely at scale.
 
-# 🚀 Platform Highlights
+## 🚀 Platform Highlights
 
-* Multi-tenant workspace architecture
+*   Multi-tenant workspace architecture
+*   AI runtime orchestration
+*   Durable execution pipelines
+*   Real-time observability
+*   Agent lifecycle management
+*   Role-Based Access Control (RBAC)
+*   Runtime governance & safety controls
+*   Distributed worker execution
+*   Mission tracing & analytics
+*   Budget-aware AI execution
+*   Live WebSocket telemetry
+*   Retry-safe execution architecture
+*   Idempotent durable workflows
+*   ✅ BYOK (OpenAI & Gemini)
+*   ✅ RAG Knowledge Infrastructure
+*   ✅ ChromaDB Vector Search
+*   ✅ Workspace API Provider Management
+*   ✅ Agent-Specific Provider Overrides
+*   ✅ Document Encryption
+*   ✅ Retrieval Telemetry & Explainability
 
-* AI runtime orchestration
-
-* Durable execution pipelines
-
-* Real-time observability
-
-* Agent lifecycle management
-
-* Role-Based Access Control (RBAC)
-
-* Runtime governance & safety controls
-
-* Distributed worker execution
-
-* Mission tracing & analytics
-
-* Budget-aware AI execution
-
-* Live WebSocket telemetry
-
-* Retry-safe execution architecture
-
-* Idempotent durable workflows
-
-# 🧠 Why Agent-Pulse Exists
+## 🧠 Why Agent-Pulse Exists
 
 Modern AI systems are becoming increasingly autonomous, distributed, and operationally complex.
-
 However, most AI workflows still lack:
 
-* Runtime visibility
+*   Runtime visibility
+*   Durable execution
+*   Governance controls
+*   Execution tracing
+*   Failure recovery
+*   Cost monitoring
+*   Multi-agent management
+*   Runtime analytics
+*   Safe orchestration
+*   Real-time observability
+*   Workspace collaboration
+*   Runtime control systems
 
-* Durable execution
+Agent-Pulse is designed to unify: **observability**, **orchestration**, **governance**, **analytics**, **durable execution**, and **runtime control** into a single operational AI runtime platform.
 
-* Governance controls
+---
 
-* Execution tracing
+## 🏢 Multi-Tenant Workspace Architecture
 
-* Failure recovery
+Agent-Pulse now supports a fully workspace-based SaaS architecture. Every agent, mission, runtime event, task, usage metric, and governance operation is securely isolated per workspace.
 
-* Cost monitoring
+### Workspace Features
+*   Workspace-based tenant isolation
+*   Organization-style collaboration model
+*   Workspace membership system
+*   Workspace-aware APIs
+*   Secure workspace validation
+*   Workspace-scoped runtime telemetry
+*   Workspace-specific analytics
+*   Multi-organization support
 
-* Multi-agent management
+---
 
-* Runtime analytics
-
-* Safe orchestration
-
-* Real-time observability
-
-* Workspace collaboration
-
-* Runtime control systems
-
-Agent-Pulse is designed to unify:
-
-* observability,
-
-* orchestration,
-
-* governance,
-
-* analytics,
-
-* durable execution,
-
-* and runtime control
-
-into a single operational AI runtime platform.
-
-# 🏢 Multi-Tenant Workspace Architecture
-
-Agent-Pulse now supports a fully workspace-based SaaS architecture.
-
-Every:
-
-* agent,
-
-* mission,
-
-* runtime event,
-
-* task,
-
-* usage metric,
-
-* and governance operation
-
-is securely isolated per workspace.
-
-## Workspace Features
-
-* Workspace-based tenant isolation
-
-* Organization-style collaboration model
-
-* Workspace membership system
-
-* Workspace-aware APIs
-
-* Secure workspace validation
-
-* Workspace-scoped runtime telemetry
-
-* Workspace-specific analytics
-
-* Multi-organization support
-
-# 🔐 Role-Based Access Control (RBAC)
+## 🔐 Role-Based Access Control (RBAC)
 
 Agent-Pulse includes backend-enforced RBAC infrastructure.
 
-## Roles
+### Roles
 
-### Admin
+*   **Admin**
+    *   Full platform access
+    *   Agent creation
+    *   Budget controls
+    *   API key regeneration
+    *   Runtime governance access
+    *   Workspace member management
+*   **Operator**
+    *   Operational runtime controls
+    *   Kill/resume permissions
+    *   Mission visibility
+    *   Runtime monitoring
+*   **Viewer**
+    *   Read-only access
+    *   Runtime observability
+    *   Analytics visibility
+    *   Mission tracking
 
-* Full platform access
+### Security Enforcement
+*   Backend role enforcement
+*   Workspace membership validation
+*   Protected runtime operations
+*   Permission-aware execution control
+*   Secure authorization layers
 
-* Agent creation
+---
 
-* Budget controls
-
-* API key regeneration
-
-* Runtime governance access
-
-* Workspace member management
-
-### Operator
-
-* Operational runtime controls
-
-* Kill/resume permissions
-
-* Mission visibility
-
-* Runtime monitoring
-
-### Viewer
-
-* Read-only access
-
-* Runtime observability
-
-* Analytics visibility
-
-* Mission tracking
-
-## Security Enforcement
-
-* Backend role enforcement
-
-* Workspace membership validation
-
-* Protected runtime operations
-
-* Permission-aware execution control
-
-* Secure authorization layers
-
-# 🤖 Agent Management System
+## 🤖 Agent Management System
 
 Agent-Pulse includes a complete agent lifecycle management system.
 
-## Agents Dashboard
+### Agents Dashboard
+*   Real-time agent overview
+*   Workspace-scoped agents
+*   Responsive agents UI
+*   Agent runtime summaries
+*   Agent operational statistics
+*   Runtime state visibility
 
-* Real-time agent overview
+### Create Agent System
+*   Secure agent creation flow
+*   Runtime configuration support
+*   API key generation
+*   One-time API key visibility
+*   Copy API key functionality
+*   Workspace-bound agents
+*   Role-protected creation access
 
-* Workspace-scoped agents
+---
 
-* Responsive agents UI
-
-* Agent runtime summaries
-
-* Agent operational statistics
-
-* Runtime state visibility
-
-## Create Agent System
-
-* Secure agent creation flow
-
-* Runtime configuration support
-
-* API key generation
-
-* One-time API key visibility
-
-* Copy API key functionality
-
-* Workspace-bound agents
-
-* Role-protected creation access
-
-# 📄 Agent Detail Dashboard
+## 📄 Agent Detail Dashboard
 
 Each agent includes a dedicated operational dashboard.
 
-## Per-Agent Features
+### Per-Agent Features
+*   Runtime details
+*   Agent metadata
+*   Agent status visibility
+*   Mission tracking
+*   Usage monitoring
+*   Budget controls
+*   API key regeneration
+*   Kill/resume controls
+*   Task visibility
+*   Runtime analytics
+*   Execution telemetry
 
-* Runtime details
+---
 
-* Agent metadata
+## 🔑 Bring Your Own Key (BYOK)
 
-* Agent status visibility
+Agent-Pulse supports Bring Your Own Key (BYOK) infrastructure, allowing organizations to connect their own AI providers and control model usage directly.
 
-* Mission tracking
+### Supported Providers
+*   OpenAI
+*   Gemini
 
-* Usage monitoring
+### Provider Capabilities
+*   Workspace-level provider management
+*   Agent-specific provider assignment
+*   Multiple provider configurations
+*   Model selection support
+*   Secure API key storage
+*   Provider usage tracking
+*   Provider source visibility
 
-* Budget controls
+### Provider Resolution Order
+1.  **Agent-Specific Provider Override** (Highest Priority)
+2.  **Workspace Assigned Provider**
+3.  **Workspace Default Provider**
+4.  **Agent-Pulse Free Tier / System Provider** (Fallback Ground)
 
-* API key regeneration
+This architecture enables flexible AI infrastructure management across teams and organizations while tracking execution paths natively.
 
-* Kill/resume controls
+---
 
-* Task visibility
+## 🧠 Knowledge & RAG Infrastructure
 
-* Runtime analytics
+Agent-Pulse includes a Retrieval-Augmented Generation (RAG) system that allows agents to retrieve and utilize organization-specific knowledge blocks.
 
-* Execution telemetry
+### Supported Documents
+*   **PDF** (`.pdf`)
+*   **TXT** (`.txt`)
 
-# ⚙️ AI Workflow Orchestration
+### Knowledge Features
+*   Document upload pipeline
+*   Automatic chunking
+*   Semantic indexing
+*   Knowledge retrieval synthesis
+*   Source attribution
+*   Workspace-isolated knowledge boundaries
+*   Agent-aware retrieval filtering
+*   Metadata tracking
+
+The platform enables agents to answer using company-specific information rather than relying solely on model training data.
+
+---
+
+## 🔎 ChromaDB Vector Infrastructure
+
+Agent-Pulse integrates ChromaDB for semantic retrieval, low-latency embedding indexing, and contextual knowledge search.
+
+### Capabilities
+*   Vector embeddings calculation
+*   Semantic similarity search
+*   Workspace-scoped collections separation
+*   Retrieval optimization metrics
+*   Metadata indexing
+*   Source tracing provenance
+*   Context window payload generation
+
+### Stored Metadata
+*   `workspace_id`
+*   `document_id`
+*   `source_file`
+*   `upload_timestamp`
+*   `page_number`
+*   `retrieval_similarity_confidence`
+
+---
+
+## 🔐 Knowledge Security & Encryption
+
+Knowledge security and multi-tenant data isolation are treated as first-class, zero-trust platform concerns inside Agent-Pulse.
+
+### Document Security Features
+*   Encrypted document block storage
+*   Secure stream upload verification pipeline
+*   Workspace-aware encryption layers
+*   Protected context retrieval workflows
+*   Secure document lifecycle persistence
+
+### Security Architecture Goals
+*   Total multi-tenant workspace isolation
+*   Knowledge extraction leak protection
+*   Controlled retrieval access controls
+*   Secure document lifecycle and destruction
+
+---
+
+## 📊 Retrieval Telemetry & Explainability
+
+Agent-Pulse provides real-time visibility into exactly how retrieved corporate knowledge influences final LLM step outputs.
+
+### Retrieval Telemetry Includes
+*   Raw retrieval user search query
+*   Ordered matched document chunks
+*   Similarity distance confidence scores
+*   Pure search latency times (in milliseconds)
+*   Source file tracking provenance
+*   Document contribution indicator tracking
+*   Retrieval hit/miss metrics matching
+*   Knowledge context footprint visibility
+
+This allows engineering operators to understand exactly why an answer was generated and which specific document chunks influenced the final execution response.
+
+---
+
+## 🏢 Workspace Provider Management
+
+Organizations can centrally manage AI engine nodes through workspace-level credential configurations.
+
+### Workspace Provider Features
+*   Multiple parallel provider configurations
+*   Custom workspace provider naming profiles
+*   Agent-to-provider routing assignment allocations
+*   Shared team infrastructure access pools
+*   Default fallback workspace keys
+*   Centralized AI expense governance
+
+### Configuration Profiles Examples
+*   `OpenAI Production - Central Team`
+*   `OpenAI Backup - Token Guard`
+*   `Gemini Research - Tier 1 Labs`
+*   `Gemini Team - Free Sandbox Dev`
+
+This architecture supports enterprise-scale AI operations without duplicating API key management variables across local environments.
+
+---
+
+## 🤖 Agent-Specific Provider Overrides
+
+Agent-Pulse allows specialized performance agents to clean override workspace-level providers when dedicated tokens or isolated billing scopes are mandatory.
+
+### Agent Provider Features
+*   Dedicated agent-specific API keys
+*   Dedicated fine-tuned models selection
+*   Agent-level custom model routing paths
+*   Provider access containment boundaries
+*   Custom isolated AI cost tracking tracking
+
+This enables advanced agent-level infrastructure customization while maintaining overall centralized organizational governance.
+
+---
+
+## ⚙️ AI Workflow Orchestration
 
 Agent-Pulse provides durable distributed orchestration infrastructure.
 
-## Execution Features
+### Execution Features
+*   Durable background execution
+*   Celery distributed workers
+*   Redis-backed execution queues
+*   Concurrent workflow execution
+*   Async execution pipelines
+*   Queue-driven orchestration
+*   Worker lifecycle coordination
+*   Retry-safe execution model
+*   Durable step tracking
+*   Distributed task execution
 
-* Durable background execution
+---
 
-* Celery distributed workers
-
-* Redis-backed execution queues
-
-* Concurrent workflow execution
-
-* Async execution pipelines
-
-* Queue-driven orchestration
-
-* Worker lifecycle coordination
-
-* Retry-safe execution model
-
-* Durable step tracking
-
-* Distributed task execution
-
-# 🧱 Durable Execution System
+## 🧱 Durable Execution System
 
 The platform includes a durable runtime execution architecture.
 
-## Durable Runtime Features
+### Durable Runtime Features
+*   Idempotent execution support
+*   Duplicate request prevention
+*   Cached execution reuse
+*   Durable step persistence
+*   Persistent mission state
+*   PostgreSQL-backed runtime state
+*   Execution replay-ready design
+*   Failure recovery architecture
+*   Runtime state synchronization
 
-* Idempotent execution support
+---
 
-* Duplicate request prevention
-
-* Cached execution reuse
-
-* Durable step persistence
-
-* Persistent mission state
-
-* PostgreSQL-backed runtime state
-
-* Execution replay-ready design
-
-* Failure recovery architecture
-
-* Runtime state synchronization
-
-# 🛡️ Runtime Governance & Controls
+## 🛡️ Runtime Governance & Controls
 
 Agent-Pulse includes runtime governance systems for operational AI safety.
 
-## Governance Features
+### Governance Features
+*   Kill running agents
+*   Resume paused agents
+*   Runtime safeguard enforcement
+*   Dynamic retry controls
+*   Infinite-loop protection
+*   Repeated task detection
+*   Runtime execution guards
+*   Mission execution protection
+*   Safe execution boundaries
+*   Runtime control enforcement
+*   Failure containment architecture
 
-* Kill running agents
+---
 
-* Resume paused agents
-
-* Runtime safeguard enforcement
-
-* Dynamic retry controls
-
-* Infinite-loop protection
-
-* Repeated task detection
-
-* Runtime execution guards
-
-* Mission execution protection
-
-* Safe execution boundaries
-
-* Runtime control enforcement
-
-* Failure containment architecture
-
-# 💰 Budget Control System
+## 💰 Budget Control System
 
 Per-agent runtime budget management is built directly into the platform.
 
-## Budget Features
+### Budget Features
+*   Runtime budget limits
+*   Agent-level budget control
+*   Usage restriction controls
+*   Runtime spend visibility
+*   AI usage monitoring
+*   Operational cost awareness
 
-* Runtime budget limits
+---
 
-* Agent-level budget control
-
-* Usage restriction controls
-
-* Runtime spend visibility
-
-* AI usage monitoring
-
-* Operational cost awareness
-
-# 📋 Mission Runtime Infrastructure
+## 📋 Mission Runtime Infrastructure
 
 Mission orchestration is a core operational layer inside Agent-Pulse.
 
-## Mission Features
+### Mission Features
+*   Mission execution engine
+*   Step orchestration
+*   Mission lifecycle tracking
+*   Runtime mission visibility
+*   Durable mission execution
+*   Mission state persistence
+*   Mission telemetry collection
+*   Retry-aware execution tracking
 
-* Mission execution engine
+---
 
-* Step orchestration
-
-* Mission lifecycle tracking
-
-* Runtime mission visibility
-
-* Durable mission execution
-
-* Mission state persistence
-
-* Mission telemetry collection
-
-* Retry-aware execution tracking
-
-# 🧩 Task Management System
+## 🧩 Task Management System
 
 Each agent contains task-level runtime visibility.
 
-## Task Features
+### Task Features
+*   Agent-specific task dashboard
+*   Runtime task monitoring
+*   Task execution tracking
+*   Input/output visibility
+*   Runtime timestamps
+*   Success/failure visibility
+*   Mission-linked task tracing
+*   Execution lifecycle tracking
 
-* Agent-specific task dashboard
+---
 
-* Runtime task monitoring
-
-* Task execution tracking
-
-* Input/output visibility
-
-* Runtime timestamps
-
-* Success/failure visibility
-
-* Mission-linked task tracing
-
-* Execution lifecycle tracking
-
-# 📡 Real-Time Runtime Infrastructure
+## 📡 Real-Time Runtime Infrastructure
 
 Agent-Pulse includes real-time runtime synchronization using WebSockets.
 
-## Real-Time Features
+### Real-Time Features
+*   WebSocket connectivity
+*   Heartbeat monitoring
+*   Live runtime updates
+*   Real-time dashboard synchronization
+*   Runtime activity feeds
+*   Live mission telemetry
+*   Runtime event streaming
 
-* WebSocket connectivity
+---
 
-* Heartbeat monitoring
-
-* Live runtime updates
-
-* Real-time dashboard synchronization
-
-* Runtime activity feeds
-
-* Live mission telemetry
-
-* Runtime event streaming
-
-# 📊 Usage & Analytics System
+## 📊 Usage & Analytics System
 
 The platform provides workspace-wide and agent-specific analytics.
 
-## Analytics Features
+### Analytics Features
+*   Usage event logging
+*   Cache-hit tracking
+*   Runtime analytics
+*   Agent activity monitoring
+*   Mission analytics
+*   Token usage tracking
+*   Runtime cost monitoring
+*   Execution metrics
+*   Retry analytics
+*   Failure analytics
+*   Runtime telemetry aggregation
+*   Throughput tracking
 
-* Usage event logging
+---
 
-* Cache-hit tracking
-
-* Runtime analytics
-
-* Agent activity monitoring
-
-* Mission analytics
-
-* Token usage tracking
-
-* Runtime cost monitoring
-
-* Execution metrics
-
-* Retry analytics
-
-* Failure analytics
-
-* Runtime telemetry aggregation
-
-* Throughput tracking
-
-# 🔭 Runtime Observability
+## 🔭 Runtime Observability
 
 Agent-Pulse provides operational observability for AI systems.
 
-## Observability Features
+### Observability Features
+*   Real-time mission monitoring
+*   Live execution telemetry
+*   Mission lifecycle tracking
+*   Runtime execution visibility
+*   Worker activity monitoring
+*   Execution timelines
+*   Runtime event monitoring
+*   Agent telemetry systems
+*   Distributed runtime analytics
 
-* Real-time mission monitoring
+---
 
-* Live execution telemetry
-
-* Mission lifecycle tracking
-
-* Runtime execution visibility
-
-* Worker activity monitoring
-
-* Execution timelines
-
-* Runtime event monitoring
-
-* Agent telemetry systems
-
-* Distributed runtime analytics
-
-# 🏗️ System Architecture
+## 🏗️ System Architecture
 
 ```text
 User Request
@@ -468,11 +461,8 @@ Mission / Step Execution
 PostgreSQL Durable State
       ↓
 WebSocket Live Dashboard
-```
-
-# 🔄 Runtime Execution Flow
-
-```text
+🔄 Runtime Execution Flow
+Plaintext
 Mission Created
       ↓
 Workspace Validation
@@ -494,355 +484,244 @@ Dashboard Updated Live
 Governance Rules Applied
       ↓
 Mission Completed / Failed
-```
+🛠️ Tech Stack
+Backend
+FastAPI
 
-# 🛠️ Tech Stack
+Python
 
-## Backend
+SQLAlchemy
 
-* FastAPI
+Alembic
 
-* Python
+PostgreSQL
 
-* SQLAlchemy
+ChromaDB
 
-* Alembic
+Celery
 
-* PostgreSQL
+Redis
 
-* Celery
+WebSockets
 
-* Redis
+Frontend
+Next.js App Router
 
-* WebSockets
+TypeScript
 
-## Frontend
+Tailwind CSS
 
-* Next.js App Router
+Recharts
 
-* TypeScript
+Infrastructure
+Docker
 
-* Tailwind CSS
+Docker Compose
 
-* Recharts
+Async Workers
 
-## Infrastructure
+Distributed Queue System
 
-* Docker
+Vercel Deployment
 
-* Docker Compose
+Render Deployment
 
-* Async Workers
+🔐 Security Features
+Workspace isolation boundaries
 
-* Distributed Queue System
+Cryptographic document encryption (AES)
 
-* Vercel Deployment
+Backend RBAC enforcement matrices
 
-* Render Deployment
+Workspace membership access token validation
 
-# 🔐 Security Features
+API key one-way cryptographic hashing
 
-* Workspace isolation
+Key rotation and regeneration infrastructure
 
-* RBAC enforcement
+Permission-protected runtime emergency kill switches
 
-* Workspace membership validation
+Workspace-scoped authentication workflows
 
-* Secure token validation
+🧪 Engineering Concepts Used
+Distributed task orchestration
 
-* API key hashing
+Durable workflow execution architectures
 
-* Key regeneration infrastructure
+Runtime governance containment models
 
-* Permission-protected runtime controls
+Retry-safe transactional execution loops
 
-* Workspace-scoped authentication
+Real-time state machine streaming logs
 
-# 🧪 Engineering Concepts Used
+Queue-based load balancing and execution
 
-* Distributed task orchestration
+Asynchronous multi-model API execution pipelines
 
-* Durable execution workflows
+AI runtime trace telemetry graphs
 
-* Runtime governance systems
+Multi-tenant SaaS workspace cryptographic isolation
 
-* Retry-safe execution architecture
+Hierarchical credential resolution pipelines
 
-* Real-time observability
-
-* Queue-based execution systems
-
-* Async execution pipelines
-
-* AI runtime telemetry
-
-* Distributed worker coordination
-
-* Execution lifecycle monitoring
-
-* Multi-tenant SaaS architecture
-
-* Workspace isolation systems
-
-* RBAC authorization design
-
-* Runtime analytics pipelines
-
-* Operational AI governance
-
-# 📂 Project Structure
-
-```text
+📂 Project Structure
+Plaintext
 Agent-Pulse/
 │
-├── app/                     # Backend application
-├── alembic/                 # Database migrations
-├── frontend/                # Next.js frontend
-├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── README.md
-```
+├── app/                     # Backend application code modules
+│   ├── core/                # Encryption, auth, and security guards
+│   ├── models/              # Database models (PostgreSQL, User API keys)
+│   ├── services/            # Core business engines (LLM, RAG, Tokenizer)
+│   └── tasks/               # Background Celery event execution workers
+│
+├── alembic/                 # Database schema migrations versions
+├── frontend/                # Next.js App Router UI dashboard app
+├── docker-compose.yml       # Production/Local service orchestration
+├── Dockerfile               # Container build recipes
+├── requirements.txt         # Python server package allocations
+├── .env.example             # Shell configuration properties mapping template
+├── .gitignore               # Build footprint bypass array matching rules
+└── README.md                # System documentation
+⚙️ Environment Variables
+Create a .env file in the root directory matching this template layout:
 
-# ⚙️ Environment Variables
-
-Create a `.env` file in the root directory.
-
-Example:
-
-```env
+Code snippet
 DATABASE_URL=your_database_url
 REDIS_URL=your_redis_url
 SECRET_KEY=your_secret_key
 ALGORITHM=HS256
 OPENAI_API_KEY=your_openai_api_key
+GEMINI_API_KEY=your_gemini_api_key
+CHROMA_HOST=your_chroma_http_host
+CHROMA_TOKEN=your_chroma_auth_bearer_token
 DEBUG=True
-```
+🐳 Running with Docker
+Start all services using Docker Compose:
 
-# 🐳 Running with Docker
-
-Start all services:
-
-```bash
+Bash
 docker compose up --build
-```
+Stop background container cluster infrastructure:
 
-Stop services:
-
-```bash
+Bash
 docker compose down
-```
+💻 Local Development
+Backend Setup
+Install active development python package assignments:
 
-# 💻 Local Development
-
-## Backend
-
-Install dependencies:
-
-```bash
+Bash
 pip install -r requirements.txt
-```
+Launch the local high-throughput FastAPI server execution lifecycle loop:
 
-Run FastAPI server:
-
-```bash
+Bash
 uvicorn app.main:app --reload
-```
+Frontend Dashboard Setup
+Navigate into your Next.js application directory scope:
 
-## Frontend
-
-Move to frontend directory:
-
-```bash
+Bash
 cd frontend
-```
+Install node package elements:
 
-Install dependencies:
-
-```bash
+Bash
 npm install
-```
+Boot your local dev compile observer system:
 
-Start development server:
-
-```bash
+Bash
 npm run dev
-```
+🧱 Database Migration
+Execute Alembic tracking updates to bring your PostgreSQL schemas up to date:
 
-# 🧱 Database Migration
-
-Run Alembic migrations:
-
-```bash
+Bash
 alembic upgrade head
-```
+🌐 Application URLs
+Frontend Dashboard UI: http://localhost:3000
 
-# 🌐 Application URLs
+Backend Server Root Engine: http://localhost:8000
 
-## Frontend
+Auto-Generated Interactive OpenAPI Docs: http://localhost:8000/docs
 
-```text
-http://localhost:3000
-```
+🚀 Production Infrastructure
+Frontend Layer
+Next.js App Router (React)
 
-## Backend
+Responsive client dashboard panels layout
 
-```text
-http://localhost:8000
-```
+Workspace-aware global execution hooks
 
-## API Documentation
+Vercel edge build optimization deployment
 
-```text
-http://localhost:8000/docs
-```
+Backend Core Layer
+FastAPI modular application routing architecture
 
-# 🚀 Production Infrastructure
+PostgreSQL production durability database
 
-## Frontend Infrastructure
+ChromaDB cloud container semantic vectors store
 
-* Next.js App Router
+Redis ephemeral messaging system / caching stack
 
-* Responsive dashboard architecture
+Celery microservices distributed system background queue loops
 
-* Workspace-aware UI system
+Render server deployment infrastructure
 
-* Vercel deployment
+🧑‍💻 Developer Experience
+Modular context API route endpoints structure
 
-## Backend Infrastructure
+Strictly typed frontend interfaces matching backend output schemas
 
-* FastAPI backend services
+Reusable structural service modules (RAG, Cryptography, Tokenizer)
 
-* PostgreSQL durable storage
+Isolated workspace lookup validation patterns
 
-* SQLAlchemy ORM architecture
+Clean durable execution model step abstractions
 
-* Redis task queue
+🚧 Future Roadmap
+Multi-agent graph cluster coordination frameworks
 
-* Celery worker orchestration
+Persistent long-term cognitive agent memory networks
 
-* Render deployment
+Advanced cross-step execution tool routing graphs
 
-# 🧑‍💻 Developer Experience
+MCP-compatible tool execution endpoints
 
-* Modular route architecture
+High-availability Kubernetes pod infrastructure deployment blueprints
 
-* Typed frontend interfaces
+Real-time AI behavioral anomaly detection guards
 
-* Reusable runtime services
+Granular micro-step sub-latency analytics tools
 
-* Workspace-based backend structure
-
-* Durable runtime abstractions
-
-* Clean orchestration layers
-
-* Scalable API organization
-
-# 🚧 Future Roadmap
-
-* Multi-agent coordination
-
-* Agent memory systems
-
-* Advanced workflow graphs
-
-* MCP-compatible tool execution endpoints
-
-* Distributed scaling architecture
-
-* Kubernetes deployment
-
-* Cloud-native orchestration
-
-* Advanced runtime tracing
-
-* AI runtime anomaly detection
-
-* Advanced telemetry pipelines
-
-* Tool-level execution analytics
-
-* Agent dependency graphs
-
-## Screenshots
-
-### Dashboard Overview
+Screenshots
+Dashboard Overview
 Central runtime dashboard with live telemetry, execution monitoring and infrastructure health.
 
-![Dashboard Overview](./assets/dashboard-overview.png)
-
----
-
-### Mission Runtime
+Mission Runtime
 Track autonomous AI mission execution in real time with mission lifecycle telemetry.
 
-![Mission Runtime](./assets/Mission.png)
-
----
-
-### Runtime Analytics
+Runtime Analytics
 Execution analytics, runtime feeds and live observability for AI agents.
 
-![Analytics](./assets/Analytics.png)
-
----
-
-### Runtime Usage Logs
+Runtime Usage Logs
 Detailed token usage, completion metrics and execution cost monitoring.
 
-![Usage Logs](./assets/Usage-Logs.png)
-
----
-
-### Workspace Management
+Workspace Management
 Manage team members, runtime roles and collaborative AI infrastructure.
 
-![Workspace Management](./assets/Workspace-Management.png)
-
----
-
-### Agent Infrastructure
+Agent Infrastructure
 Create and manage autonomous runtime agents with operational controls.
 
-![Agents](./assets/Agents.png)
-
----
-
-### Dashboard Settings
+Dashboard Settings
 Global runtime controls, API gateway management and infrastructure operations.
 
-![Dashboard Settings](./assets/Dashboard-Settings.png)
-
----
-
-### Agent Summary
+Agent Summary
 Detailed agent runtime overview including missions, retries, execution state and cost telemetry.
 
-![Agent Summary](./assets/agent-summary.png)
-
----
-
-### Agent Settings
+Agent Settings
 Configure API security, execution budgets, runtime limits and governance policies.
 
-![Agent Settings](./assets/agent-settings.png)
-
----
-
-### Agent Task Details
+Agent Task Details
 Inspect execution logs, cache states, input/output payloads and runtime task telemetry.
 
-![Agent Task Details](./assets/Agent-task-details.png)
-
-# 👨‍💻 Author
-
+👨‍💻 Author
 Milan Charan
 
-# 📄 License
-
+📄 License
 All Rights Reserved.
-
 This project is currently proprietary and not licensed for redistribution or commercial reuse.
