@@ -554,12 +554,16 @@ def process_step(self, step_id: str):
             }
         }
 
-        # ✅ NEW SCHEMA COUPLING: Bind tier notification metadata properties down to step context maps
+        # ✅ FIXED: Surface the telemetry metrics explicitly at the root level of your payload data.
+        # This gives your frontend drawer direct access to the `.telemetry_timeline` maps natively!
         result = {
             "success": True,
             "result": output,
-            "tier_notification": tier_status_msg, # Connects cleanly to your Next.js toast/card banner component
+            "tier_notification": tier_status_msg,
             "last_executed_step": "generation_completed",
+            "query": prompt,
+            "rag_telemetry": rag_telemetry_node,
+            "llm_telemetry": llm_telemetry_node,
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
 
