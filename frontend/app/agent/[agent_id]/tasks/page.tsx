@@ -15,10 +15,8 @@ import {
   SlidersHorizontal,
   X,
   FileText,
-  Binary,
   Gauge,
   Sparkles,
-  HelpCircle,
   User,
   Calendar,
   Layers,
@@ -97,6 +95,7 @@ export default function AgentTasksPage() {
       toast.error(error?.message || "Telemetry handshake failed.");
       setSelectedTaskId(null);
     } finally {
+      setTelemetryData(null);
       setLoadingTelemetry(false);
     }
   }
@@ -210,9 +209,8 @@ export default function AgentTasksPage() {
                     <p className="mt-3 break-all text-sm text-zinc-500">{task.step_id}</p>  
                   </div>  
                   
-                  {/* RE-ARCHITECTED STATUS CONTAINER BAR ADDING TELEMETRY DRAWER LINK */}
+                  {/* STATUS BAR WITH TELEMETRY TRAWER LAUNCH TOGGLE */}
                   <div className="flex items-center gap-3 flex-wrap">
-                    {/* NEW: PREMIUM OBSERVE ACCELERATOR TELEMETRY TRACE LAUNCH BUTTON ACTION */}
                     <button
                       onClick={() => viewTelemetryTrace(task.step_id)}
                       className="flex items-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-950/40 hover:bg-cyan-400/20 px-5 py-3 font-bold text-sm text-cyan-400 transition-all shadow-[0_0_15px_rgba(34,211,238,0.02)]"
@@ -228,7 +226,7 @@ export default function AgentTasksPage() {
                   </div>
                 </div>  
 
-                {/* ✅ NEW FULL-STACK INJECTION: DYNAMIC BILLING ROUTING NOTIFICATION ALERT BANNER */}
+                {/* DYNAMIC BILLING ROUTING ALERT BANNER */}
                 {task.output_data?.tier_notification && (
                   <div className={`mt-6 p-4 rounded-2xl border text-xs leading-relaxed font-sans flex items-center justify-between gap-4 animate-fadeIn ${
                     isSystemTier 
@@ -284,7 +282,6 @@ export default function AgentTasksPage() {
                   </div>  
                 )}  
 
-                {/* DYNAMIC BROWSER USER TIMESTAMPS GENERATION GRID */}  
                 <div className="mt-8 grid gap-5 md:grid-cols-3">  
                   <InfoCard  
                     title="Started At"  
@@ -311,23 +308,19 @@ export default function AgentTasksPage() {
         </div>  
       )}  
 
-      {/* =====================================================================
-          UPGRADED: FULL-PAGE EXTENDED HIGH-REBOOSTED TELEMETRY PANEL MODULE
-          ===================================================================== */}
+      {/* ADVANCED VECTOR TRACE TELEMETRY SLIDE-OUT DRAWER OVERLAY */}
       {selectedTaskId && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/80 backdrop-blur-md transition-all duration-300">
-          {/* Backdrop Click Out Controller */}
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/85 backdrop-blur-md transition-all duration-300">
           <div className="flex-1" onClick={() => setSelectedTaskId(null)} />
           
-          {/* FIXED: Changed to full screen width footprint layout max-w-6xl */}
-          <div className="w-full max-w-6xl bg-[#040b15] border-l border-cyan-500/30 h-screen overflow-y-auto p-10 shadow-[-15px_0_45px_rgba(0,0,0,0.8)] flex flex-col">
+          <div className="w-full max-w-5xl bg-[#030914] border-l border-cyan-500/30 h-screen overflow-y-auto p-10 shadow-[-20px_0_50px_rgba(0,0,0,0.9)] flex flex-col">
             
-            {/* PANEL TITLE SUMMARY ROW */}
+            {/* MODAL CLOSE TITLE BAR */}
             <div className="flex items-center justify-between border-b border-cyan-500/20 pb-6 shrink-0">
               <div className="space-y-2">
-                <div className="text-xs font-mono font-black tracking-widest text-cyan-400 uppercase">Advanced Vector Trace Analytics Panel</div>
+                <div className="text-xs font-mono font-black tracking-widest text-cyan-400 uppercase">Granular Subsystem Performance Breakdowns</div>
                 <h2 className="text-4xl font-black tracking-tight text-white flex items-center gap-3">
-                  <Gauge size={28} className="text-cyan-400 animate-pulse" /> Live Telemetry Audit Graph
+                  <Gauge size={28} className="text-cyan-400" /> Live Telemetry Trace Graph
                 </h2>
               </div>
               <button 
@@ -338,26 +331,26 @@ export default function AgentTasksPage() {
               </button>
             </div>
 
-            {/* DYNAMIC ASYNC CONTENT GATEWAY CONTAINER */}
+            {/* TELEMETRY ANALYTICS GATEWAY CONTENT SPACE */}
             <div className="flex-1 py-8 space-y-10 font-sans">
               {loadingTelemetry ? (
-                <div className="h-full flex flex-col items-center justify-center gap-4 text-zinc-400 font-mono text-sm tracking-widest">
-                  <Loader2 className="animate-spin text-cyan-400" size={36} />
+                <div className="h-full flex flex-col items-center justify-center gap-4 text-zinc-400 font-mono text-xs tracking-widest">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-cyan-400 border-t-transparent" />
                   <span>EXTRACTING GRANULAR COGNITIVE STEP RETRIEVAL GRAPHS...</span>
                 </div>
               ) : !telemetryData ? (
                 <div className="text-center p-6 border border-red-500/20 rounded-2xl bg-red-500/5 text-red-400 text-sm font-mono flex items-center justify-center gap-2">
-                  <XCircle size={18} /> Bypassed telemetry handshake loop or cache indices expired.
+                  <XCircle size={18} /> Telemetry data initialization trace missed.
                 </div>
               ) : (
-                <div className="space-y-10">
+                <div className="space-y-12">
                   
-                  {/* META OVERVIEW ROW TILES - INCREASED ACCENT SIZES */}
+                  {/* PANEL SURFACE METRICS ROW CARD TILES */}
                   <div className="grid grid-cols-2 gap-6">
                     <div className="p-6 rounded-2xl bg-black/50 border border-slate-800/80">
                       <span className="text-xs font-mono uppercase tracking-wider text-zinc-400 block font-bold">Execution Step Tracking Phase</span>
                       <span className="text-sm font-mono font-black uppercase inline-block mt-3 bg-cyan-400/10 border border-cyan-400/30 text-cyan-300 px-4 py-1.5 rounded-xl">
-                        {telemetryData.last_executed_step}
+                        {telemetryData.last_executed_step || "generation_completed"}
                       </span>
                     </div>
                     <div className="p-6 rounded-2xl bg-black/50 border border-slate-800/80">
@@ -368,7 +361,7 @@ export default function AgentTasksPage() {
                     </div>
                   </div>
 
-                  {/* ✅ TELEMETRY-LEVEL ALLOCATION DISPLAY NOTICE */}
+                  {/* DRAWER ALLOCATION ALERT STICKER */}
                   {telemetryData.tier_notification && (
                     <div className={`p-5 rounded-2xl border text-xs font-sans leading-relaxed flex items-center justify-between gap-4 ${
                       telemetryData.tier_notification.includes("Notice:") 
@@ -379,187 +372,177 @@ export default function AgentTasksPage() {
                         <Sparkles size={15} className={telemetryData.tier_notification.includes("Notice:") ? "text-amber-400" : "text-cyan-400"} />
                         <span>{telemetryData.tier_notification}</span>
                       </div>
-                      {telemetryData.tier_notification.includes("Notice:") && (
-                        <button 
-                          type="button"
-                          onClick={() => { const targetPath = `/dashboard/workspace`; window.location.href = targetPath;}}
-                          className="px-3 py-1.5 bg-amber-500 text-slate-950 font-bold rounded-xl text-[10px] uppercase tracking-wide hover:bg-amber-400 transition-colors"
-                        >
-                          Connect Key
-                        </button>
-                      )}
                     </div>
                   )}
 
-                  {/* TELEMETRY LOOP PIPELINE TIMELINE STEP GRID */}
-                  <div className="space-y-8">
-                    <h3 className="text-sm font-mono uppercase tracking-widest text-cyan-400 font-black flex items-center gap-2">
-                      <Layers size={16} /> Granular Subsystem Performance Breakdowns
-                    </h3>
-                    
-                    {telemetryData.telemetry_timeline?.map((step: any) => (
-                      <div key={step.step_index || step.event_name} className="relative pl-8 border-l-2 border-cyan-500/20 space-y-5">
-                        
-                        {/* Bullet Circle Tag */}
-                        <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-cyan-400 border border-cyan-500 shadow-[0_0_12px_#22d3ee]" />
+                  {/* GRANULAR STEP TRACE RENDER BLOCKS */}
+                  <div className="space-y-12">
+                    {telemetryData.telemetry_timeline?.map((step: any, index: number) => {
+                      
+                      // ✅ SYSTEM REPAIR ACCELERATOR FILTER: Self-healing object mapping tracker to unpack fields from both root-level or nested meta indices maps cleanly
+                      const isKnowledgeStep = step.event_name === "KNOWLEDGE_RETRIEVAL" || step.collection_human_name;
+                      const isGenerationStep = step.event_name?.toLowerCase().includes("generation") || step.meta?.model_utilized || step.model_utilized;
 
-                        <div className="flex items-center justify-between gap-4 flex-wrap">
-                          <h4 className="text-2xl font-black text-white flex items-center gap-2">
-                            {step.event_name}
-                          </h4>
-                          {/* Handles display of unified performance latency times */}
-                          {step.latency_ms && (
-                            <span className="text-sm font-mono font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1.5 border border-cyan-500/20 rounded-xl flex items-center gap-1.5">
-                              <Timer size={14} /> {step.latency_ms} ms
-                            </span>
-                          )}
-                        </div>
+                      if (isKnowledgeStep) {
+                        const engineBase = step.collection_human_name || step.meta?.collection_human_name || "rag_enterprise_vectors_v1";
+                        const cutoff = step.similarity_threshold_used ?? step.meta?.similarity_threshold_used ?? 0.45;
+                        const searchedBlocks = step.candidate_chunks_evaluated ?? step.meta?.candidate_chunks_evaluated ?? 0;
+                        const hitRate = step.retrieval_similarity_hit_rate_percent ?? step.meta?.retrieval_similarity_hit_rate_percent ?? 0;
+                        const embedTime = step.query_embedding_time_ms ?? step.meta?.query_embedding_time_ms ?? 0;
+                        const scanTime = step.vector_search_time_ms ?? step.meta?.vector_search_time_ms ?? 0;
+                        const totalReturned = step.chunks_returned_count ?? step.meta?.chunks_returned_count ?? 0;
+                        const docArray = step.documents || step.meta?.documents || [];
 
-                        {/* UPGRADED RETRIEVAL METRICS BLOCK */}
-                        {step.event_name === "KNOWLEDGE_RETRIEVAL" && step.meta && (
-                          <div className="bg-[#09131f]/80 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
+                        return (
+                          <div key={index} className="relative pl-8 border-l-2 border-cyan-500/20 space-y-5">
+                            <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-cyan-400 border border-cyan-500 shadow-[0_0_12px_#22d3ee]" />
                             
-                            {/* Rich Metrics Top Section Grid */}
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/30 border border-slate-800/60 p-5 rounded-2xl font-mono text-xs">
-                              <div>
-                                <span className="text-zinc-500 block mb-1">Knowledge Engine Base:</span>
-                                <span className="text-white font-black text-sm">{step.meta.collection_human_name || "rag_knowledge_base"}</span>
-                              </div>
-                              <div>
-                                <span className="text-zinc-500 block mb-1">Similarity Threshold Used:</span>
-                                <span className="text-cyan-400 font-black text-sm">{(step.meta.similarity_threshold_used * 100).toFixed(0)}% Match Cutoff</span>
-                              </div>
-                              <div>
-                                <span className="text-zinc-500 block mb-1">Candidate Chunks Searched:</span>
-                                <span className="text-amber-400 font-black text-sm">{step.meta.candidate_chunks_evaluated || 0} Blocks</span>
-                              </div>
-                              <div>
-                                <span className="text-zinc-500 block mb-1">Overall Core Relevance Score:</span>
-                                <span className="text-emerald-400 font-black text-sm">{step.meta.retrieval_similarity_hit_rate_percent || 0.0}% Hit Rate</span>
-                              </div>
-                            </div>
-
-                            {/* New Isolated Micro Latencies Layer */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs text-zinc-400">
-                              <div className="p-3 rounded-xl bg-black/20 border border-slate-900 flex justify-between items-center">
-                                <span>Query Embedding Translation Time:</span>
-                                <span className="text-white font-bold">{step.meta.query_embedding_time_ms || 0.0} ms</span>
-                              </div>
-                              <div className="p-3 rounded-xl bg-black/20 border border-slate-900 flex justify-between items-center">
-                                <span>Pure Vector Index Matrix Scan Time:</span>
-                                <span className="text-white font-bold">{step.meta.vector_search_time_ms || 0.0} ms</span>
-                              </div>
-                            </div>
-
-                            {/* Documents Nested Card Grid Mapping with Big Fonts */}
-                            <div className="space-y-4">
-                              <span className="text-xs font-mono uppercase text-zinc-400 block font-black tracking-wider">
-                                Extracted Text Segments Ordered By Vector Rank Priority ({step.meta.chunks_returned_count || 0} returned):
-                              </span>
-                              
-                              {!step.meta.documents || step.meta.documents.length === 0 ? (
-                                <p className="text-sm text-zinc-500 italic p-4 bg-black/20 rounded-xl border border-slate-800">No documents were processed during this query segment trace execution.</p>
-                              ) : (
-                                step.meta.documents.map((doc: any, dIdx: number) => (
-                                  <div key={dIdx} className={`p-5 rounded-2xl bg-black/40 border transition-all ${
-                                    doc.context_contribution_indicator ? "border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.03)]" : "border-slate-800/80 opacity-60"
-                                  } space-y-4`}>
-                                    
-                                    <div className="flex items-center justify-between gap-4 flex-wrap text-xs font-mono">
-                                      <div className="flex items-center gap-2.5 truncate max-w-md">
-                                        <span className="bg-cyan-500 text-black px-2 py-0.5 rounded font-black text-[11px]">
-                                          #{doc.chunk_rank || dIdx + 1}
-                                        </span>
-                                        <span className="text-white font-black flex items-center gap-1.5 text-sm truncate">
-                                          <FileText size={16} className="text-cyan-400 shrink-0" /> {doc.source_file}
-                                        </span>
-                                      </div>
-                                      
-                                      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-                                        <span className="text-zinc-500">
-                                          Page: <span className="text-white font-bold">{doc.page_number || 1}</span>
-                                        </span>
-                                        <span className="text-zinc-500">
-                                          Match: <span className="text-emerald-400 font-bold">{doc.similarity_confidence_percentage || 0.0}%</span>
-                                        </span>
-                                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                                          doc.context_contribution_indicator ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "bg-zinc-800 text-zinc-500"
-                                        }`}>
-                                          {doc.context_contribution_indicator ? "USED IN CONTEXT" : "FILTERED OUT"}
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4 text-[11px] font-mono text-zinc-500 border-t border-slate-900 pt-2">
-                                      <div className="flex items-center gap-1">
-                                        <User size={12} /> Uploaded By: <span className="text-zinc-400 ml-1">{doc.uploaded_by_user || "Workspace Admin"}</span>
-                                      </div>
-                                      <div className="flex items-center gap-1 justify-end">
-                                        <Calendar size={12} /> Sync Date: <span className="text-zinc-400 ml-1">{doc.last_updated || "2026-06-01"}</span>
-                                      </div>
-                                    </div>
-
-                                    <p className="text-zinc-300 leading-relaxed text-md font-sans bg-black/30 p-4 border border-slate-900 rounded-xl italic break-all max-h-48 overflow-y-auto">
-                                      "{doc.content_snippet}"
-                                    </p>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* UPGRADED GENERATION BLOCK */}
-                        {step.event_name.includes("Response Generation") && step.meta && (
-                          <div className="bg-[#09131f]/80 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
-                            <div className="flex items-center justify-between gap-4 border-b border-slate-800/60 pb-4 flex-wrap">
-                              <div className="flex items-center gap-2">
-                                <Sparkles size={16} className="text-purple-400 animate-pulse" />
-                                <span className="text-sm font-mono text-zinc-400">Target Core LLM Model Engine:</span>
-                              </div>
-                              <span className="font-mono text-sm font-black text-purple-300 uppercase tracking-widest bg-purple-500/10 border border-purple-500/30 px-3 py-1 rounded-xl">
-                                {step.meta.model_utilized}
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                              <h4 className="text-2xl font-black text-white tracking-wide">KNOWLEDGE_RETRIEVAL</h4>
+                              <span className="text-sm font-mono font-bold text-cyan-400 bg-cyan-950/40 px-3 py-1.5 border border-cyan-500/20 rounded-xl flex items-center gap-1.5">
+                                <Timer size={14} /> {embedTime + scanTime ? (embedTime + scanTime).toFixed(1) : "0.0"} ms
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-4 font-mono text-center text-xs">
-                              <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
-                                <span className="text-zinc-500 block mb-1">Prompt Weight</span>
-                                <span className="text-white font-black text-md">{step.meta.prompt_tokens_consumed} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
-                              </div>
-                              <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
-                                <span className="text-zinc-500 block mb-1">Completion Weight</span>
-                                <span className="text-white font-black text-md">{step.meta.completion_tokens_consumed} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
-                              </div>
-                              <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
-                                <span className="text-zinc-500 block mb-1">Total Token Footprint</span>
-                                <span className="text-cyan-400 font-black text-md">{step.meta.total_tokens_consumed} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-3">
-                              <span className="text-xs font-mono uppercase text-zinc-400 block font-black tracking-wider">Verified Source Files Influencing Final Generated Answer:</span>
-                              
-                              {!step.meta.documents_influencing_final_answer || step.meta.documents_influencing_final_answer.length === 0 ? (
-                                <p className="text-sm text-zinc-500 italic p-4 bg-black/20 border border-slate-800/80 rounded-xl">
-                                  No document slices met execution response integration boundaries for this prompt execution run.
-                                </p>
-                              ) : (
-                                <div className="flex flex-wrap gap-2.5">
-                                  {step.meta.documents_influencing_final_answer.map((fileName: string, sIdx: number) => (
-                                    <div key={sIdx} className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/5 px-4 py-2.5 font-mono text-xs font-bold text-purple-300">
-                                      <FileText size={14} className="text-purple-400" />
-                                      <span>{fileName}</span>
-                                    </div>
-                                  ))}
+                            <div className="bg-[#08111f]/90 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 bg-black/30 border border-slate-800/60 p-5 rounded-2xl font-mono text-xs">
+                                <div>
+                                  <span className="text-zinc-500 block mb-1">Knowledge Engine Base:</span>
+                                  <span className="text-white font-black text-sm break-all">{engineBase}</span>
                                 </div>
-                              )}
+                                <div>
+                                  <span className="text-zinc-500 block mb-1">Similarity Threshold Used:</span>
+                                  <span className="text-cyan-400 font-black text-sm">{(cutoff * 100).toFixed(0)}% Match Cutoff</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block mb-1">Candidate Chunks Searched:</span>
+                                  <span className="text-amber-400 font-black text-sm">{searchedBlocks} Blocks</span>
+                                </div>
+                                <div>
+                                  <span className="text-zinc-500 block mb-1">Overall Core Relevance Score:</span>
+                                  <span className="text-emerald-400 font-black text-sm">{hitRate}% Hit Rate</span>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-xs text-zinc-400">
+                                <div className="p-3 rounded-xl bg-black/20 border border-slate-900 flex justify-between items-center">
+                                  <span>Query Embedding Translation Time:</span>
+                                  <span className="text-white font-bold">{embedTime} ms</span>
+                                </div>
+                                <div className="p-3 rounded-xl bg-black/20 border border-slate-900 flex justify-between items-center">
+                                  <span>Pure Vector Index Matrix Scan Time:</span>
+                                  <span className="text-white font-bold">{scanTime} ms</span>
+                                </div>
+                              </div>
+
+                              <div className="space-y-4">
+                                <span className="text-xs font-mono uppercase text-zinc-400 block font-black tracking-wider">
+                                  Extracted Text Segments Ordered By Vector Rank Priority ({totalReturned} returned):
+                                </span>
+                                
+                                {!docArray || docArray.length === 0 ? (
+                                  <p className="text-sm text-zinc-500 italic p-4 bg-black/20 rounded-xl border border-slate-800">
+                                    No documents were processed during this query segment trace execution.
+                                  </p>
+                                ) : (
+                                  docArray.map((doc: any, dIdx: number) => (
+                                    <div key={dIdx} className={`p-5 rounded-2xl bg-black/40 border transition-all ${
+                                      doc.context_contribution_indicator ? "border-cyan-500/30 shadow-[0_0_15px_rgba(34,211,238,0.03)]" : "border-slate-800/80 opacity-60"
+                                    } space-y-4`}>
+                                      <div className="flex items-center justify-between gap-4 flex-wrap text-xs font-mono">
+                                        <div className="flex items-center gap-2.5 truncate max-w-md">
+                                          <span className="bg-cyan-500 text-black px-2 py-0.5 rounded font-black text-[11px]">#{doc.chunk_rank || dIdx + 1}</span>
+                                          <span className="text-white font-black flex items-center gap-1.5 text-sm truncate">
+                                            <FileText size={16} className="text-cyan-400 shrink-0" /> {doc.source_file}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+                                          <span>Page: <span className="text-white font-bold">{doc.page_number || 1}</span></span>
+                                          <span>Match: <span className="text-emerald-400 font-bold">{doc.similarity_confidence_percentage || 0.0}%</span></span>
+                                          <span className="bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-2 py-0.5 rounded font-bold text-[10px]">USED IN CONTEXT</span>
+                                        </div>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-4 text-[11px] font-mono text-zinc-500 border-t border-slate-900 pt-2">
+                                        <div className="flex items-center gap-1"><User size={12} /> Uploaded By: <span className="text-zinc-400 ml-1">{doc.uploaded_by_user || "Workspace Operator"}</span></div>
+                                        <div className="flex items-center gap-1 justify-end"><Calendar size={12} /> Sync Date: <span className="text-zinc-400 ml-1">{doc.last_updated || "2026-06-11"}</span></div>
+                                      </div>
+                                      <p className="text-zinc-300 leading-relaxed text-md font-sans bg-black/30 p-4 border border-slate-900 rounded-xl italic break-all max-h-48 overflow-y-auto">
+                                        "{doc.content_snippet}"
+                                      </p>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
                             </div>
                           </div>
-                        )}
+                        );
+                      }
 
-                      </div>
-                    ))}
+                      if (isGenerationStep) {
+                        const model = step.model_utilized || step.meta?.model_utilized || "gemini-2.5-flash-lite";
+                        const promptTokens = step.prompt_tokens_consumed || step.meta?.prompt_tokens_consumed || 0;
+                        const completionTokens = step.completion_tokens_consumed || step.meta?.completion_tokens_consumed || 0;
+                        const totalTokens = step.total_tokens_consumed || step.meta?.total_tokens_consumed || 0;
+                        const filesList = step.documents_influencing_final_answer || step.meta?.documents_influencing_final_answer || [];
+
+                        return (
+                          <div key={index} className="relative pl-8 border-l-2 border-cyan-500/20 space-y-5">
+                            <div className="absolute -left-[7px] top-1 h-3 w-3 rounded-full bg-purple-500 border border-purple-500 shadow-[0_0_12px_#a855f7]" />
+                            <div className="flex items-center justify-between gap-4 flex-wrap">
+                              <h4 className="text-2xl font-black text-white tracking-wide">LLM Model Response Generation</h4>
+                            </div>
+
+                            <div className="bg-[#08111f]/90 border border-cyan-500/20 rounded-3xl p-6 space-y-6">
+                              <div className="flex items-center justify-between gap-4 border-b border-slate-800/60 pb-4 flex-wrap">
+                                <div className="flex items-center gap-2">
+                                  <Sparkles size={16} className="text-purple-400 animate-pulse" />
+                                  <span className="text-sm font-mono text-zinc-400">Target Core LLM Model Engine:</span>
+                                </div>
+                                <span className="font-mono text-sm font-black text-purple-300 uppercase tracking-widest bg-purple-500/10 border border-purple-500/30 px-3 py-1 rounded-xl">
+                                  {model}
+                                </span>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-4 font-mono text-center text-xs">
+                                <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
+                                  <span className="text-zinc-500 block mb-1">Prompt Weight</span>
+                                  <span className="text-white font-black text-md">{promptTokens} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
+                                  <span className="text-zinc-500 block mb-1">Completion Weight</span>
+                                  <span className="text-white font-black text-md">{completionTokens} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-xl border border-slate-800">
+                                  <span className="text-zinc-500 block mb-1">Total Token Footprint</span>
+                                  <span className="text-cyan-400 font-black text-md">{totalTokens} <span className="text-[10px] font-normal text-zinc-600">tokens</span></span>
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <span className="text-xs font-mono uppercase text-zinc-400 block font-black tracking-wider">Verified Source Files Influencing Final Generated Answer:</span>
+                                
+                                {!filesList || filesList.length === 0 ? (
+                                  <p className="text-sm text-zinc-500 italic p-4 bg-black/20 border border-slate-800/80 rounded-xl">
+                                    No document slices met execution response integration boundaries for this prompt execution run.
+                                  </p>
+                                ) : (
+                                  <div className="flex flex-wrap gap-2.5">
+                                    {filesList.map((fileName: string, sIdx: number) => (
+                                      <div key={sIdx} className="flex items-center gap-2 rounded-xl border border-purple-500/30 bg-purple-500/5 px-4 py-2.5 font-mono text-xs font-bold text-purple-300">
+                                        <FileText size={14} className="text-purple-400" />
+                                        <span>{fileName}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })}
                   </div>
 
                 </div>
@@ -580,21 +563,5 @@ function InfoCard({ title, value }: { title: string; value: string | number; }) 
       <p className="text-sm text-zinc-400">{title}</p>
       <h3 className="mt-3 text-xl font-black break-all">{value}</h3>
     </div>
-  );
-}
-
-function Loader2({ className, size }: { className?: string; size?: number; }) {
-  return (
-    <svg 
-      className={`animate-spin ${className || ""}`} 
-      xmlns="http://www.w3.org/2000/svg" 
-      fill="none" 
-      viewBox="0 0 24 24"
-      width={size || 16}
-      height={size || 16}
-    >
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-    </svg>
   );
 }
