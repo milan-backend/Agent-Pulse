@@ -14,6 +14,9 @@ from app.models.agent_policy import AgentPolicy
 from app.models.user_api_key import UserAPIKey  
 from app.core.rag_crypto import decrypt_text_string  
 
+# 🟢 IMPORT THE UPLOADED DOCUMENT MODEL FOR THE PERMANENT LOGICAL CHECK
+from app.models.uploaded_document import UploadedDocument  
+
 from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
 from app.services.usage_service import create_usage_event
@@ -190,7 +193,6 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
-            # ✅ FIXED FOR BLANK BOUNDARIES: Pre-initialize fallback status token tags to prevent UnboundLocalError
             tier_status_msg = "Notice: Running on System Shared Sandbox Tier."
 
             if not prompt or not str(prompt).strip():
@@ -212,15 +214,13 @@ def process_step(self, step_id: str):
                 agent_model = getattr(agent, "model_name", None)
                 active_model_target = None
                 
-                # Identify engine provider target requested by agent row configuration
                 agent_model_clean = str(agent_model).lower().strip() if agent_model else ""
                 requested_engine = "openai" if ("gpt" in agent_model_clean or "openai" in agent_model_clean) else "gemini"
 
                 resolved_key_record = None
-                tier_source = "system" # Base tracking identifier placeholder
+                tier_source = "system"
 
                 if agent_id_raw:
-                    # ✅ FIXED FOR TUPLE ATTRIBUTE FAULTS: Unpack both variables from your new Tuple signature smoothly
                     resolved_key_record, tier_source = UserAPIKeyService.resolve_agent_api_key(
                         db=db,
                         workspace_id=uuid.UUID(current_workspace_id),
@@ -231,15 +231,12 @@ def process_step(self, step_id: str):
                     if resolved_key_record and resolved_key_record.model_name:
                         active_model_target = str(resolved_key_record.model_name).strip()
 
-                # Fallback to Agent Meta Configuration Choice if resolver did not explicitly lock model names
                 if not active_model_target and agent_model and str(agent_model).strip():
                     active_model_target = str(agent_model).strip()
 
-                # Absolute baseline structural fallback if completely unconfigured
                 if not active_model_target:
                     active_model_target = "gpt-4o-mini" if requested_engine == "openai" else "gemini-2.5-flash-lite"
 
-                # 🛡️ SECURITY CONTROL UPGRADE BLOCK: ENFORCE ZERO-TRUST TASK ISOLATION BOUNDARY
                 if not resolved_key_record and not os.getenv("OPENAI_API_KEY") and not os.getenv("GEMINI_API_KEY"):
                     raise ValueError(
                         f"Zero-Trust Violation: Agent '{agent_id_raw}' is not explicitly assigned to any valid keys "
@@ -252,11 +249,10 @@ def process_step(self, step_id: str):
                 context_fragments = []
                 documents_influencing_list = []
                 
-                # Base structure matching your observability requirements without ID noise
                 rag_telemetry_node = {
                     "event_name": "KNOWLEDGE_RETRIEVAL",
                     "collection_human_name": "rag_enterprise_vectors_v1",
-                    "similarity_threshold_used": 0.45,  # 🎯 Lowered to 45% production gate to accept dense matches
+                    "similarity_threshold_used": 0.45,
                     "query_embedding_time_ms": 0.0,
                     "vector_search_time_ms": 0.0,
                     "candidate_chunks_evaluated": 0,
@@ -265,141 +261,142 @@ def process_step(self, step_id: str):
                     "documents": []
                 }
 
-                try:
-                    # Initialize the official Google GenAI SDK client for the query vector match
-                    gemini_api_key = os.getenv("GEMINI_API_KEY")
-                    
-                    # Fallback to the resolved database credential string if the environment is empty for RAG lookups
-                    if not gemini_api_key and resolved_key_record:
-                        from app.core.crypto import decrypt_api_key
-                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+                # 🟢 PERMANENT GUARD: Check relational PostgreSQL context before running heavy vector functions
+                workspace_document_count = (
+                    db.query(UploadedDocument)
+                    .filter(UploadedDocument.workspace_id == uuid.UUID(current_workspace_id))
+                    .count()
+                )
 
-                    if not gemini_api_key:
-                        raise ValueError("GEMINI_API_KEY is completely missing on worker container environment")
-                        
-                    ai_client = genai.Client(api_key=gemini_api_key)
-                    
-                    # -----------------------------------------------------------------
-                    # 🚀 STEP A: Self-Healing Multi-Model Fallback Vector Query Engine
-                    # -----------------------------------------------------------------
-                    embed_start_time = time.time()
-                    query_vector = None
-                    
+                # 🎯 STRATEGIC OVERRIDE: Skip ChromaDB completely if the workspace has no files uploaded!
+                if workspace_document_count == 0:
+                    print(f"ℹ️ Workspace {current_workspace_id} has 0 documents. Skipping ChromaDB lookup lane entirely.")
+                    # Keep documents empty inside the node, letting the UI render "SKIPPED" cleanly.
+                    rag_telemetry_node["collection_human_name"] = "rag_enterprise_vectors_v1 (No Uploads)"
+                else:
                     try:
-                        query_vector_resp = ai_client.models.embed_content(
-                            model="gemini-embedding-2",
-                            contents=prompt
-                        )
-                        query_vector = query_vector_resp.embeddings[0].values
-                    except Exception:
+                        gemini_api_key = os.getenv("GEMINI_API_KEY")
+                        
+                        if not gemini_api_key and resolved_key_record:
+                            from app.core.crypto import decrypt_api_key
+                            gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+
+                        if not gemini_api_key:
+                            raise ValueError("GEMINI_API_KEY is completely missing on worker container environment")
+                            
+                        ai_client = genai.Client(api_key=gemini_api_key)
+                        
+                        # 🚀 STEP A: Self-Healing Multi-Model Fallback Vector Query Engine
+                        embed_start_time = time.time()
+                        query_vector = None
+                        
                         try:
                             query_vector_resp = ai_client.models.embed_content(
-                                model="text-embedding-004",
+                                model="gemini-embedding-2",
                                 contents=prompt
                             )
                             query_vector = query_vector_resp.embeddings[0].values
                         except Exception:
-                            query_vector_resp = ai_client.models.embed_content(
-                                model="text-embedding-005",
-                                contents=prompt
-                            )
-                            query_vector = query_vector_resp.embeddings[0].values
-                            
-                    rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
-                    
-                    # -----------------------------------------------------------------
-                    # 🚀 STEP B: Connect to Chroma DB Collection Space
-                    # -----------------------------------------------------------------
-                    chroma_client = get_chroma_client()
-                    collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
-                    
-                    if collection:
-                        search_start_time = time.time()
-                        # Multi-tenant scoping logic filter queries
-                        agent_results = collection.query(
-                            query_embeddings=[query_vector],
-                            n_results=4,
-                            where={
-                                "$and": [
-                                    {"workspace_id": current_workspace_id},
-                                    {"agent_id": str(agent_id_raw)}
-                                ]
-                            }
-                        )
-                        rag_telemetry_node["vector_search_time_ms"] = round((time.time() - search_start_time) * 1000, 2)
+                            try:
+                                query_vector_resp = ai_client.models.embed_content(
+                                    model="text-embedding-004",
+                                    contents=prompt
+                                )
+                                query_vector = query_vector_resp.embeddings[0].values
+                            except Exception:
+                                query_vector_resp = ai_client.models.embed_content(
+                                    model="text-embedding-005",
+                                    contents=prompt
+                                )
+                                query_vector = query_vector_resp.embeddings[0].values
+                                
+                        rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
                         
-                        # Unpack internal arrays safely
-                        docs_list = agent_results.get("documents", [[]])[0] if agent_results.get("documents") else []
-                        metas_list = agent_results.get("metadatas", [[]])[0] if agent_results.get("metadatas") else []
-                        dists_list = agent_results.get("distances", [[]])[0] if agent_results.get("distances") else []
+                        # 🚀 STEP B: Connect to Chroma DB Collection Space
+                        chroma_client = get_chroma_client()
+                        collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
                         
-                        rag_telemetry_node["candidate_chunks_evaluated"] = len(docs_list)
-                        successful_hits_count = 0
-
-                        # Check general fallback workspace pool if agent query returned zero records
-                        if not docs_list:
+                        if collection:
                             search_start_time = time.time()
-                            workspace_results = collection.query(
+                            agent_results = collection.query(
                                 query_embeddings=[query_vector],
                                 n_results=4,
                                 where={
                                     "$and": [
                                         {"workspace_id": current_workspace_id},
-                                        {"agent_id": "None"}
+                                        {"agent_id": str(agent_id_raw)}
                                     ]
                                 }
                             )
-                            rag_telemetry_node["vector_search_time_ms"] += round((time.time() - search_start_time) * 1000, 2)
-                            docs_list = workspace_results.get("documents", [[]])[0] if workspace_results.get("documents") else []
-                            metas_list = workspace_results.get("metadatas", [[]])[0] if workspace_results.get("metadatas") else []
-                            dists_list = workspace_results.get("distances", [[]])[0] if workspace_results.get("distances") else []
-                            rag_telemetry_node["candidate_chunks_evaluated"] += len(docs_list)
-
-                        # -----------------------------------------------------------------
-                        # 🚀 STEP C: Evaluate True Cosine Similarities & Extract Text Data
-                        # -----------------------------------------------------------------
-                        for idx, encrypted_chunk in enumerate(docs_list):
-                            meta_data = metas_list[idx] if idx < len(metas_list) else {}
-                            raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
+                            rag_telemetry_node["vector_search_time_ms"] = round((time.time() - search_start_time) * 1000, 2)
                             
-                            normalized_similarity = round(max(0.0, (1.0 - float(raw_distance))) * 100, 2)
-                            passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)
+                            docs_list = agent_results.get("documents", [[]])[0] if agent_results.get("documents") else []
+                            metas_list = agent_results.get("metadatas", [[]])[0] if agent_results.get("metadatas") else []
+                            dists_list = agent_results.get("distances", [[]])[0] if agent_results.get("distances") else []
                             
-                            plain_chunk = "Decryption Suppressed"
-                            if passes_cutoff:
-                                plain_chunk = decrypt_text_string(encrypted_chunk, uuid.UUID(current_workspace_id))
-                                if not plain_chunk:
-                                    continue
-                                    
-                                context_fragments.append(plain_chunk)
-                                successful_hits_count += 1
-                                if meta_data.get("source_file") and meta_data["source_file"] not in documents_influencing_list:
-                                    documents_influencing_list.append(str(meta_data["source_file"]))
+                            rag_telemetry_node["candidate_chunks_evaluated"] = len(docs_list)
+                            successful_hits_count = 0
 
-                            # Append itemized logs profile maps
-                            rag_telemetry_node["documents"].append({
-                                "chunk_rank": idx + 1,
-                                "source_file": meta_data.get("source_file", "Unknown Source Document"),
-                                "page_number": meta_data.get("page_number", 1),
-                                "last_updated": meta_data.get("last_updated", "2026-06-10"),
-                                "uploaded_by_user": meta_data.get("uploaded_by", "System Operator"),
-                                "similarity_confidence_percentage": normalized_similarity,
-                                "context_contribution_indicator": passes_cutoff,
-                                "content_snippet": plain_chunk[:250] + "..." if len(plain_chunk) > 250 else plain_chunk
-                            })
+                            if not docs_list:
+                                search_start_time = time.time()
+                                workspace_results = collection.query(
+                                    query_embeddings=[query_vector],
+                                    n_results=4,
+                                    where={
+                                        "$and": [
+                                            {"workspace_id": current_workspace_id},
+                                            {"agent_id": "None"}
+                                        ]
+                                    }
+                                )
+                                rag_telemetry_node["vector_search_time_ms"] += round((time.time() - search_start_time) * 1000, 2)
+                                docs_list = workspace_results.get("documents", [[]])[0] if workspace_results.get("documents") else []
+                                metas_list = workspace_results.get("metadatas", [[]])[0] if workspace_results.get("metadatas") else []
+                                dists_list = workspace_results.get("distances", [[]])[0] if workspace_results.get("distances") else []
+                                rag_telemetry_node["candidate_chunks_evaluated"] += len(docs_list)
 
-                        rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
-                        
-                        if rag_telemetry_node["chunks_returned_count"] > 0:
-                            rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
-                                (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
-                            )
+                            # 🚀 STEP C: Evaluate True Cosine Similarities & Extract Text Data
+                            for idx, encrypted_chunk in enumerate(docs_list):
+                                meta_data = metas_list[idx] if idx < len(metas_list) else {}
+                                raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
+                                
+                                normalized_similarity = round(max(0.0, (1.0 - float(raw_distance))) * 100, 2)
+                                passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)
+                                
+                                plain_chunk = "Decryption Suppressed"
+                                if passes_cutoff:
+                                    plain_chunk = decrypt_text_string(encrypted_chunk, uuid.UUID(current_workspace_id))
+                                    if not plain_chunk:
+                                        continue
+                                        
+                                    context_fragments.append(plain_chunk)
+                                    successful_hits_count += 1
+                                    if meta_data.get("source_file") and meta_data["source_file"] not in documents_influencing_list:
+                                        documents_influencing_list.append(str(meta_data["source_file"]))
 
-                except Exception as chroma_err:
-                    print(f"⚠️ Vector search bypassed or uninitialized safely: {str(chroma_err)}")
-                    rag_telemetry_node["error_log_report"] = str(chroma_err)
+                                rag_telemetry_node["documents"].append({
+                                    "chunk_rank": idx + 1,
+                                    "source_file": meta_data.get("source_file", "Unknown Source Document"),
+                                    "page_number": meta_data.get("page_number", 1),
+                                    "last_updated": meta_data.get("last_updated", "2026-06-10"),
+                                    "uploaded_by_user": meta_data.get("uploaded_by", "System Operator"),
+                                    "similarity_confidence_percentage": normalized_similarity,
+                                    "context_contribution_indicator": passes_cutoff,
+                                    "content_snippet": plain_chunk[:250] + "..." if len(plain_chunk) > 250 else plain_chunk
+                                })
 
-                # Inject decoded context pieces natively into the instruction system prompt block
+                            rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
+                            
+                            if rag_telemetry_node["chunks_returned_count"] > 0:
+                                rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
+                                    (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
+                                )
+
+                    except Exception as chroma_err:
+                        print(f"⚠️ Vector search exception caught in worker: {str(chroma_err)}")
+                        rag_telemetry_node["error_log_report"] = str(chroma_err)
+
+                # Inject decoded context pieces natively into the prompt block
                 final_prompt_payload = prompt
                 if context_fragments:
                     combined_context = "\n\n".join(context_fragments)
@@ -411,7 +408,6 @@ def process_step(self, step_id: str):
                         f"USER INSTRUCTION TASK: {prompt}"
                     )
 
-                # ✅ RUN HANDSHAKE: Safely unpacking both properties from your refactored LLM Service file tuple
                 output, tier_status_msg = generate_llm_response(
                     prompt=final_prompt_payload,
                     db=db,
@@ -420,7 +416,6 @@ def process_step(self, step_id: str):
                     model_name=active_model_target
                 )
                 
-                # ✅ PURE TOKENIZER MAP: Passing the extracted text string to prevent usage calculation faults
                 completion_usage = calculate_usage(
                    prompt=final_prompt_payload,
                    completion=output,
@@ -465,7 +460,6 @@ def process_step(self, step_id: str):
                 "message": "LLM execution failed"
             }
 
-        # REFRESH STATES
         db.refresh(agent)
         db.refresh(step)
 
@@ -554,8 +548,6 @@ def process_step(self, step_id: str):
             }
         }
 
-        # ✅ FIXED: Surface the telemetry metrics explicitly at the root level of your payload data.
-        # This gives your frontend drawer direct access to the `.telemetry_timeline` maps natively!
         result = {
             "success": True,
             "result": output,
