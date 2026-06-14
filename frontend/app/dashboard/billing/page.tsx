@@ -130,6 +130,18 @@ export default function BillingPage() {
     setCurrentPlan
   ] = useState("free");
 
+  // Dynamically inject Razorpay Checkout Script when component mounts
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
   useEffect(() => {
 
     const loadPlan = async () => {
@@ -163,14 +175,38 @@ export default function BillingPage() {
   ) => {
 
     try {
+      // Step 1: Hit backend to register Razorpay order context
+      const response = await createCheckout(planName);
 
-      const response =
-        await createCheckout(
-          planName
-        );
+      // Step 2: Configure native Razorpay checkout modal overlay window
+      const options = {
+        key: response.key_id, 
+        amount: response.amount, 
+        currency: response.currency,
+        name: "Agent Pulse",
+        description: `Upgrade to ${planName.toUpperCase()} Plan`,
+        order_id: response.order_id,
+        handler: function (razorpayResponse: any) {
+          // Triggered on clean payment verification signature check matching
+          if (razorpayResponse.razorpay_payment_id) {
+            window.location.href = response.success_url;
+          } else {
+            window.location.href = response.cancel_url;
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            console.log("Checkout overlay wizard dropped by user context");
+          }
+        },
+        theme: {
+          color: "#22d3ee" // Cyan accent matching your visual application layout
+        }
+      };
 
-      window.location.href =
-        response.checkout_url;
+      // Open Razorpay payment box
+      const rzp = new (window as any).Razorpay(options);
+      rzp.open();
 
     } catch (error) {
 

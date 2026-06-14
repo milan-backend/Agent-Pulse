@@ -377,7 +377,8 @@ BILLING
 ========================================================= */
 
 export const createCheckout = async (planName: string) => {
-  return request(`/billing/checkout/${planName}`, {
+  // Appending the gateway query context to target Razorpay safely
+  return request(`/billing/checkout/${planName}?gateway=razorpay`, {
     method: "POST",
   });
 };

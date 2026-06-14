@@ -29,3 +29,5 @@ protobuf
 
 pypdf
 python-multipart
+
+razorpay
