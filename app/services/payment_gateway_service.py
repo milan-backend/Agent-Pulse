@@ -9,7 +9,7 @@ razorpay_client = razorpay.Client(
     auth=(os.getenv("RAZORPAY_KEY_ID", ""), os.getenv("RAZORPAY_KEY_SECRET", ""))
 )
 
-def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: str, gateway: str):
+def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: str, gateway: str, billing_cycle: str = "monthly"):
     # SECURITY ASPECT: Guarantee reference workspace constraint validation
     subscription = (
         db.query(WorkspaceSubscription)
@@ -21,6 +21,9 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
 
     if plan_name not in ["pro", "enterprise"]:
         raise HTTPException(status_code=400, detail="Invalid plan scope selection.")
+        
+    if billing_cycle not in ["monthly", "yearly"]:
+        raise HTTPException(status_code=400, detail="Invalid billing cycle selection.")
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
     success_url = f"{frontend_url}/dashboard/billing/success"
@@ -30,8 +33,11 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
     # GATEWAY ROUTING: RAZORPAY (INDIA - ₹ INR)
     # ============================================
     if gateway == "razorpay":
-        # INR Pricing mapped in total Paise units (₹2499 and ₹16999)
-        amount = 249900 if plan_name == "pro" else 1699900  
+        # Dynamic INR Pricing mapped in total Paise units based on billing cycle
+        if plan_name == "pro":
+            amount = 249900 if billing_cycle == "monthly" else 2499000  # e.g., ₹2,499/mo or ₹24,990/yr
+        else:
+            amount = 1699900 if billing_cycle == "monthly" else 16999000  # e.g., ₹16,999/mo or ₹169,990/yr
         
         try:
             order_data = {
@@ -40,7 +46,8 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
                 "receipt": f"rcpt_{str(workspace_id)[:20]}",
                 "notes": {
                     "workspace_id": str(workspace_id),
-                    "plan_name": plan_name
+                    "plan_name": plan_name,
+                    "billing_cycle": billing_cycle  # 💡 Added: Webhook will read this to set correct access duration
                 }
             }
             razorpay_order = razorpay_client.order.create(data=order_data)
@@ -58,20 +65,27 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
             raise HTTPException(status_code=500, detail=f"Razorpay Order Fault: {str(e)}")
 
     # ============================================
-    # GATEWAY ROUTING: PADDLE (GLOBAL - $ USD) [REPLACED GUMROAD]
+    # GATEWAY ROUTING: PADDLE (GLOBAL - $ USD)
     # ============================================
     elif gateway == "paddle":
-        # Fetch the distinct Paddle Price IDs created in your sandbox dashboard catalog
-        price_id = (
-            os.getenv("PADDLE_PRO_PRICE_ID")
-            if plan_name == "pro"
-            else os.getenv("PADDLE_ENTERPRISE_PRICE_ID")
-        )
+        # Fetch the distinct Paddle Price IDs based on both Plan and Billing Cycle
+        if plan_name == "pro":
+            price_id = (
+                os.getenv("PADDLE_PRO_MONTHLY_PRICE_ID")
+                if billing_cycle == "monthly"
+                else os.getenv("PADDLE_PRO_YEARLY_PRICE_ID")
+            )
+        else:
+            price_id = (
+                os.getenv("PADDLE_ENTERPRISE_PRICE_ID")  # Defaults to standard monthly variable name if preferred
+                if billing_cycle == "monthly"
+                else os.getenv("PADDLE_ENTERPRISE_YEARLY_PRICE_ID")
+            )
 
         if not price_id:
             raise HTTPException(
                 status_code=500,
-                detail=f"Paddle Price ID for '{plan_name}' missing inside environment variables."
+                detail=f"Paddle Price ID for '{plan_name}' ({billing_cycle}) missing inside environment variables."
             )
 
         # Return parameters for frontend Paddle.js initialization
@@ -80,9 +94,12 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
             "environment": os.getenv("PADDLE_ENVIRONMENT", "sandbox"),
             "client_token": os.getenv("PADDLE_CLIENT_TOKEN"),
             "price_id": price_id,
+            "success_url": success_url,
+            "cancel_url": cancel_url,
             "custom_data": {
                 "workspace_id": str(workspace_id),
-                "plan_name": plan_name
+                "plan_name": plan_name,
+                "billing_cycle": billing_cycle  # 💡 Added: Paddle pass-through metadata
             }
         }
 

@@ -373,12 +373,12 @@ export const getCurrentUser = async () => {
 };
 
 /* =========================================================
-BILLING (UPDATED WITH DUAL-GATEWAY DESCRIPTOR ROUTING)
+BILLING (UPDATED WITH DUAL-GATEWAY & INTERVAL CYCLES)
 ========================================================= */
 
-export const createCheckout = async (planName: string, gateway: string) => {
-  // Appends gateway ("razorpay" or "gumroad") cleanly as a query string parameter context
-  return request(`/billing/checkout/${planName}?gateway=${gateway}`, {
+export const createCheckout = async (planName: string, gateway: string, billingCycle: string = "monthly") => {
+  // Appends gateway and billing_cycle cleanly as a query string parameter context for FastAPI
+  return request(`/billing/checkout/${planName}?gateway=${gateway}&billing_cycle=${billingCycle}`, {
     method: "POST",
   });
 };

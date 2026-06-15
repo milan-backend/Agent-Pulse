@@ -10,14 +10,17 @@ router = APIRouter()
 def create_checkout(
     plan_name: str,
     gateway: str,  # Passed dynamically via frontend execution query strings ("razorpay" or "paddle")
+    billing_cycle: str = "monthly",  # 💡 Added: Accepts query string ("monthly" or "yearly")
     workspace_id: str = Header(...),
     db: Session = Depends(get_db)
 ):
+    # Pass billing_cycle smoothly down into your gateway session builder service!
     return create_gateway_checkout_session(
         db=db,
         workspace_id=workspace_id,
         plan_name=plan_name,
-        gateway=gateway
+        gateway=gateway,
+        billing_cycle=billing_cycle
     )
 
 @router.get("/current-plan")

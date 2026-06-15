@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { createCheckout, getCurrentPlan } from "@/components/api";
 import { initializePaddle, Paddle } from "@paddle/paddle-js";
-import { CreditCard, Rocket, Shield, Cpu, CheckCircle2, Sparkles, Globe } from "lucide-react";
+import { CreditCard, Rocket, Shield, Cpu, CheckCircle2, Sparkles, Globe} from "lucide-react";
 
-const plansData = (isIndia: boolean) => [
+// Updated pricing matrix matrix generator handling 20% discount bounds for yearly billing cycles
+const plansData = (isIndia: boolean, billingCycle: "monthly" | "yearly") => [
   {
     name: "Free",
     price: isIndia ? "₹0" : "$0",
@@ -30,7 +31,9 @@ const plansData = (isIndia: boolean) => [
   },
   {
     name: "Pro",
-    price: isIndia ? "₹2,499" : "$29",
+    price: isIndia 
+      ? (billingCycle === "monthly" ? "₹2,499" : "₹1,999") 
+      : (billingCycle === "monthly" ? "$29" : "$23"),
     description: "Advanced runtime monitoring and guardrails built for growing developer teams",
     features: [
       "Bring Your Own API Key (BYOK) Native Integration",
@@ -55,7 +58,9 @@ const plansData = (isIndia: boolean) => [
   },
   {
     name: "Enterprise",
-    price: isIndia ? "₹16,999" : "$199",
+    price: isIndia 
+      ? (billingCycle === "monthly" ? "₹16,999" : "₹13,599") 
+      : (billingCycle === "monthly" ? "$199" : "$159"),
     description: "Full scaling capacity and high-throughput logging for high-volume agent frameworks",
     features: [
       "Bring Your Own API Key (BYOK) Native Integration",
@@ -80,6 +85,7 @@ const plansData = (isIndia: boolean) => [
 export default function BillingPage() {
   const [currentPlan, setCurrentPlan] = useState("free");
   const [isIndia, setIsIndia] = useState(true);
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [detectingRegion, setDetectingRegion] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
@@ -134,7 +140,9 @@ export default function BillingPage() {
     setCheckoutLoading(true);
     try {
       const selectedGateway = isIndia ? "razorpay" : "paddle";
-      const response = await createCheckout(planName, selectedGateway);
+      
+      // 💡 Modified: Now cleanly appends the billing cycle parameter string into the endpoint query string context
+      const response = await createCheckout(planName, selectedGateway, billingCycle);
 
       // ============================================
       // PROVIDER ENGINE A: PADDLE SMART OVERLAY (GLOBAL USD)
@@ -155,7 +163,8 @@ export default function BillingPage() {
           settings: {
             displayMode: "overlay",
             theme: "dark",
-            locale: "en"
+            locale: "en",
+            successUrl: response.success_url // 🚀 CLOSED THE LOOP: Paddle handles the successful route shift automatically!
           }
         });
         return;
@@ -169,7 +178,7 @@ export default function BillingPage() {
         amount: response.amount,
         currency: response.currency,
         name: "Agent Pulse",
-        description: `Upgrade to ${planName.toUpperCase()} Plan Tier`,
+        description: `Upgrade to ${planName.toUpperCase()} Plan (${billingCycle.toUpperCase()})`,
         order_id: response.order_id,
         handler: function (razorpayResponse: any) {
           if (razorpayResponse.razorpay_payment_id) {
@@ -199,7 +208,7 @@ export default function BillingPage() {
     }
   };
 
-  const dynamicPlans = plansData(isIndia);
+  const dynamicPlans = plansData(isIndia, billingCycle);
 
   return (
     <div className="min-h-screen bg-[#020817] text-white overflow-y-auto relative p-4 md:p-8">
@@ -248,6 +257,35 @@ export default function BillingPage() {
           </div>
         </div>
 
+        {/* 🔄 MODERN INTERVAL CYCLE TOGGLE INTERFACE */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-slate-950 border border-slate-800 p-1 rounded-2xl flex items-center relative shadow-2xl">
+            <button
+              onClick={() => setBillingCycle("monthly")}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black font-mono tracking-widest uppercase transition-all duration-300 ${
+                billingCycle === "monthly" 
+                  ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-black shadow-lg shadow-cyan-500/20" 
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Monthly Base
+            </button>
+            <button
+              onClick={() => setBillingCycle("yearly")}
+              className={`px-6 py-2.5 rounded-xl text-xs font-black font-mono tracking-widest uppercase transition-all duration-300 flex items-center gap-2 ${
+                billingCycle === "yearly" 
+                  ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-black shadow-lg shadow-cyan-500/20" 
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              Yearly Loop
+              <span className="bg-green-500/20 text-green-400 text-[9px] px-2 py-0.5 rounded-md border border-green-500/30">
+                SAVE 20%
+              </span>
+            </button>
+          </div>
+        </div>
+
         {/* ACTIVE PLATFORM WORKSPACE METRICS BLOCK */}
         <div className="mb-8 rounded-[32px] border border-green-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-6 md:p-8">
           <div className="flex items-center justify-between">
@@ -261,12 +299,12 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* PRICING MATRIX ROW - FIXES FLEX OVERFLOWS ENTIRELY */}
+        {/* PRICING MATRIX ROW */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
           {dynamicPlans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative rounded-[36px] border ${plan.border} bg-[linear-gradient(180deg,#0b1220_0%,#091525_100%)] p-6 md:p-8 flex flex-col justify-between overflow-hidden backdrop-blur-xl transition-all duration-300 min-h-[680px] ${
+              className={`relative rounded-[36px] border ${plan.border} bg-[linear-gradient(180deg,#0b1220_0%,#091525_100%)] p-6 md:p-8 flex flex-col justify-between overflow-hidden backdrop-blur-xl transition-all duration-300 min-h-[700px] ${
                 plan.featured ? "shadow-[0_0_50px_rgba(34,211,238,0.15)] ring-1 ring-cyan-400/20" : ""
               }`}
             >
@@ -300,7 +338,9 @@ export default function BillingPage() {
                   <div className="mb-6">
                     <div className="flex items-end gap-1.5">
                       <span className="text-4xl md:text-5xl font-black tracking-tight">{plan.price}</span>
-                      <span className="text-slate-400 text-xs font-mono mb-1">/month</span>
+                      <span className="text-slate-400 text-xs font-mono mb-1">
+                        /{billingCycle === "monthly" ? "month" : "month, billed yearly"}
+                      </span>
                     </div>
                     <p className="mt-2 text-slate-400 text-xs leading-relaxed min-h-[32px]">{plan.description}</p>
                   </div>

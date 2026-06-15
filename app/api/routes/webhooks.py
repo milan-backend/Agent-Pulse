@@ -81,6 +81,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         notes = order_entity.get("notes", {}) or payment_entity.get("notes", {})
         workspace_id_raw = notes.get("workspace_id")
         plan_name = notes.get("plan_name")
+        billing_cycle = notes.get("billing_cycle", "monthly")  # 💡 Extract cycle metadata safely
 
         if not workspace_id_raw or not plan_name:
             return {"status": "ignored", "reason": "Missing custom references."}
@@ -99,7 +100,10 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
         if not plan:
             return {"status": "error", "reason": "Product entry matching dropped."}
 
-        expiration_deadline = datetime.utcnow() + timedelta(days=30)
+        # 💡 DYNAMIC TIMELINE CALCULATION: Apply 365 days if user picked yearly
+        days_to_add = 365 if billing_cycle == "yearly" else 30
+        expiration_deadline = datetime.utcnow() + timedelta(days=days_to_add)
+        
         subscription = db.query(WorkspaceSubscription).filter(WorkspaceSubscription.workspace_id == workspace_id).first()
 
         if subscription:
@@ -120,7 +124,7 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
             db.add(subscription)
 
         db.commit()
-        print(f"🎉 SECURED INR PROVISIONING COMPLETE: Workspace {workspace_id} upgraded to {plan_name}.")
+        print(f"🎉 SECURED INR PROVISIONING COMPLETE: Workspace {workspace_id} upgraded to {plan_name} ({billing_cycle}).")
         return {"status": "success"}
 
     return {"status": "ignored"}
@@ -162,6 +166,7 @@ async def paddle_webhook(request: Request, db: Session = Depends(get_db)):
         
         workspace_id_raw = custom_data.get("workspace_id")
         plan_name = custom_data.get("plan_name")
+        billing_cycle = custom_data.get("billing_cycle", "monthly")  # 💡 Extract cycle metadata safely
         paddle_id = data_object.get("id") 
 
         if not workspace_id_raw or not plan_name or not paddle_id:
@@ -181,7 +186,10 @@ async def paddle_webhook(request: Request, db: Session = Depends(get_db)):
         if not plan:
             return {"status": "error", "reason": "Target global tier identifier dropped from system models configuration arrays."}
 
-        expiration_deadline = datetime.utcnow() + timedelta(days=30)
+        # 💡 DYNAMIC TIMELINE CALCULATION: Apply 365 days if user picked yearly
+        days_to_add = 365 if billing_cycle == "yearly" else 30
+        expiration_deadline = datetime.utcnow() + timedelta(days=days_to_add)
+        
         subscription = db.query(WorkspaceSubscription).filter(WorkspaceSubscription.workspace_id == workspace_id).first()
 
         customer_email = data_object.get("customer", {}).get("email", "paddle_global_user")
@@ -204,7 +212,7 @@ async def paddle_webhook(request: Request, db: Session = Depends(get_db)):
             db.add(subscription)
 
         db.commit()
-        print(f"🎉 SECURED USD PROVISIONING COMPLETE: Global Workspace {workspace_id} upgraded to {plan_name} via Paddle Sandbox.")
+        print(f"🎉 SECURED USD PROVISIONING COMPLETE: Global Workspace {workspace_id} upgraded to {plan_name} ({billing_cycle}) via Paddle Sandbox.")
         return {"status": "success"}
 
     return {"status": "ignored", "message": f"Event type '{event_type}' unmapped inside execution router endpoints rules."}
