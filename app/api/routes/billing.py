@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/checkout/{plan_name}")
 def create_checkout(
     plan_name: str,
-    gateway: str,  # Passed dynamically via frontend execution query strings ("razorpay" or "gumroad")
+    gateway: str,  # Passed dynamically via frontend execution query strings ("razorpay" or "paddle")
     workspace_id: str = Header(...),
     db: Session = Depends(get_db)
 ):

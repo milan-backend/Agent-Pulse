@@ -4,13 +4,42 @@ import hmac
 import hashlib
 from datetime import datetime, timedelta
 from hmac import compare_digest
-from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi import APIRouter, Request, HTTPException, Depends, Header
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.plan import Plan
 from app.models.workspace_subscription import WorkspaceSubscription
 
 router = APIRouter()
+
+def verify_paddle_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """
+    Validates the cryptographic header hash sent by Paddle Sandbox to block fake injection attacks.
+    Paddle signatures arrive formatted inside a standard 'ts=12345;h=hashvalue' structural array string.
+    """
+    if not signature or ":" not in signature:
+        return False
+        
+    try:
+        parts = dict(item.split("=") for item in signature.split(";"))
+        timestamp = parts.get("ts")
+        provided_hash = parts.get("h")
+        
+        if not timestamp or not provided_hash:
+            return False
+            
+        # Re-verify the verification payload template sequence
+        signed_payload = f"{timestamp}:{payload.decode('utf-8')}"
+        computed_hash = hmac.new(
+            secret.encode('utf-8'),
+            signed_payload.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+        
+        return compare_digest(computed_hash, provided_hash)
+    except Exception:
+        return False
+
 
 # ============================================
 # ENDPOINT: RAZORPAY SECURE INCOMING WEBHOOK
@@ -86,54 +115,78 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 # ============================================
-# ENDPOINT: GUMROAD SECURE INCOMING WEBHOOK
+# ENDPOINT: PADDLE SECURE INCOMING WEBHOOK [REPLACED GUMROAD]
 # ============================================
-@router.post("/gumroad")
-async def gumroad_webhook(request: Request, db: Session = Depends(get_db)):
-    # Gumroad sends transactional pings formatted via standard urlencoded form data fields
-    form_data = await request.form()
-    
-    workspace_id_raw = form_data.get("workspace_id")
-    plan_name = form_data.get("plan_name")
-    sale_id = form_data.get("sale_id") # Unique Gumroad identifier parameter 
+@router.post("/paddle")
+async def paddle_webhook(
+    request: Request, 
+    paddle_signature: str = Header(None), 
+    db: Session = Depends(get_db)
+):
+    raw_body = await request.body()
+    webhook_secret = os.getenv("PADDLE_WEBHOOK_SECRET", "")
 
-    if not workspace_id_raw or not plan_name or not sale_id:
-        print("🚨 GUMROAD TRACKING: Incoming sale structure dropped due to missing routing attributes.")
-        return {"status": "ignored", "reason": "Missing custom reference metrics tags."}
+    if not webhook_secret:
+        raise HTTPException(status_code=500, detail="Paddle verification webhook secret token missing inside server .env config arrays.")
 
-    workspace_id = uuid.UUID(workspace_id_raw)
+    # 🛡️ COUNTERPART VALIDATION GUARD: Drop unverified faked network payload dispatches instantly
+    if not verify_paddle_webhook_signature(raw_body, paddle_signature, webhook_secret):
+        print("🚨 SECURITY THREAT BLOCK: Faked Paddle Webhook Verification Request Blocked!")
+        raise HTTPException(status_code=401, detail="Invalid webhook signature provenance profile.")
 
-    # 🛡️ LOOPHOLE SAFEGUARD: Idempotency Duplicate Entry Protection for international users
-    dup = db.query(WorkspaceSubscription).filter(
-        WorkspaceSubscription.stripe_subscription_id == sale_id
-    ).first()
-    if dup:
-        return {"status": "success", "detail": "Idempotent block: International order already provisioned."}
+    event_data = await request.json()
+    event_type = event_data.get("event_type")
 
-    plan = db.query(Plan).filter(Plan.name == plan_name.lower().strip()).first()
-    if not plan:
-        return {"status": "error", "reason": "Target plan configuration not initialized."}
+    # Capture both baseline checkout conversions and automatic cycle transaction executions
+    if event_type in ["transaction.completed", "subscription.created"]:
+        data_object = event_data.get("data", {})
+        custom_data = data_object.get("custom_data", {})
+        
+        workspace_id_raw = custom_data.get("workspace_id")
+        plan_name = custom_data.get("plan_name")
+        paddle_id = data_object.get("id") # Unique dynamic transactional record handle string
 
-    expiration_deadline = datetime.utcnow() + timedelta(days=30)
-    subscription = db.query(WorkspaceSubscription).filter(WorkspaceSubscription.workspace_id == workspace_id).first()
+        if not workspace_id_raw or not plan_name or not paddle_id:
+            print("⚠️ PADDLE HOOK WARNING: Missing transaction contextual metadata identifiers.")
+            return {"status": "ignored", "reason": "Missing operational context parameters attributes."}
 
-    if subscription:
-        subscription.plan_id = plan.id
-        subscription.status = "active"
-        subscription.stripe_customer_id = form_data.get("email", "gumroad_global_user")
-        subscription.stripe_subscription_id = sale_id
-        subscription.current_period_end = expiration_deadline
-    else:
-        subscription = WorkspaceSubscription(
-            workspace_id=workspace_id,
-            plan_id=plan.id,
-            status="active",
-            stripe_customer_id=form_data.get("email", "gumroad_global_user"),
-            stripe_subscription_id=sale_id,
-            current_period_end=expiration_deadline
-        )
-        db.add(subscription)
+        workspace_id = uuid.UUID(workspace_id_raw)
 
-    db.commit()
-    print(f"🎉 SECURED USD PROVISIONING COMPLETE: Global Workspace {workspace_id} upgraded to {plan_name} via Gumroad.")
-    return {"status": "success"}
+        # 🛡️ LOOPHOLE SAFEGUARD: Idempotency Entry Tracking Constraint Enforcement
+        dup = db.query(WorkspaceSubscription).filter(
+            WorkspaceSubscription.stripe_subscription_id == paddle_id
+        ).first()
+        if dup:
+            return {"status": "success", "detail": "Idempotent block: Transaction already successfully evaluated."}
+
+        plan = db.query(Plan).filter(Plan.name == plan_name.lower().strip()).first()
+        if not plan:
+            return {"status": "error", "reason": "Target global tier identifier dropped from system models configuration arrays."}
+
+        expiration_deadline = datetime.utcnow() + timedelta(days=30)
+        subscription = db.query(WorkspaceSubscription).filter(WorkspaceSubscription.workspace_id == workspace_id).first()
+
+        customer_email = data_object.get("customer", {}).get("email", "paddle_global_user")
+
+        if subscription:
+            subscription.plan_id = plan.id
+            subscription.status = "active"
+            subscription.stripe_customer_id = customer_email
+            subscription.stripe_subscription_id = paddle_id
+            subscription.current_period_end = expiration_deadline
+        else:
+            subscription = WorkspaceSubscription(
+                workspace_id=workspace_id,
+                plan_id=plan.id,
+                status="active",
+                stripe_customer_id=customer_email,
+                stripe_subscription_id=paddle_id,
+                current_period_end=expiration_deadline
+            )
+            db.add(subscription)
+
+        db.commit()
+        print(f"🎉 SECURED USD PROVISIONING COMPLETE: Global Workspace {workspace_id} upgraded to {plan_name} via Paddle Sandbox.")
+        return {"status": "success"}
+
+    return {"status": "ignored", "message": f"Event type '{event_type}' unmapped inside execution router endpoints rules."}

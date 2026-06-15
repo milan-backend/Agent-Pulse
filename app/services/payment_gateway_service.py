@@ -58,26 +58,32 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
             raise HTTPException(status_code=500, detail=f"Razorpay Order Fault: {str(e)}")
 
     # ============================================
-    # GATEWAY ROUTING: GUMROAD (GLOBAL - $ USD)
+    # GATEWAY ROUTING: PADDLE (GLOBAL - $ USD) [REPLACED GUMROAD]
     # ============================================
-    elif gateway == "gumroad":
-        # Fetch your distinct static Gumroad redirect payment URLs from your environment variables
-        if plan_name == "pro":
-            gumroad_base_url = os.getenv("GUMROAD_PRO_PRODUCT_URL") # e.g. https://yourname.gumroad.com/l/proplan
-        else:
-            gumroad_base_url = os.getenv("GUMROAD_ENTERPRISE_PRODUCT_URL")
+    elif gateway == "paddle":
+        # Fetch the distinct Paddle Price IDs created in your sandbox dashboard catalog
+        price_id = (
+            os.getenv("PADDLE_PRO_PRICE_ID")
+            if plan_name == "pro"
+            else os.getenv("PADDLE_ENTERPRISE_PRICE_ID")
+        )
 
-        if not gumroad_base_url:
-            raise HTTPException(status_code=500, detail="Gumroad product string missing inside .env variables.")
+        if not price_id:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Paddle Price ID for '{plan_name}' missing inside environment variables."
+            )
 
-        # Secure query parameter nesting context mapping
-        checkout_url = f"{gumroad_base_url}?workspace_id={str(workspace_id)}&plan_name={plan_name}"
-        
+        # Return parameters for frontend Paddle.js initialization
         return {
-            "gateway": "gumroad",
-            "checkout_url": checkout_url,
-            "success_url": success_url,
-            "cancel_url": cancel_url
+            "gateway": "paddle",
+            "environment": os.getenv("PADDLE_ENVIRONMENT", "sandbox"),
+            "client_token": os.getenv("PADDLE_CLIENT_TOKEN"),
+            "price_id": price_id,
+            "custom_data": {
+                "workspace_id": str(workspace_id),
+                "plan_name": plan_name
+            }
         }
 
     else:
