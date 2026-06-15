@@ -120,7 +120,6 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
 @router.post("/paddle")
 async def paddle_webhook(
     request: Request, 
-    paddle_signature: str = Header(None), 
     db: Session = Depends(get_db)
 ):
     raw_body = await request.body()
@@ -128,6 +127,13 @@ async def paddle_webhook(
 
     if not webhook_secret:
         raise HTTPException(status_code=500, detail="Paddle verification webhook secret token missing inside server .env config arrays.")
+
+    # 🛡️ FIX: Safely pull the header directly from request properties to stop the 405 loop
+    paddle_signature = request.headers.get("Paddle-Signature", "")
+
+    if not paddle_signature:
+        print("🚨 SECURITY REJECTION: Missing Paddle-Signature header context.")
+        raise HTTPException(status_code=401, detail="Missing verification header metadata.")
 
     # 🛡️ COUNTERPART VALIDATION GUARD: Drop unverified faked network payload dispatches instantly
     if not verify_paddle_webhook_signature(raw_body, paddle_signature, webhook_secret):
