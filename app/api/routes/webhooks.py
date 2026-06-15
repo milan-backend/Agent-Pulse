@@ -12,24 +12,35 @@ from app.models.workspace_subscription import WorkspaceSubscription
 
 router = APIRouter()
 
+# =========================================================================
+# 🔒 UTILITY: PADDLE WEBHOOK CRYPTO VERIFICATION SIGNATURE HANDLER
+# =========================================================================
 def verify_paddle_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
     """
     Validates the cryptographic header hash sent by Paddle Sandbox to block fake injection attacks.
-    Paddle signatures arrive formatted inside a standard 'ts=12345;h=hashvalue' structural array string.
     """
-    if not signature or ":" not in signature:
+    if not signature or ";" not in signature:
+        print("⚠️ Verification rejected: Signature missing or invalid structure.")
         return False
         
     try:
-        parts = dict(item.split("=") for item in signature.split(";"))
+        parts = {}
+        for item in signature.split(";"):
+            if "=" in item:
+                k, v = item.split("=", 1)
+                parts[k.strip()] = v.strip()
+
         timestamp = parts.get("ts")
-        provided_hash = parts.get("h")
+        # 💡 Paddle Billing uses 'h1' format for modern security payloads
+        provided_hash = parts.get("h1") or parts.get("h")
         
         if not timestamp or not provided_hash:
+            print("⚠️ Verification rejected: Missing ts or h1 inside signature components.")
             return False
             
-        # Re-verify the verification payload template sequence
-        signed_payload = f"{timestamp}:{payload.decode('utf-8')}"
+        payload_str = payload.decode('utf-8')
+        signed_payload = f"{timestamp}:{payload_str}"
+        
         computed_hash = hmac.new(
             secret.encode('utf-8'),
             signed_payload.encode('utf-8'),
@@ -37,7 +48,8 @@ def verify_paddle_webhook_signature(payload: bytes, signature: str, secret: str)
         ).hexdigest()
         
         return compare_digest(computed_hash, provided_hash)
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Exception occurred during crypto signature verification: {str(e)}")
         return False
 
 
@@ -115,27 +127,28 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 # ============================================
-# ENDPOINT: PADDLE SECURE INCOMING WEBHOOK [REPLACED GUMROAD]
+# ENDPOINT: PADDLE SECURE INCOMING WEBHOOK
 # ============================================
 @router.post("/paddle")
-async def paddle_webhook(
-    request: Request, 
-    db: Session = Depends(get_db)
-):
+async def paddle_webhook(request: Request, db: Session = Depends(get_db)):
     raw_body = await request.body()
     webhook_secret = os.getenv("PADDLE_WEBHOOK_SECRET", "")
 
     if not webhook_secret:
         raise HTTPException(status_code=500, detail="Paddle verification webhook secret token missing inside server .env config arrays.")
 
-    # 🛡️ FIX: Safely pull the header directly from request properties to stop the 405 loop
-    paddle_signature = request.headers.get("Paddle-Signature", "")
+    # 💡 Pull header directly from incoming request properties
+    paddle_signature = request.headers.get("paddle-signature") or request.headers.get("Paddle-Signature", "")
+
+    print(f"📋 DEBUG: Incoming Payload Length: {len(raw_body)} bytes")
+    print(f"🔑 DEBUG: Received Header String: {paddle_signature}")
+    print(f"🔒 DEBUG: Verification Secret Configured: {webhook_secret[:15]}...")
 
     if not paddle_signature:
-        print("🚨 SECURITY REJECTION: Missing Paddle-Signature header context.")
+        print("🚨 SECURITY REJECTION: Missing paddle-signature header context completely.")
         raise HTTPException(status_code=401, detail="Missing verification header metadata.")
 
-    # 🛡️ COUNTERPART VALIDATION GUARD: Drop unverified faked network payload dispatches instantly
+    # 🛡️ CALL THE FUNCTION WE DEFINED AT THE TOP!
     if not verify_paddle_webhook_signature(raw_body, paddle_signature, webhook_secret):
         print("🚨 SECURITY THREAT BLOCK: Faked Paddle Webhook Verification Request Blocked!")
         raise HTTPException(status_code=401, detail="Invalid webhook signature provenance profile.")
@@ -143,14 +156,13 @@ async def paddle_webhook(
     event_data = await request.json()
     event_type = event_data.get("event_type")
 
-    # Capture both baseline checkout conversions and automatic cycle transaction executions
     if event_type in ["transaction.completed", "subscription.created"]:
         data_object = event_data.get("data", {})
         custom_data = data_object.get("custom_data", {})
         
         workspace_id_raw = custom_data.get("workspace_id")
         plan_name = custom_data.get("plan_name")
-        paddle_id = data_object.get("id") # Unique dynamic transactional record handle string
+        paddle_id = data_object.get("id") 
 
         if not workspace_id_raw or not plan_name or not paddle_id:
             print("⚠️ PADDLE HOOK WARNING: Missing transaction contextual metadata identifiers.")
@@ -158,7 +170,7 @@ async def paddle_webhook(
 
         workspace_id = uuid.UUID(workspace_id_raw)
 
-        # 🛡️ LOOPHOLE SAFEGUARD: Idempotency Entry Tracking Constraint Enforcement
+        # 🛡️ LOOPHOLE SAFEGUARD: Idempotency Entry Tracking
         dup = db.query(WorkspaceSubscription).filter(
             WorkspaceSubscription.stripe_subscription_id == paddle_id
         ).first()
