@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createCheckout, getCurrentPlan } from "@/components/api";
-import { initializePaddle, Paddle } from "@paddle/paddle-js"; // Imports the new Paddle SDK engine
-import { CreditCard, Rocket, Shield, Cpu, CheckCircle2, Sparkles } from "lucide-react";
+import { initializePaddle, Paddle } from "@paddle/paddle-js";
+import { CreditCard, Rocket, Shield, Cpu, CheckCircle2, Sparkles, Globe } from "lucide-react";
 
 const plansData = (isIndia: boolean) => [
   {
@@ -83,7 +83,7 @@ export default function BillingPage() {
   const [detectingRegion, setDetectingRegion] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
-  // 1. REGION LOCATION TARGET DETECTION DETECTOR
+  // 1. DYNAMIC REGION DETECTION SNIFFER WITH ERROR FALLBACK
   useEffect(() => {
     const locateUserRegion = async () => {
       try {
@@ -93,7 +93,7 @@ export default function BillingPage() {
           setIsIndia(data.countryCode === "IN");
         }
       } catch (err) {
-        console.error("Geotargeting layer failed to reach endpoint nodes. Falling back to INR currency context:", err);
+        console.error("Geotargeting layer failed to reach endpoint nodes. Falling back to INR:", err);
         setIsIndia(true);
       } finally {
         setDetectingRegion(false);
@@ -102,7 +102,7 @@ export default function BillingPage() {
     locateUserRegion();
   }, []);
 
-  // 2. INJECT RAZORPAY NATIVE JS WRAPPER CLIENT SCRIPT ONCE
+  // 2. MOUNT RAZORPAY FRONTEND SCRIPT LAYER
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -116,7 +116,7 @@ export default function BillingPage() {
     };
   }, []);
 
-  // 3. FETCH ACCOUNT CURRENT PLAN STATUS OVERVIEW
+  // 3. FETCH USER SUBSCRIPTION RECORD STATE ON INITIALIZATION
   useEffect(() => {
     const loadPlan = async () => {
       try {
@@ -129,37 +129,29 @@ export default function BillingPage() {
     loadPlan();
   }, []);
 
-  // 4. SECURED BILLING SYSTEM GATEWAY SWITCHBOARD EXECUTER
+  // 4. CORE GATEWAY ROUTER WEBHOOK INITIALIZATION COORD
   const handleCheckout = async (planName: string) => {
     setCheckoutLoading(true);
     try {
-      // Determine target payment provider infrastructure based on region
       const selectedGateway = isIndia ? "razorpay" : "paddle";
-
       const response = await createCheckout(planName, selectedGateway);
 
       // ============================================
-      // EXECUTION PROFILE: PADDLE ROUTE (GLOBAL USD) [REPLACED GUMROAD]
+      // PROVIDER ENGINE A: PADDLE SMART OVERLAY (GLOBAL USD)
       // ============================================
       if (selectedGateway === "paddle") {
         const paddleInstance: Paddle | undefined = await initializePaddle({
-          environment: response.environment, // loads 'sandbox' securely from backend
-          token: response.client_token       // matches your platform token signature string
+          environment: response.environment,
+          token: response.client_token
         });
 
         if (!paddleInstance) {
           throw new Error("Unable to build frontend client-side Paddle.js framework context wrapper.");
         }
 
-        // Open the native dark mode overlay frame box
         paddleInstance.Checkout.open({
-          items: [
-            {
-              priceId: response.price_id, // maps directly to the Dashboard catalog tier ID string
-              quantity: 1
-            }
-          ],
-          customData: response.custom_data, // forwards your user workspace tracking credentials metadata securely
+          items: [{ priceId: response.price_id, quantity: 1 }],
+          customData: response.custom_data,
           settings: {
             displayMode: "overlay",
             theme: "dark",
@@ -170,7 +162,7 @@ export default function BillingPage() {
       }
 
       // ============================================
-      // EXECUTION PROFILE: RAZORPAY ROUTE (INDIA INR)
+      // PROVIDER ENGINE B: RAZORPAY NATIVE (DOMESTIC INR)
       // ============================================
       const options = {
         key: response.key_id,
@@ -188,7 +180,7 @@ export default function BillingPage() {
         },
         modal: {
           ondismiss: function () {
-            console.log("Payment wizard initialization box exited by user context.");
+            console.log("Payment wizard closed by user context.");
           }
         },
         theme: {
@@ -201,7 +193,7 @@ export default function BillingPage() {
 
     } catch (error) {
       console.error(error);
-      alert("Checkout generation session crashed. Please retry the configuration process.");
+      alert("Checkout session generation faulted. Please verify environment endpoints.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -210,106 +202,134 @@ export default function BillingPage() {
   const dynamicPlans = plansData(isIndia);
 
   return (
-    <div className="min-h-screen bg-[#020817] text-white overflow-hidden relative p-8">
-      {/* Background Glow Accents */}
-      <div className="absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-cyan-500/10 blur-3xl" />
-      <div className="absolute bottom-0 left-0 h-[500px] w-[500px] rounded-full bg-fuchsia-500/10 blur-3xl" />
+    <div className="min-h-screen bg-[#020817] text-white overflow-y-auto relative p-4 md:p-8">
+      {/* Background Glow Context Utilities */}
+      <div className="absolute top-0 right-0 h-[500px] w-[500px] rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 h-[500px] w-[500px] rounded-full bg-fuchsia-500/10 blur-3xl pointer-events-none" />
 
-      <div className="relative z-10">
-        {/* Hero Card Container */}
+      <div className="relative z-10 max-w-7xl mx-auto">
+        
+        {/* HERO HEADER AREA CONTAINER */}
         <div className="rounded-[40px] border border-cyan-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-6 md:p-8 overflow-hidden relative mb-6">
           <div className="absolute top-0 right-0 h-96 w-96 rounded-full bg-cyan-500/10 blur-3xl" />
-          <div className="relative z-10">
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-5">
-              <div className="h-16 w-16 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 flex items-center justify-center">
-                <CreditCard size={42} className="text-cyan-300" />
+              <div className="h-16 w-16 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 flex items-center justify-center shrink-0">
+                <CreditCard size={32} className="text-cyan-300" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-black leading-none">AI Runtime Pricing</h1>
-                <p className="mt-4 text-slate-400 text-base md:text-lg max-w-3xl">
-                  Scale autonomous AI agents from solo experimentation to enterprise-grade runtime orchestration.
-                  {detectingRegion ? " (Analyzing localized geolocation...)" : isIndia ? " 🇮🇳 Domestic INR Tier Active" : " 🌐 Global USD Tier Active"}
+                <h1 className="text-3xl md:text-5xl font-black tracking-tight leading-none">AI Runtime Pricing</h1>
+                <p className="mt-2 text-slate-400 text-sm md:text-base max-w-xl">
+                  Scale autonomous AI agents seamlessly from solo sandboxes to enterprise clusters.
+                  {detectingRegion ? " (Sniffing locale...)" : isIndia ? " 🇮🇳 Domestic INR Tier Active" : " 🌐 Global USD Tier Active"}
                 </p>
               </div>
+            </div>
+
+            {/* 🎉 THE MANUAL TESTING SWITCHBOARD OVERRIDE CONTROLLER */}
+            <div className="bg-slate-900/90 border border-slate-800 p-1.5 rounded-2xl flex items-center gap-2 self-start md:self-auto shrink-0">
+              <button
+                onClick={() => setIsIndia(true)}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                  isIndia ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                🇮🇳 INR TIER
+              </button>
+              <button
+                onClick={() => setIsIndia(false)}
+                className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                  !isIndia ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                <Globe size={12} /> GLOBAL USD TIER
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Current Active Plan Monitoring Card */}
-        <div className="mb-8 rounded-[32px] border border-green-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-8">
+        {/* ACTIVE PLATFORM WORKSPACE METRICS BLOCK */}
+        <div className="mb-8 rounded-[32px] border border-green-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-6 md:p-8">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-green-300 font-black uppercase tracking-wider">Your Current Plan</p>
-              <h2 className="text-4xl font-black mt-2">{currentPlan.toUpperCase()}</h2>
+              <p className="text-green-300 font-black text-xs md:text-sm uppercase tracking-widest">Your Current Plan</p>
+              <h2 className="text-3xl md:text-4xl font-black mt-1">{currentPlan.toUpperCase()}</h2>
             </div>
-            <div className="px-5 py-3 rounded-full bg-green-500/10 border border-green-500/20 text-green-300 font-black">
+            <div className="px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20 text-green-300 font-black text-xs">
               ACTIVE
             </div>
           </div>
         </div>
 
-        {/* Three Plan Matrix Array Grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+        {/* PRICING MATRIX ROW - FIXES FLEX OVERFLOWS ENTIRELY */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
           {dynamicPlans.map((plan) => (
             <div
               key={plan.name}
-              className={`relative rounded-[36px] border ${plan.border} bg-[linear-gradient(180deg,#0b1220_0%,#091525_100%)] p-10 overflow-hidden backdrop-blur-xl transition-all hover:scale-[1.02] hover:shadow-[0_0_60px_rgba(34,211,238,0.12)] ${
-                plan.featured ? "scale-[1.03] shadow-[0_0_60px_rgba(34,211,238,0.18)]" : ""
+              className={`relative rounded-[36px] border ${plan.border} bg-[linear-gradient(180deg,#0b1220_0%,#091525_100%)] p-6 md:p-8 flex flex-col justify-between overflow-hidden backdrop-blur-xl transition-all duration-300 min-h-[680px] ${
+                plan.featured ? "shadow-[0_0_50px_rgba(34,211,238,0.15)] ring-1 ring-cyan-400/20" : ""
               }`}
             >
-              <div className={`absolute inset-0 bg-gradient-to-br ${plan.glow} opacity-40`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${plan.glow} opacity-30 pointer-events-none`} />
 
-              <div className="relative z-10">
-                {plan.featured && (
-                  <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 mb-6">
-                    <Sparkles size={16} className="text-cyan-300" />
-                    <span className="text-sm font-black text-cyan-300">MOST POPULAR</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-4xl font-black">{plan.name}</h2>
-                  <div className="h-14 w-14 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
-                    {plan.name === "Enterprise" ? (
-                      <Shield className="text-fuchsia-300" />
-                    ) : plan.name === "Pro" ? (
-                      <Rocket className="text-cyan-300" />
-                    ) : (
-                      <Cpu className="text-slate-300" />
-                    )}
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <div className="flex items-end gap-2">
-                    <span className="text-6xl font-black">{plan.price}</span>
-                    <span className="text-slate-400 mb-2">/month</span>
-                  </div>
-                  <p className="mt-3 text-slate-400 text-sm">{plan.description}</p>
-                </div>
-
-                <div className="space-y-4 mb-10">
-                  {plan.features.map((feature) => (
-                    <div key={feature} className="flex items-center gap-3">
-                      <CheckCircle2 size={18} className="text-cyan-300 shrink-0" />
-                      <span className="text-slate-200 text-sm">{feature}</span>
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div>
+                  {/* FEATURED CARD INSIGNIA FLAG */}
+                  {plan.featured && (
+                    <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 mb-4">
+                      <Sparkles size={12} className="text-cyan-300" />
+                      <span className="text-[10px] font-black text-cyan-300 tracking-wider">MOST POPULAR</span>
                     </div>
-                  ))}
+                  )}
+
+                  {/* HEADER META PROPERTIES */}
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-2xl md:text-3xl font-black tracking-tight">{plan.name}</h2>
+                    <div className="h-12 w-12 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center shrink-0">
+                      {plan.name === "Enterprise" ? (
+                        <Shield size={20} className="text-fuchsia-300" />
+                      ) : plan.name === "Pro" ? (
+                        <Rocket size={20} className="text-cyan-300" />
+                      ) : (
+                        <Cpu size={20} className="text-slate-300" />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* PRICING DISPLAY ELEMENT STRIPS */}
+                  <div className="mb-6">
+                    <div className="flex items-end gap-1.5">
+                      <span className="text-4xl md:text-5xl font-black tracking-tight">{plan.price}</span>
+                      <span className="text-slate-400 text-xs font-mono mb-1">/month</span>
+                    </div>
+                    <p className="mt-2 text-slate-400 text-xs leading-relaxed min-h-[32px]">{plan.description}</p>
+                  </div>
+
+                  {/* SECURED SCROLLABLE/FLEXIBLE FEATURES ARRAY POOL */}
+                  <div className="space-y-3.5 border-t border-slate-900 pt-5 mb-8">
+                    {plan.features.map((feature) => (
+                      <div key={feature} className="flex items-start gap-2.5">
+                        <CheckCircle2 size={14} className="text-cyan-300 mt-0.5 shrink-0" />
+                        <span className="text-slate-200 text-xs font-medium leading-normal">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
+                {/* CALL TO ACTION BUTTON ENGINE */}
                 <button
                   disabled={currentPlan === plan.name.toLowerCase() || checkoutLoading}
                   onClick={() => plan.planKey && handleCheckout(plan.planKey)}
-                  className={`w-full py-4 rounded-2xl font-black text-lg transition-all ${
+                  className={`w-full py-4 rounded-xl font-black font-mono text-xs uppercase tracking-widest transition-all mt-auto ${
                     currentPlan === plan.name.toLowerCase()
-                      ? "bg-green-600 text-white cursor-not-allowed"
-                      : "bg-cyan-400 text-black hover:scale-[1.02] hover:shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+                      ? "bg-green-600/20 border border-green-500/30 text-green-400 cursor-not-allowed"
+                      : "bg-cyan-400 text-black hover:shadow-[0_0_25px_rgba(34,211,238,0.35)] active:scale-[0.99]"
                   } ${checkoutLoading ? "opacity-50 cursor-wait" : ""}`}
                 >
                   {currentPlan === plan.name.toLowerCase()
-                    ? "Current Plan"
+                    ? "Current Active Plan"
                     : checkoutLoading
-                    ? "Processing..."
+                    ? "Building Session..."
                     : plan.button}
                 </button>
               </div>
