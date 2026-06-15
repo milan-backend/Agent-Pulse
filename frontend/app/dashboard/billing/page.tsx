@@ -19,10 +19,10 @@ import {
   Sparkles,
 } from "lucide-react";
 
-const plans = [
+const plansData = (isIndia: boolean) => [
   {
     name: "Free",
-    price: "$0",
+    price: isIndia ? "₹0" : "$0",
     description:
       "For solo runtime experimentation",
 
@@ -53,7 +53,7 @@ const plans = [
   {
     name: "Pro",
 
-    price: "$29",
+    price: isIndia ? "₹2,499" : "$29",
 
     description:
       "Advanced orchestration for growing AI teams",
@@ -89,7 +89,7 @@ const plans = [
   {
     name: "Enterprise",
 
-    price: "$199",
+    price: isIndia ? "₹16,999" : "$199",
 
     description:
       "Enterprise-scale autonomous AI infrastructure",
@@ -130,7 +130,36 @@ export default function BillingPage() {
     setCurrentPlan
   ] = useState("free");
 
-  // Dynamically inject Razorpay Checkout Script when component mounts
+  const [
+    isIndia,
+    setIsIndia
+  ] = useState(true); // Default fallback safe state config
+
+  const [
+    detectingRegion,
+    setDetectingRegion
+  ] = useState(true);
+
+  // 1. REGION LOCATION TARGET DETECTION DETECTOR
+  useEffect(() => {
+    const locateUserRegion = async () => {
+      try {
+        const response = await fetch("https://ip-api.com/json/");
+        const data = await response.json();
+        if (data && data.countryCode) {
+          setIsIndia(data.countryCode === "IN");
+        }
+      } catch (err) {
+        console.error("Geotargeting layer failed to reach endpoint nodes. Falling back to INR currency context:", err);
+        setIsIndia(true);
+      } finally {
+        setDetectingRegion(false);
+      }
+    };
+    locateUserRegion();
+  }, []);
+
+  // 2. INJECT RAZORPAY NATIVE JS WRAPPER CLIENT SCRIPT ONCE
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -138,7 +167,9 @@ export default function BillingPage() {
     document.body.appendChild(script);
 
     return () => {
-      document.body.removeChild(script);
+      if (document.body.contains(script)) {
+        document.body.removeChild(script);
+      }
     };
   }, []);
 
@@ -175,19 +206,39 @@ export default function BillingPage() {
   ) => {
 
     try {
-      // Step 1: Hit backend to register Razorpay order context
-      const response = await createCheckout(planName);
+      // Determine the target payment provider routing branch based on geographic ip location
+      const selectedGateway = isIndia ? "razorpay" : "gumroad";
 
-      // Step 2: Configure native Razorpay checkout modal overlay window
+      const response =
+        await createCheckout(
+          planName,
+          selectedGateway
+        );
+
+      // ============================================
+      // EXECUTION PROFILE: GUMROAD ROUTE (GLOBAL)
+      // ============================================
+      if (selectedGateway === "gumroad") {
+        if (response.checkout_url) {
+          // Direct secure redirect mapping to your Gumroad MoR Product Portal Link
+          window.location.href = response.checkout_url;
+        } else {
+          alert("Gumroad integration link failed to initialize.");
+        }
+        return;
+      }
+
+      // ============================================
+      // EXECUTION PROFILE: RAZORPAY ROUTE (INDIA)
+      // ============================================
       const options = {
-        key: response.key_id, 
-        amount: response.amount, 
+        key: response.key_id,
+        amount: response.amount,
         currency: response.currency,
         name: "Agent Pulse",
-        description: `Upgrade to ${planName.toUpperCase()} Plan`,
+        description: `Upgrade to ${planName.toUpperCase()} Plan Tier`,
         order_id: response.order_id,
         handler: function (razorpayResponse: any) {
-          // Triggered on clean payment verification signature check matching
           if (razorpayResponse.razorpay_payment_id) {
             window.location.href = response.success_url;
           } else {
@@ -196,15 +247,14 @@ export default function BillingPage() {
         },
         modal: {
           ondismiss: function () {
-            console.log("Checkout overlay wizard dropped by user context");
+            console.log("Payment wizard initialization box exited by user context.");
           }
         },
         theme: {
-          color: "#22d3ee" // Cyan accent matching your visual application layout
+          color: "#22d3ee" // Smooth cyan hex tracking matching layout colors
         }
       };
 
-      // Open Razorpay payment box
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
 
@@ -212,9 +262,11 @@ export default function BillingPage() {
 
       console.error(error);
 
-      alert("Checkout failed");
+      alert("Checkout generation failed. Please refresh your session.");
     }
   };
+
+  const dynamicPlans = plansData(isIndia);
 
   return (
 
@@ -342,6 +394,7 @@ export default function BillingPage() {
                   from solo experimentation
                   to enterprise-grade runtime
                   orchestration.
+                  {detectingRegion ? " (Analyzing localized geolocation...)" : isIndia ? " 🇮🇳 Domestic INR Tier Active" : " 🌐 Global USD Tier Active"}
                 </p>
               </div>
             </div>
@@ -423,7 +476,7 @@ export default function BillingPage() {
           "
         >
 
-          {plans.map((plan) => (
+          {dynamicPlans.map((plan) => (
 
             <div
               key={plan.name}

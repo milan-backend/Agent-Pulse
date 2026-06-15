@@ -373,12 +373,12 @@ export const getCurrentUser = async () => {
 };
 
 /* =========================================================
-BILLING
+BILLING (UPDATED WITH DUAL-GATEWAY DESCRIPTOR ROUTING)
 ========================================================= */
 
-export const createCheckout = async (planName: string) => {
-  // Appending the gateway query context to target Razorpay safely
-  return request(`/billing/checkout/${planName}?gateway=razorpay`, {
+export const createCheckout = async (planName: string, gateway: string) => {
+  // Appends gateway ("razorpay" or "gumroad") cleanly as a query string parameter context
+  return request(`/billing/checkout/${planName}?gateway=${gateway}`, {
     method: "POST",
   });
 };

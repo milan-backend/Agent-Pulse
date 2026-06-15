@@ -9,7 +9,7 @@ router = APIRouter()
 @router.post("/checkout/{plan_name}")
 def create_checkout(
     plan_name: str,
-    gateway: str,  # "razorpay" or "gumroad" passed as query parameter
+    gateway: str,  # Passed dynamically via frontend execution query strings ("razorpay" or "gumroad")
     workspace_id: str = Header(...),
     db: Session = Depends(get_db)
 ):
@@ -22,22 +22,28 @@ def create_checkout(
 
 @router.get("/current-plan")
 def get_current_plan(workspace_id: str = Header(...), db: Session = Depends(get_db)):
-    # EXACT LOGIC UNTOUCHED
-    subscription = (
-        db.query(WorkspaceSubscription)
-        .filter(
-            WorkspaceSubscription.workspace_id == workspace_id,
-            WorkspaceSubscription.status == "active"
-        )
-        .first()
-    )
+    subscription = db.query(WorkspaceSubscription).filter(
+        WorkspaceSubscription.workspace_id == workspace_id
+    ).first()
 
     if not subscription:
-        raise HTTPException(status_code=404, detail="No active subscription")
+        raise HTTPException(status_code=404, detail="No billing record discovered.")
+
+    # Safe Lazy-Expiration Validation Check Loophole Safeguard
+    from datetime import datetime
+    if subscription.status == "active" and subscription.current_period_end:
+        if datetime.utcnow() > subscription.current_period_end:
+            from app.models.plan import Plan
+            free_plan = db.query(Plan).filter(Plan.name == "free").first()
+            subscription.status = "canceled"
+            if free_plan:
+                subscription.plan_id = free_plan.id
+            subscription.stripe_subscription_id = None
+            db.commit()
 
     plan = subscription.plan
     if not plan:
-        raise HTTPException(status_code=404, detail="Plan not found")
+        raise HTTPException(status_code=404, detail="Plan configuration dropped.")
 
     return {
         "plan": plan.name,

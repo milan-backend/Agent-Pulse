@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 
 export default function Footer() {
   return (
@@ -56,63 +57,43 @@ export default function Footer() {
           </div>
 
           <div className="flex flex-wrap justify-center gap-x-8 gap-y-2 text-sm font-medium text-slate-400">
-            <a
-              href="#product"
-              className="hover:text-white transition-colors"
-            >
+            <Link href="/#features" className="hover:text-white transition-colors">
               Product
-            </a>
+            </Link>
 
-            <a
-              href="#features"
-              className="hover:text-white transition-colors"
-            >
+            <Link href="/#features" className="hover:text-white transition-colors">
               Features
-            </a>
+            </Link>
 
-            <a
-              href="#pricing"
-              className="hover:text-white transition-colors"
-            >
+            <Link href="/pricing" className="hover:text-white transition-colors">
               Pricing
-            </a>
+            </Link>
 
-            <a
-              href="#docs"
-              className="hover:text-white transition-colors"
-            >
+            <Link href="/#docs" className="hover:text-white transition-colors">
               Documentation
-            </a>
+            </Link>
 
-            <a
-              href="#github"
-              className="hover:text-white transition-colors"
-            >
+            <a href="#github" className="hover:text-white transition-colors">
               GitHub
             </a>
 
-            <a
-              href="#linkedin"
-              className="hover:text-white transition-colors"
-            >
+            <a href="#linkedin" className="hover:text-white transition-colors">
               LinkedIn
             </a>
           </div>
 
-          <div className="flex gap-6 text-xs font-mono text-slate-600">
-            <a
-              href="#privacy"
-              className="hover:text-slate-400 transition-colors"
-            >
+          <div className="flex flex-wrap justify-center gap-6 text-xs font-mono text-slate-600">
+            <Link href="/privacy" className="hover:text-slate-400 transition-colors">
               Privacy Policy
-            </a>
+            </Link>
 
-            <a
-              href="#terms"
-              className="hover:text-slate-400 transition-colors"
-            >
+            <Link href="/terms" className="hover:text-slate-400 transition-colors">
               Terms of Service
-            </a>
+            </Link>
+
+            <Link href="/refund" className="hover:text-slate-400 transition-colors">
+              Refund Policy
+            </Link>
           </div>
         </div>
       </footer>

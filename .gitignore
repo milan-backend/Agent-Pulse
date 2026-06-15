@@ -128,3 +128,4 @@ chroma_db_check.py
 inject_refresh_tokens.py
 locustfile.py
 seed_plans.py
+test_reset.py

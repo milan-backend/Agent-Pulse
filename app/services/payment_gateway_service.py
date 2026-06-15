@@ -4,37 +4,34 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.workspace_subscription import WorkspaceSubscription
 
-# Initialize Razorpay Client with environment variables safely
+# Initialize Razorpay Client with live environment configs
 razorpay_client = razorpay.Client(
     auth=(os.getenv("RAZORPAY_KEY_ID", ""), os.getenv("RAZORPAY_KEY_SECRET", ""))
 )
 
 def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: str, gateway: str):
-    # EXACT LOGIC: Verify workspace subscription row exists first, matching your old Stripe code
+    # SECURITY ASPECT: Guarantee reference workspace constraint validation
     subscription = (
         db.query(WorkspaceSubscription)
         .filter(WorkspaceSubscription.workspace_id == workspace_id)
         .first()
     )
     if not subscription:
-        raise HTTPException(status_code=404, detail="Subscription not found")
+        raise HTTPException(status_code=404, detail="Subscription workspace node not found.")
 
-    # Guard check for plans
     if plan_name not in ["pro", "enterprise"]:
-        raise HTTPException(status_code=400, detail="Invalid plan name")
+        raise HTTPException(status_code=400, detail="Invalid plan scope selection.")
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-    
-    # EXACT SUCCESS AND CANCEL URL LOGIC FROM YOUR STRIPE FILE
     success_url = f"{frontend_url}/dashboard/billing/success"
     cancel_url = f"{frontend_url}/dashboard/billing/cancel"
 
     # ============================================
-    # GATEWAY: RAZORPAY (FOR INDIA)
+    # GATEWAY ROUTING: RAZORPAY (INDIA - ₹ INR)
     # ============================================
     if gateway == "razorpay":
-        # Amount in paise (e.g., ₹999 = 99900 paise, ₹4999 = 499900 paise)
-        amount = 99900 if plan_name == "pro" else 499900  
+        # INR Pricing mapped in total Paise units (₹2499 and ₹16999)
+        amount = 249900 if plan_name == "pro" else 1699900  
         
         try:
             order_data = {
@@ -48,7 +45,6 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
             }
             razorpay_order = razorpay_client.order.create(data=order_data)
             
-            # Returning order details along with exact success/cancel landing URLs for your frontend modal callback
             return {
                 "gateway": "razorpay",
                 "order_id": razorpay_order["id"],
@@ -59,23 +55,23 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
                 "cancel_url": cancel_url
             }
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Razorpay Order Error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Razorpay Order Fault: {str(e)}")
 
     # ============================================
-    # GATEWAY: GUMROAD (FOR OUTSIDE INDIA)
+    # GATEWAY ROUTING: GUMROAD (GLOBAL - $ USD)
     # ============================================
     elif gateway == "gumroad":
-        # Pulling your custom product URLs generated from Gumroad Dashboard
+        # Fetch your distinct static Gumroad redirect payment URLs from your environment variables
         if plan_name == "pro":
-            gumroad_base_url = os.getenv("GUMROAD_PRO_PRODUCT_URL") 
+            gumroad_base_url = os.getenv("GUMROAD_PRO_PRODUCT_URL") # e.g. https://yourname.gumroad.com/l/proplan
         else:
             gumroad_base_url = os.getenv("GUMROAD_ENTERPRISE_PRODUCT_URL")
 
         if not gumroad_base_url:
-            raise HTTPException(status_code=500, detail="Gumroad product configuration missing in .env")
+            raise HTTPException(status_code=500, detail="Gumroad product string missing inside .env variables.")
 
-        # Appending custom fields so Gumroad passes them back to your webhook along with return logic
-        checkout_url = f"{gumroad_base_url}?workspace_id={workspace_id}&plan_name={plan_name}"
+        # Secure query parameter nesting context mapping
+        checkout_url = f"{gumroad_base_url}?workspace_id={str(workspace_id)}&plan_name={plan_name}"
         
         return {
             "gateway": "gumroad",
@@ -85,4 +81,4 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
         }
 
     else:
-        raise HTTPException(status_code=400, detail="Invalid payment gateway selected")
+        raise HTTPException(status_code=400, detail="Selected target gateway variation is unauthorized.")
