@@ -3,15 +3,15 @@
 import React from "react";
 import MatrixBg from "@/components/MatrixBg"; // Safely imports your matrix rain effect
 import Navbar from "@/components/Navbar";     // Safely imports your top navbar header
-import Footer from "@/components/Footer";     // Safely imports your footer navigation layout[cite: 4, 10]
+import Footer from "@/components/Footer";     // Safely imports your footer navigation layout
 
 export default function TermsOfService() {
   return (
     <div className="min-h-screen bg-black text-slate-100 font-sans selection:bg-cyan-500/30 relative overflow-x-hidden">
-      {/* 1. Matrix Animation & Background Glows Context Layer[cite: 10] */}
+      {/* 1. Matrix Animation & Background Glows Context Layer */}
       <MatrixBg />
       
-      {/* 2. Top Header Navigation Bar[cite: 10] */}
+      {/* 2. Top Header Navigation Bar */}
       <Navbar />
 
       {/* 3. Main Centered Legal Content Shell */}
@@ -24,7 +24,7 @@ export default function TermsOfService() {
             Terms of Service
           </h1>
           <p className="text-xs text-slate-500 font-mono mt-2">
-            LAST MODIFIED: JUNE 15, 2026
+            LAST MODIFIED: JUNE 16, 2026
           </p>
         </div>
 
@@ -83,7 +83,11 @@ export default function TermsOfService() {
               6. Subscription Billing, Fees, & Gateways
             </h2>
             <p>
-              Access to our Pro Stack and Enterprise planes is governed by recurring subscription tiers[cite: 7]. Fees are billed in advance on a recurring monthly or annual processing track. By mapping a corporate card or digital wallet provider through our compliant checkout gateways, you authorize AgentPulse and its Merchant of Record infrastructure to process automated payments until you submit an explicit cancellation request inside your billing sub-dashboard.
+              Access to our Pro Stack and Enterprise planes is governed by recurring subscription tiers. Fees are billed in advance on a recurring monthly or annual processing track. By mapping a corporate card or digital wallet provider through our compliant checkout gateways, you authorize AgentPulse and its Merchant of Record infrastructure to process automated payments until you submit an explicit cancellation request inside your billing sub-dashboard.
+            </p>
+            {/* 💡 CRITICAL ADDITION: BYOK LEGAL DISCLOSURE CLAUSE */}
+            <p className="mt-3 border-l-2 border-cyan-500/30 pl-4 bg-slate-950/40 p-3 rounded-r-xl text-slate-300">
+              <strong>6a. Bring Your Own Key (BYOK) Responsibility:</strong> AgentPulse provisions orchestrational middleware, live dashboard webhooks, security guardrails, and concurrency metrics. Subscription fees do <strong>not</strong> include Large Language Model (LLM) tokens or API generation usage charges. Users are strictly required to supply their own proprietary API keys (OpenAI, Anthropic, Gemini, etc.). All backend token consumption costs are billed directly to the user by their respective AI model vendors and remain completely independent of AgentPulse invoicing.
             </p>
           </section>
 
@@ -116,7 +120,7 @@ export default function TermsOfService() {
         </div>
       </main>
 
-      {/* 4. Bottom Retention Banner & Footer Links Grid[cite: 4, 10] */}
+      {/* 4. Bottom Retention Banner & Footer Links Grid */}
       <Footer />
     </div>
   );

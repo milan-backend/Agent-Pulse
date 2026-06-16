@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { CheckCircle2, Cpu, HelpCircle, ChevronDown } from "lucide-react";
+import { CheckCircle2, Cpu, HelpCircle, ChevronDown, Key } from "lucide-react";
 import MatrixBg from "@/components/MatrixBg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -20,6 +20,10 @@ export default function PricingPage() {
   };
 
   const faqs: FAQItem[] = [
+    {
+      question: "Are LLM token generation fees included in the subscription plans?",
+      answer: "No. AgentPulse runs on a strict Bring Your Own Key (BYOK) model. Your subscription handles infrastructure, concurrency mechanics, dashboard webhooks, analytics, and loop guardrails. The raw AI tokens consumed during agent runtimes are billed directly to your personal OpenAI, Anthropic, or Gemini API keys by those respective platforms.",
+    },
     {
       question: "What happens when the Free Sandbox shared key hits a resource limit?",
       answer: "Since the Free Sandbox tier runs on a shared community API key, it is subject to global rate limits. If the shared tier resources are exhausted, the app will return a standard HTTP 429 error and instantly prompt you with a dashboard suggestion to add your own personal API key (BYOK) so your agents can keep running without interruptions.",
@@ -44,7 +48,7 @@ export default function PricingPage() {
             Predictable <span className="bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">Runtime Pricing</span>
           </h1>
           <p className="text-slate-400 text-sm md:text-base font-sans max-w-xl mx-auto">
-            Get complete visibility into your agent infrastructure. Start for free with our shared community key or scale up with custom keys.
+            Scale your autonomous agent fleets sustainably with our clean orchestration infrastructure. Connect your own custom model keys for complete workspace autonomy.
           </p>
 
           {/* DYNAMIC MONTHLY / YEARLY TOGGLE */}
@@ -68,6 +72,19 @@ export default function PricingPage() {
           </div>
         </div>
 
+        {/* 🔑 HIGH-VISIBILITY BYOK ARCHITECTURAL TRANSPARENCY NOTICE */}
+        <div className="max-w-4xl mx-auto mb-16 rounded-3xl border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-transparent p-6 flex flex-col md:flex-row items-start md:items-center gap-5 backdrop-blur-md">
+          <div className="h-12 w-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
+            <Key size={22} className="text-amber-400" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-amber-300 uppercase tracking-wide font-mono">Bring Your Own Key (BYOK) Operational Policy</h4>
+            <p className="text-slate-400 text-xs mt-1 leading-relaxed">
+              AgentPulse charges exclusively for running infrastructure coordination and loops. **Users link their own external keys** (OpenAI, Anthropic, or Gemini) inside settings. Any inference usage costs are paid directly to those respective AI key providers and are not included in subscription plan costs.
+            </p>
+          </div>
+        </div>
+
         {/* CARDS MATRIX */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto mb-28">
           
@@ -76,7 +93,7 @@ export default function PricingPage() {
             <div>
               <h3 className="text-xl font-black text-white">Free Sandbox</h3>
               <p className="text-xs text-slate-400 mt-2 min-h-[32px]">
-                Perfect for workflow testing using our shared community keys.
+                Perfect for basic workflow testing using our shared community keys or your personal links.
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
@@ -123,7 +140,7 @@ export default function PricingPage() {
                 Pro Stack <Cpu size={16} className="text-cyan-400" />
               </h3>
               <p className="text-xs text-slate-400 mt-2 min-h-[32px]">
-                Advanced runtime controls and custom key integrations for team collaboration.
+                Advanced runtime controls and custom key integrations for team collaboration workflows.
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
@@ -159,7 +176,7 @@ export default function PricingPage() {
             </div>
 
             <button className="w-full mt-8 py-4 bg-cyan-400 text-black font-black font-mono text-xs uppercase tracking-wider rounded-xl hover:shadow-[0_0_20px_rgba(34,211,238,0.4)] hover:scale-[1.01] transition-all">
-              Upgrade to Pro Plane
+              Upgrade to Pro Plan
             </button>
           </div>
 
@@ -168,7 +185,7 @@ export default function PricingPage() {
             <div>
               <h3 className="text-xl font-black text-white">Enterprise Node</h3>
               <p className="text-xs text-slate-400 mt-2 min-h-[32px]">
-                Full scaling metrics capacity and high-throughput logs for corporate deployments.
+                Full scaling metrics capacity and high-throughput logs for corporate cluster deployments.
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
