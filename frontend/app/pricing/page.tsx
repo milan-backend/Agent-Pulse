@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { CheckCircle2, Cpu, HelpCircle, ChevronDown, Key } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { CheckCircle2, Cpu, ChevronDown, Key, Globe } from "lucide-react";
 import MatrixBg from "@/components/MatrixBg";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -14,6 +14,26 @@ interface FAQItem {
 export default function PricingPage() {
   const [isYearly, setIsYearly] = useState<boolean>(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [isIndia, setIsIndia] = useState<boolean>(true);
+  const [detectingRegion, setDetectingRegion] = useState<boolean>(true);
+
+  // Automatic locale tracking matrix context synchronization
+  useEffect(() => {
+    const locateUserRegion = async () => {
+      try {
+        const response = await fetch("https://ip-api.com/json/");
+        const data = await response.json();
+        if (data && data.countryCode) {
+          setIsIndia(data.countryCode === "IN");
+        }
+      } catch (err) {
+        setIsIndia(true); // Secure fallback constraint strategy
+      } finally {
+        setDetectingRegion(false);
+      }
+    };
+    locateUserRegion();
+  }, []);
 
   const toggleFaq = (index: number): void => {
     setOpenFaq(openFaq === index ? null : index);
@@ -49,26 +69,46 @@ export default function PricingPage() {
           </h1>
           <p className="text-slate-400 text-sm md:text-base font-sans max-w-xl mx-auto">
             Scale your autonomous agent fleets sustainably with our clean orchestration infrastructure. Connect your own custom model keys for complete workspace autonomy.
+            {detectingRegion ? " (Sniffing locale...)" : isIndia ? " 🇮🇳 INR Tier Active" : " 🌐 USD Tier Active"}
           </p>
 
-          {/* DYNAMIC MONTHLY / YEARLY TOGGLE */}
-          <div className="mt-10 inline-flex items-center gap-3 bg-slate-950 border border-slate-800 p-1.5 rounded-xl backdrop-blur-md">
-            <button
-              onClick={() => setIsYearly(false)}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all ${
-                !isYearly ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              MONTHLY
-            </button>
-            <button
-              onClick={() => setIsYearly(true)}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
-                isYearly ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              YEARLY <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wide">SAVE 20%</span>
-            </button>
+          {/* DISPLAY CONTROLS ROW */}
+          <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
+            {/* DYNAMIC MONTHLY / YEARLY TOGGLE */}
+            <div className="inline-flex items-center gap-3 bg-slate-950 border border-slate-800 p-1.5 rounded-xl backdrop-blur-md">
+              <button
+                onClick={() => setIsYearly(false)}
+                className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all ${
+                  !isYearly ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                MONTHLY
+              </button>
+              <button
+                onClick={() => setIsYearly(true)}
+                className={`px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                  isYearly ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                YEARLY <span className="text-[10px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded font-sans font-black uppercase tracking-wide">SAVE 20%</span>
+              </button>
+            </div>
+
+            {/* EXTERNAL CURRENCY FALLBACK TOGGLE */}
+            <div className="bg-slate-950 border border-slate-800 p-1.5 rounded-xl flex items-center gap-2 backdrop-blur-md">
+              <button 
+                onClick={() => setIsIndia(true)} 
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all ${isIndia ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                🇮🇳 INR
+              </button>
+              <button 
+                onClick={() => setIsIndia(false)} 
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1 ${!isIndia ? "bg-cyan-500/10 text-cyan-300 border border-cyan-500/20" : "text-slate-400 hover:text-slate-200"}`}
+              >
+                <Globe size={12} /> USD
+              </button>
+            </div>
           </div>
         </div>
 
@@ -97,7 +137,7 @@ export default function PricingPage() {
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-white">$0</span>
+                <span className="text-5xl font-black text-white">{isIndia ? "₹0" : "$0"}</span>
                 <span className="text-xs font-mono text-slate-500">/ month</span>
               </div>
 
@@ -144,10 +184,12 @@ export default function PricingPage() {
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-white">
-                  ${isYearly ? "23" : "29"}
+                <span className="text-4xl md:text-5xl font-black text-white">
+                  {isIndia 
+                    ? (isYearly ? "₹2,174" : "₹2,740") 
+                    : (isYearly ? "$23" : "$29")}
                 </span>
-                <span className="text-xs font-mono text-slate-400">/ month</span>
+                <span className="text-xs font-mono text-slate-400">/{isYearly ? "mo billed yearly" : "month"}</span>
               </div>
 
               <div className="mt-8 space-y-4 border-t border-cyan-950 pt-6">
@@ -189,10 +231,12 @@ export default function PricingPage() {
               </p>
 
               <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-5xl font-black text-white">
-                  ${isYearly ? "159" : "199"}
+                <span className="text-4xl md:text-5xl font-black text-white">
+                  {isIndia 
+                    ? (isYearly ? "₹15,025" : "₹18,805") 
+                    : (isYearly ? "$159" : "$199")}
                 </span>
-                <span className="text-xs font-mono text-slate-500">/ month</span>
+                <span className="text-xs font-mono text-slate-500">/{isYearly ? "mo billed yearly" : "month"}</span>
               </div>
 
               <div className="mt-8 space-y-4 border-t border-slate-900 pt-6">

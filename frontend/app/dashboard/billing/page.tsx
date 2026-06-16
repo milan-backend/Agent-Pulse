@@ -5,7 +5,7 @@ import { createCheckout, getCurrentPlan } from "@/components/api";
 import { initializePaddle, Paddle } from "@paddle/paddle-js";
 import { CreditCard, Rocket, Shield, Cpu, CheckCircle2, Sparkles, Globe } from "lucide-react";
 
-// Updated pricing matrix with precise math matching international conversion (₹26,085 & ₹180,300)
+// Updated pricing matrix matrix generator handling 100% value parity for Indian users across all cycles
 const plansData = (isIndia: boolean, billingCycle: "monthly" | "yearly") => [
   {
     name: "Free",
@@ -31,9 +31,9 @@ const plansData = (isIndia: boolean, billingCycle: "monthly" | "yearly") => [
   },
   {
     name: "Pro",
-    // 💡 CALCULATION: ₹26,085 / 12 = ₹2,174 (Correct parity with $276/yr)
+    // 💡 PARITY FIXED: Monthly is exactly ₹2,740 ($29) | Yearly breaks down to ₹2,174/mo ($23)
     price: isIndia 
-      ? (billingCycle === "monthly" ? "₹2,499" : "₹2,174") 
+      ? (billingCycle === "monthly" ? "₹2,740" : "₹2,174") 
       : (billingCycle === "monthly" ? "$29" : "$23"),
     description: "Advanced runtime monitoring and guardrails built for growing developer teams",
     features: [
@@ -59,9 +59,9 @@ const plansData = (isIndia: boolean, billingCycle: "monthly" | "yearly") => [
   },
   {
     name: "Enterprise",
-    // 💡 CALCULATION: ₹180,300 / 12 = ₹15,025 (Correct parity with $1,908/yr)
+    // 💡 PARITY FIXED: Monthly is exactly ₹18,805 ($199) | Yearly breaks down to ₹15,025/mo ($159)
     price: isIndia 
-      ? (billingCycle === "monthly" ? "₹16,999" : "₹15,025") 
+      ? (billingCycle === "monthly" ? "₹18,805" : "₹15,025") 
       : (billingCycle === "monthly" ? "$199" : "$159"),
     description: "Full scaling capacity and high-throughput logging for high-volume agent frameworks",
     features: [

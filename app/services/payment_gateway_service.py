@@ -35,11 +35,11 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
     if gateway == "razorpay":
         # Dynamic INR Pricing mapped in total Paise units based on billing cycle
         if plan_name == "pro":
-            # 💡 Fixed: ₹2,499/mo or ₹26,085/yr (Perfect parity with international pricing)
-            amount = 249900 if billing_cycle == "monthly" else 2608500  
+            # 💡 Fixed Parity: ₹2,740/mo or ₹26,085/yr (Perfect match with $29 and $23 plans)
+            amount = 274000 if billing_cycle == "monthly" else 2608500  
         else:
-            # 💡 Fixed: ₹16,999/mo or ₹1,80,300/yr (No additional unfair discounts for enterprise)
-            amount = 1699900 if billing_cycle == "monthly" else 18030000  
+            # 💡 Fixed Parity: ₹18,805/mo or ₹1,80,300/yr (Perfect match with $199 and $159 plans)
+            amount = 1880500 if billing_cycle == "monthly" else 18030000  
         
         try:
             order_data = {
@@ -49,7 +49,7 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
                 "notes": {
                     "workspace_id": str(workspace_id),
                     "plan_name": plan_name,
-                    "billing_cycle": billing_cycle  # 💡 Added: Webhook will read this to set correct access duration
+                    "billing_cycle": billing_cycle  # Webhook will read this to set correct access duration
                 }
             }
             razorpay_order = razorpay_client.order.create(data=order_data)
@@ -101,7 +101,7 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
             "custom_data": {
                 "workspace_id": str(workspace_id),
                 "plan_name": plan_name,
-                "billing_cycle": billing_cycle  # 💡 Added: Paddle pass-through metadata
+                "billing_cycle": billing_cycle  # Paddle pass-through metadata
             }
         }
 
