@@ -30,9 +30,11 @@ export default function Navbar() {
           <Link href="/pricing" className="text-slate-300 hover:text-cyan-400 font-bold transition-colors">
             Pricing
           </Link>
-          <Link href="/#docs" className="hover:text-white transition-colors">
-            Documentation
-          </Link>
+          // 🟢 New Correct Anchor Link inside Navbar.tsx
+          <a href="#docs" className="text-sm text-slate-400 hover:text-white font-medium transition-colors">
+           Documentation
+          </a>
+
         </div>
 
         {/* DESKTOP CALL TO ACTION BUTTONS */}
