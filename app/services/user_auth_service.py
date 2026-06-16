@@ -1,6 +1,6 @@
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, Response
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
@@ -12,7 +12,6 @@ from app.models.plan import Plan
 from app.models.workspace_subscription import WorkspaceSubscription
 from app.models.workspace_member import WorkspaceMember
 from app.models.refresh_token import RefreshToken
-from datetime import timezone
 
 from app.services.email_service import (
     send_verification_email,
@@ -255,9 +254,8 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
     if not token_record:
         raise HTTPException(status_code=401, detail="Refresh token invalid or missing")
 
-    # ✅ FIXED FOR DASHBOARD CONCURRENCY RACE CONDITIONS:
-    # If a token has already been revoked, check if it happened in the last 10 seconds.
-    # If yes, treat this as a safe concurrent dashboard loading request and pass it through smoothly.
+    # ✅ CORRECTION: The concurrency window pass-through loop handles dynamic token reuse gracefully, 
+    # but since explicit logs out completely destroy the DB record field now, this never overrides human intent.
     if token_record.revoked:
         updated_time = getattr(token_record, "updated_at", None) or getattr(token_record, "created_at", datetime.utcnow())
         if datetime.utcnow() - updated_time > timedelta(seconds=10):
@@ -265,10 +263,9 @@ def refresh_access_token(db: Session, refresh_token: str, response: Response):
             db.commit()
             raise HTTPException(status_code=401, detail="Security Warning: Token reuse detected. Session revoked.")
         
-        # Safe Pass-Through Loop: Query and return a fresh access payload mapping to the same user credentials
         new_access_payload = {
             "sub": str(token_record.user_id),
-            "exp": datetime.utcnow() + timedelta(mminutes=15)
+            "exp": datetime.utcnow() + timedelta(minutes=15)
         }
         return {
             "access_token": jwt.encode(new_access_payload, SECRET_KEY, algorithm=ALGORITHM),
@@ -323,16 +320,12 @@ def issue_websocket_ticket(user_id: str) -> str:
 # ============================================
 def logout_user(db: Session, refresh_token: str, response: Response):
     if refresh_token:
-        token_record = (
-            db.query(RefreshToken)
-            .filter(RefreshToken.token_id == refresh_token)
-            .first()
-        )
-        if token_record:
-            token_record.revoked = True
-            db.commit()
+        # 💡 FIXED: Completely wipe the token configuration record from database storage.
+        # This prevents any late browser network threads from sliding through the 10-second concurrency window.
+        db.query(RefreshToken).filter(RefreshToken.token_id == refresh_token).delete()
+        db.commit()
 
-    # ✅ FIXED FOR LOGOUT SEPARATION: Clear using matching samesite configuration fields
+    # ✅ FIXED: Clear response cookies context with matching cross-site configuration parameters
     response.delete_cookie(
         key="refresh_token", 
         path="/",
