@@ -19,8 +19,16 @@ export default function AuthBootstrap() {
       return;
     }
 
-    // 2. If no token is in storage (e.g., they closed the tab or cleared memory),
-    // check the backend to see if a valid persistent session cookie exists.
+    // 💡 NEW SECURITY GUARDRAIL: 
+    // Check if a logout action was just triggered during this browser session window.
+    // If we just logged out, completely skip trying to refresh via cookies!
+    const wasLoggedOut = sessionStorage.getItem("logged_out_marker") === "true";
+    if (wasLoggedOut) {
+      console.log("AuthBootstrap: Explicit logout detected. Auto-cookie refresh aborted.");
+      return;
+    }
+
+    // 2. If no token is in storage, check the backend to see if a valid persistent session cookie exists.
     fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
       headers: {

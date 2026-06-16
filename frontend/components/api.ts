@@ -718,7 +718,7 @@ export function createDashboardSocket(
 }
 
 /* =========================================================
-LOGOUT (FIXED: ATOMIC CLEARANCE & INTERCEPTOR BREAKAGE)
+LOGOUT (FULLY OPTIMIZED & COORD WITH BOOTSTRAP RESETS)
 ========================================================= */
 
 export function logout() {
@@ -734,18 +734,19 @@ export function logout() {
       console.error("Session cookie clearance request skipped or unauthorized:", err)
     );
 
-    // 3. Clear storage arrays cleanly
+    // 3. Clear localStorage parameters cleanly
     localStorage.removeItem("token");
     localStorage.removeItem("workspace_id");
     localStorage.removeItem("active_workspace_id");
     localStorage.removeItem("user_id");
     localStorage.removeItem("workspaces");
     
-    sessionStorage.removeItem("authenticated");
-    sessionStorage.clear(); 
+    // 4. Reset sessionStorage in correct chronological order
+    sessionStorage.clear(); // 💡 Wipes everything first
+    sessionStorage.setItem("logged_out_marker", "true"); // 💡 Sets the marker safely right after clearance
 
-    // 4. Force strict location routing step to drop transient loop cycles
-    window.location.href = "/login";
+    // 5. Force strict location routing to root homepage where AuthBootstrap is waiting!
+    window.location.href = "/";
   }
 }
 
