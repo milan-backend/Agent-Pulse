@@ -25,6 +25,7 @@ function authHeaders() {
 
 // Global flags to manage unified token refresh states without deadlock
 let isRefreshing = false;
+let isLoggingOut = false; // 💡 Added: Prevents race conditions during logout execution
 let refreshSubscribers: (() => void)[] = [];
 
 function onTokenRefreshed() {
@@ -40,7 +41,7 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
       method: options.method || "GET",
       headers: finalHeaders,
       body: options.body instanceof FormData ? options.body : (options.body ? JSON.stringify(options.body) : undefined),
-      credentials:"include",
+      credentials: "include",
     });
   };
 
@@ -48,6 +49,13 @@ async function request(endpoint: string, options: RequestOptions = {}): Promise<
 
   // INTERCEPTOR: Handle 401 Unauthorized errors and safely execute token rotation
   if (response.status === 401 && endpoint !== "/auth/login" && endpoint !== "/auth/refresh") {
+    
+    // 💡 Security Guardrail: Explicitly bypass auto-refresh if logging out
+    if (isLoggingOut) {
+      console.warn("Intercepted 401 during explicit logout execution. Refresh halted.");
+      throw new Error("Unauthorized during logout state.");
+    }
+
     if (typeof window !== "undefined") {
       console.warn("Access token expired, initializing automatic refresh rotation...");
 
@@ -134,10 +142,6 @@ BRING YOUR OWN KEYS (BYOK) INTEGRATION ENDPOINTS (FIXED ROUTING)
 ========================================================= */
 
 export const apiKeyApi = {
-  /**
-   * Safe metadata lookup to discover active key status.
-   * Scopes strictly based on presence of agentId query contexts.
-   */
   getKeyStatus: async (
     workspaceId?: string | null, 
     provider: string = "gemini",
@@ -165,11 +169,6 @@ export const apiKeyApi = {
     });
   },
 
-  /**
-   * Connect and live-verify an AI console token string.
-   * Passes workspace_id in mandatory header context.
-   * ✅ FIXED SIGNATURE: Fully maps labels, selected agent arrays, and global defaults to backend fields
-   */
   connectKey: async (
     provider: string, 
     apiKey: string, 
@@ -210,9 +209,6 @@ export const apiKeyApi = {
     });
   },
 
-  /**
-   * Completely erase configuration rows from backend storage tables.
-   */
   disconnectKey: async (
     provider: string, 
     workspaceId?: string | null,
@@ -242,9 +238,6 @@ export const apiKeyApi = {
     });
   },
 
-  /**
-   * Designate a provider key as the scoped primary default target.
-   */
   setDefaultProvider: async (
     provider: string, 
     workspaceId?: string | null, 
@@ -274,9 +267,6 @@ export const apiKeyApi = {
     });
   },
 
-  /**
-   * Upgraded Multi-Provider Collector: Lists all named configurations inside a workspace.
-   */
   listWorkspaceProviders: async (workspaceId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const headers: Record<string, string> = {
@@ -364,7 +354,7 @@ RESET PASSWORD
 export const resetPassword = async (token: string, new_password: string) => {
   return request("/auth/reset-password", {
     method: "POST",
-                body: { token, new_password },
+    body: { token, new_password },
   });
 };
 
@@ -377,7 +367,6 @@ BILLING (UPDATED WITH DUAL-GATEWAY & INTERVAL CYCLES)
 ========================================================= */
 
 export const createCheckout = async (planName: string, gateway: string, billingCycle: string = "monthly") => {
-  // Appends gateway and billing_cycle cleanly as a query string parameter context for FastAPI
   return request(`/billing/checkout/${planName}?gateway=${gateway}&billing_cycle=${billingCycle}`, {
     method: "POST",
   });
@@ -510,7 +499,6 @@ export const getAgent = async (agentId: string) => {
   return response?.data || response;
 };
 
-// Upgraded authorized runtime route to safely pull all workspace active agents
 export const getWorkspaceAgents = async (workspaceId: string) => {
   return request(`/dashboard/agents/?workspace_id=${workspaceId}`, {
     method: "GET"
@@ -735,7 +723,10 @@ LOGOUT (FIXED: ATOMIC CLEARANCE & INTERCEPTOR BREAKAGE)
 
 export function logout() {
   if (typeof window !== "undefined") {
-    // 1. Fire a background request to inform FastAPI to drop session state cookies
+    // 1. Immediately set the global lockout flag to kill mid-flight refreshes
+    isLoggingOut = true;
+
+    // 2. Fire background cookies clearance request to FastAPI
     fetch(`${API_URL}/auth/logout`, { 
       method: "POST",
       credentials: "include"
@@ -743,30 +734,26 @@ export function logout() {
       console.error("Session cookie clearance request skipped or unauthorized:", err)
     );
 
-    // 2. Clear out ALL standard variation key string tokens completely
+    // 3. Clear storage arrays cleanly
     localStorage.removeItem("token");
     localStorage.removeItem("workspace_id");
-    localStorage.removeItem("active_workspace_id"); // Clears custom checkout hooks
+    localStorage.removeItem("active_workspace_id");
     localStorage.removeItem("user_id");
     localStorage.removeItem("workspaces");
     
-    // 3. Clear session caches
     sessionStorage.removeItem("authenticated");
     sessionStorage.clear(); 
 
-    // 4. Force an absolute window location redirect to destroy mid-flight refresh subscribers
+    // 4. Force strict location routing step to drop transient loop cycles
     window.location.href = "/login";
   }
 }
 
 /* =========================================================
-NEW: RAG DOCUMENT MANAGEMENT INTERFACES (SYNCHRONIZED WITH DELETE)
+RAG DOCUMENT MANAGEMENT INTERFACES (SYNCHRONIZED WITH DELETE)
 ========================================================= */
 
 export const documentsApi = {
-  /**
-   * Upload raw files (TXT, PDF) securely to the background processing gateway.
-   */
   uploadDocument: async (file: File, agentId?: string | null) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
@@ -794,9 +781,6 @@ export const documentsApi = {
     });
   },
 
-  /**
-   * List all ingested secure text vectors stub instances.
-   */
   listDocuments: async (agentId?: string | null) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
@@ -821,9 +805,6 @@ export const documentsApi = {
     });
   },
 
-  /**
-   * Safely execute document destruction workflows inside multi-cloud networks.
-   */
   deleteDocument: async (documentId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
@@ -842,13 +823,10 @@ export const documentsApi = {
 };
 
 /* =========================================================
-NEW: AGENT TASKS DETAILED TELEMETRY (RAG TRACKING)
+AGENT TASKS DETAILED TELEMETRY (RAG TRACKING)
 ========================================================= */
 
 export const agentTasksApi = {
-  /**
-   * Fetch complete multi-tenant, dynamic task trace parameters and match scores.
-   */
   getTaskTelemetry: async (stepId: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
     const workspaceId = typeof window !== "undefined" ? localStorage.getItem("workspace_id") : null;
