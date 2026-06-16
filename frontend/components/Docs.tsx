@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import {
   Terminal,
   Cpu,
-  Boxes,
   Building2,
   Copy,
   Check,
@@ -18,28 +17,44 @@ export default function Docs() {
   const [activeTab, setActiveTab] = useState("free");
   const [copied, setCopied] = useState(false);
 
-  // Both pro and enterprise now map straight to your verified live MCP endpoints from swagger!
+  // Both pro and enterprise map straight to your verified live MCP endpoints from swagger!
   const codeSnippets = {
     free: `import requests
 import uuid
 
-# Fixed configurations (Normally set only once per agent initialization)
 BACKEND_URL = "https://api.agentpulseai.dev"
 AGENT_API_KEY = "ap_agent_xxxxxxxxxxxxxxxxx"
 
-# Dynamic fields (Must change or adapt per execution loop)
+# =========================================================
+# MODE A: INFRASTRUCTURE TRACING LOGS ONLY (NO AI PROMPT)
+# Leaves input_data empty to bypass external AI rate limits
+# =========================================================
+infra_payload = {
+    "task_name": "Telemetry-Sync-Run-01",  # Cooldown applied on duplicate task names
+    "input_data": {},                     # Empty object = tracing active, model skipped!
+    "idempotency_key": str(uuid.uuid4())  # Strictly unique UUID per individual call step
+}
+
+# =========================================================
+# MODE B: ACTIVE INFERENCE WORKFLOW (WITH AI PROMPT)
+# Triggers your dynamic model loops using your backend BYOK keys
+# =========================================================
+inference_payload = {
+    "task_name": "Market-Analysis-Stream",
+    "input_data": {
+        "prompt": "Analyze high-throughput real-time AI cluster workloads"
+    },
+    "idempotency_key": str(uuid.uuid4())
+}
+
+# ✅ CORRECTION: Headers fixed to use production "X-API-Key" parameter mapping
 response = requests.post(
     f"{BACKEND_URL}/steps/execute",
     headers={
-        "X-Agent-Key": AGENT_API_KEY
+        "X-API-Key": AGENT_API_KEY,
+        "Content-Type": "application/json"
     },
-    json={
-        "task_name": "Market Research Team Run",       # Change to label your active task context
-        "input_data": {
-            "prompt": "Analyze real-time AI workloads" # Insert any custom dynamic query here
-        },
-        "idempotency_key": str(uuid.uuid4())          # ALWAYS generate a unique UUID per task execution
-    }
+    json=infra_payload # Swap with inference_payload depending on operational targets
 )
 
 print(response.json())`,
@@ -183,7 +198,6 @@ print(response.json())`,
         {/* LEFT COMPONENT: CONTENT EXPLANATIONS */}
         <div className="lg:col-span-2 space-y-4">
 
-          {/* FREE PLAN DATA CONTEXT */}
           {activeTab === "free" && (
             <>
               <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-md">
@@ -191,33 +205,39 @@ print(response.json())`,
                   <Key size={14} /> API Key Management
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  When an agent is created, a unique API token key signature generates instantly. If compromised, cycle it immediately under <code className="text-slate-200 font-mono text-[11px] bg-slate-900 px-1 rounded">Agent Settings → Regenerate API Key</code> to break older configurations.
+                  When an agent is initialized, a unique API token signature generates instantly. Pass this string into the <code className="text-slate-200 font-mono text-[11px] bg-slate-900 px-1 rounded">X-API-Key</code> request header context to establish a secure database session hook.
                 </p>
               </div>
 
               <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-md font-mono text-[11px] space-y-3">
                 <div className="text-xs font-sans font-bold text-slate-300 border-b border-slate-900 pb-1.5 uppercase flex items-center gap-2">
-                  <RefreshCw size={13} className="text-cyan-400" /> Per-Task Requirements
+                  <RefreshCw size={13} className="text-cyan-400" /> Validation Parameters
                 </div>
 
                 <div>
                   <span className="text-cyan-400 font-bold">idempotency_key:</span>
-                  <p className="text-slate-400 text-xs mt-0.5">
-                    Must be completely unique for every single run execution call to eliminate race conditions and infinite prompt tracking duplication loops.
+                  <p className="text-slate-400 text-xs mt-0.5 font-sans">
+                    Enforce a strictly unique runtime hash identifier (UUIDv4) per individual network request step to prevent dirty trace data or duplicate action logging.
                   </p>
                 </div>
 
                 <div>
-                  <span className="text-cyan-400 font-bold">task_name & prompt:</span>
-                  <p className="text-slate-400 text-xs mt-0.5">
-                    Change dynamically on every single call instance depending entirely on your target workflow requirements.
+                  <span className="text-cyan-400 font-bold">task_name:</span>
+                  <p className="text-slate-400 text-xs mt-0.5 font-sans">
+                    Consecutive identical task names trigger an intentional execution cooldown limit block to protect your processing buffers against infinite loops.
+                  </p>
+                </div>
+
+                <div>
+                  <span className="text-cyan-400 font-bold">input_data:</span>
+                  <p className="text-slate-400 text-xs mt-0.5 font-sans">
+                    Flexible schema catalog object. Leave empty <code className="text-cyan-300 font-mono">{}</code> for telemetry-only tracking runs. Add a <code className="text-cyan-300 font-mono">&quot;prompt&quot;: &quot;...&quot;</code> key string context to trigger active AI inference processing cycles.
                   </p>
                 </div>
               </div>
             </>
           )}
 
-          {/* PRO PLAN DATA CONTEXT */}
           {activeTab === "pro" && (
             <>
               <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-md">
@@ -239,12 +259,11 @@ print(response.json())`,
             </>
           )}
 
-          {/* ENTERPRISE PLAN DATA CONTEXT */}
           {activeTab === "enterprise" && (
             <>
               <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-md">
                 <div className="flex items-center gap-2 text-xs font-sans text-emerald-400 font-bold mb-2">
-                  <ServerCrash size={14} /> Shared Multi-Tenant vs Dedicated Compute
+                  <ServerCrash size={14} /> Multi-Tenant vs Dedicated Compute
                 </div>
                 <p className="text-xs text-slate-400 leading-relaxed">
                   While the Pro tier processes your MCP workflows on standard shared cluster threads, the **Enterprise tier** takes your exact same MCP engine configuration and drops it onto completely isolated, single-tenant cloud node infrastructure for maximum throughput and isolation.
