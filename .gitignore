@@ -129,3 +129,4 @@ inject_refresh_tokens.py
 locustfile.py
 seed_plans.py
 test_reset.py
+test_expire.py

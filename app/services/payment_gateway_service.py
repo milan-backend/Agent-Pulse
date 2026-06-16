@@ -35,9 +35,11 @@ def create_gateway_checkout_session(db: Session, workspace_id: str, plan_name: s
     if gateway == "razorpay":
         # Dynamic INR Pricing mapped in total Paise units based on billing cycle
         if plan_name == "pro":
-            amount = 249900 if billing_cycle == "monthly" else 2499000  # e.g., ₹2,499/mo or ₹24,990/yr
+            # 💡 Fixed: ₹2,499/mo or ₹26,085/yr (Perfect parity with international pricing)
+            amount = 249900 if billing_cycle == "monthly" else 2608500  
         else:
-            amount = 1699900 if billing_cycle == "monthly" else 16999000  # e.g., ₹16,999/mo or ₹169,990/yr
+            # 💡 Fixed: ₹16,999/mo or ₹1,80,300/yr (No additional unfair discounts for enterprise)
+            amount = 1699900 if billing_cycle == "monthly" else 18030000  
         
         try:
             order_data = {
