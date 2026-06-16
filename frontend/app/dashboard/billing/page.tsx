@@ -136,7 +136,7 @@ export default function BillingPage() {
 
       if (selectedGateway === "paddle") {
         const paddleInstance: Paddle | undefined = await initializePaddle({
-          environment: response.environment,
+          environment: response.environment === "production" ? "production" : "sandbox",
           token: response.client_token
         });
 
