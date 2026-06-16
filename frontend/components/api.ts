@@ -730,11 +730,12 @@ export function createDashboardSocket(
 }
 
 /* =========================================================
-LOGOUT
+LOGOUT (FIXED: ATOMIC CLEARANCE & INTERCEPTOR BREAKAGE)
 ========================================================= */
 
 export function logout() {
   if (typeof window !== "undefined") {
+    // 1. Fire a background request to inform FastAPI to drop session state cookies
     fetch(`${API_URL}/auth/logout`, { 
       method: "POST",
       credentials: "include"
@@ -742,11 +743,18 @@ export function logout() {
       console.error("Session cookie clearance request skipped or unauthorized:", err)
     );
 
+    // 2. Clear out ALL standard variation key string tokens completely
     localStorage.removeItem("token");
     localStorage.removeItem("workspace_id");
+    localStorage.removeItem("active_workspace_id"); // Clears custom checkout hooks
     localStorage.removeItem("user_id");
     localStorage.removeItem("workspaces");
+    
+    // 3. Clear session caches
     sessionStorage.removeItem("authenticated");
+    sessionStorage.clear(); 
+
+    // 4. Force an absolute window location redirect to destroy mid-flight refresh subscribers
     window.location.href = "/login";
   }
 }
