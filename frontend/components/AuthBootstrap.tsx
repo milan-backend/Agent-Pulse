@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { API_URL } from "./api"; // Utilizing your centralized backend URL string
+import { API_URL } from "./api"; 
 
 export default function AuthBootstrap() {
   const router = useRouter();
@@ -11,30 +11,29 @@ export default function AuthBootstrap() {
   useEffect(() => {
     if (pathname !== "/") return;
 
+    // 💡 BULLETPROOF FIX: Check the URL address bar parameters instantly
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("logout") === "true") {
+        console.log("AuthBootstrap: URL flag blocks cookie execution. Staying logged out safely.");
+        return;
+      }
+    }
+
     // 1. If a valid token is present in local storage, they are logged in! 
-    // Send them directly to the dashboard immediately.
     const token = localStorage.getItem("token");
     if (token) {
       router.replace("/dashboard");
       return;
     }
 
-    // 💡 NEW SECURITY GUARDRAIL: 
-    // Check if a logout action was just triggered during this browser session window.
-    // If we just logged out, completely skip trying to refresh via cookies!
-    const wasLoggedOut = sessionStorage.getItem("logged_out_marker") === "true";
-    if (wasLoggedOut) {
-      console.log("AuthBootstrap: Explicit logout detected. Auto-cookie refresh aborted.");
-      return;
-    }
-
-    // 2. If no token is in storage, check the backend to see if a valid persistent session cookie exists.
+    // 2. Fallback check: Read persistent backend cookie layers safely
     fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      credentials: "include", // Safely forwards your HttpOnly token cookie to Render
+      credentials: "include", 
     })
       .then((res) => {
         if (res.ok) return res.json();
@@ -42,14 +41,12 @@ export default function AuthBootstrap() {
       })
       .then((data) => {
         if (data?.access_token) {
-          // Store it where your api.ts file expects it
           localStorage.setItem("token", data.access_token);
           router.replace("/dashboard");
         }
       })
       .catch(() => {
-        // Safe Catch: If no cookie exists, do absolutely nothing!
-        // The user cleanly stays on your landing page without any loops or redirects.
+        // Safe Catch: If no cookie exists, stay cleanly on landing page
       });
   }, [pathname, router]);
 

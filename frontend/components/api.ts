@@ -718,35 +718,30 @@ export function createDashboardSocket(
 }
 
 /* =========================================================
-LOGOUT (FULLY OPTIMIZED & COORD WITH BOOTSTRAP RESETS)
+LOGOUT (BULLETPROOF URL-DRIVEN PARADIGM)
 ========================================================= */
 
 export function logout() {
   if (typeof window !== "undefined") {
-    // 1. Immediately set the global lockout flag to kill mid-flight refreshes
     isLoggingOut = true;
 
-    // 2. Fire background cookies clearance request to FastAPI
+    // Fire background cookies clearance request to FastAPI
     fetch(`${API_URL}/auth/logout`, { 
       method: "POST",
       credentials: "include"
-    }).catch((err) =>
-      console.error("Session cookie clearance request skipped or unauthorized:", err)
-    );
+    }).catch((err) => console.error(err));
 
-    // 3. Clear localStorage parameters cleanly
+    // Clear local states
     localStorage.removeItem("token");
     localStorage.removeItem("workspace_id");
     localStorage.removeItem("active_workspace_id");
     localStorage.removeItem("user_id");
     localStorage.removeItem("workspaces");
     
-    // 4. Reset sessionStorage in correct chronological order
-    sessionStorage.clear(); // 💡 Wipes everything first
-    sessionStorage.setItem("logged_out_marker", "true"); // 💡 Sets the marker safely right after clearance
+    sessionStorage.clear(); 
 
-    // 5. Force strict location routing to root homepage where AuthBootstrap is waiting!
-    window.location.href = "/";
+    // 💡 FIX: Route explicitly to the landing page with an un-wipeable URL parameter string flag!
+    window.location.href = "/?logout=true";
   }
 }
 
