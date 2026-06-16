@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
-import { ArrowRight, Terminal, Cpu, ShieldAlert, Layers } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowRight, Terminal, Cpu, ShieldAlert, Layers, Play, X } from "lucide-react";
 import Link from "next/link";
 
 export default function Hero() {
+  const [isVideoOpen, setIsVideoOpen] = useState<boolean>(false);
+
   const frameworks = [
     "LangGraph", "CrewAI", "AutoGen", "OpenAI Agents", "Semantic Kernel", "Custom Agent Systems"
   ];
@@ -48,10 +50,42 @@ export default function Hero() {
           Start Free <ArrowRight size={18} />
         </Link>
 
-        <button className="px-8 py-4 border border-slate-800 bg-black text-slate-300 font-bold text-base rounded-xl hover:bg-slate-900 hover:text-white transition-all">
+        {/* 🎥 VIEW DEMO BUTTON: Triggers the video playback engine */}
+        <button 
+          onClick={() => setIsVideoOpen(true)}
+          className="px-8 py-4 border border-slate-800 bg-black text-slate-300 font-bold text-base rounded-xl hover:bg-slate-900 hover:text-white transition-all flex items-center gap-2 group"
+        >
+          <Play size={16} className="text-cyan-400 group-hover:scale-110 transition-transform" />
           View Demo
         </button>
       </div>
+
+      {/* =========================================================
+         🎥 INTERACTIVE FUZZY VIDEO MODAL WINDOW (STREAMING LOCAL ASSET)
+         ========================================================= */}
+      {isVideoOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in">
+          <div className="relative w-full max-w-4xl aspect-video rounded-3xl border border-cyan-500/20 bg-[#020817] shadow-[0_0_60px_rgba(34,211,238,0.25)] overflow-hidden">
+            
+            {/* CLOSE UTILITY TRIGGER */}
+            <button 
+              onClick={() => setIsVideoOpen(false)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-xl bg-black/60 text-slate-400 hover:text-white border border-slate-800/80 transition-all active:scale-95"
+            >
+              <X size={18} />
+            </button>
+
+            {/* RAW LOCAL VIDEO STREAMING ELEMENT */}
+            <video
+              src="/demo1.mp4"
+              controls
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Framework Compatibility Strip Container */}
       <div className="mt-20 border-t border-b border-slate-900/60 py-4 max-w-4xl mx-auto">
