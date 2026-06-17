@@ -73,12 +73,32 @@ export default function Footer() {
               Documentation
             </Link>
 
-            <a href="#github" className="hover:text-white transition-colors">
+            {/* 🟢 VERIFIED GITHUB IDENTIFIER PROFILE LINK */}
+            <a 
+              href="https://github.com/milan-backend" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="hover:text-white transition-colors"
+            >
               GitHub
             </a>
 
-            <a href="#linkedin" className="hover:text-white transition-colors">
+            {/* 🟢 VERIFIED LINKEDIN IDENTIFIER PROFILE LINK */}
+            <a 
+              href="https://www.linkedin.com/in/milan-0770b93a3" 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="hover:text-white transition-colors"
+            >
               LinkedIn
+            </a>
+
+            {/* 🟢 SYSTEM SUPPORT MAILTO REDIRECTION INTEGRATION */}
+            <a 
+              href="mailto:milancharan847@gmail.com" 
+              className="hover:text-white transition-colors text-cyan-400/90"
+            >
+              Contact Support
             </a>
           </div>
 
