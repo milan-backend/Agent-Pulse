@@ -132,3 +132,4 @@ test_reset.py
 test_expire.py
 backup_plans.py
 my_injected_plans.txt
+run_billing_test.py
