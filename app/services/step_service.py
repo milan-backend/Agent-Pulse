@@ -17,6 +17,8 @@ from app.services.cache import generate_cache_key
 from app.services.guard import evaluate_agent_runtime
 from app.services.usage_service import create_usage_event
 from app.tasks.step_tasks import process_step
+# 🟢 Import our newly configured validation gate
+from app.services.feature_access import require_runtime_hours
 
 
 async def create_step_execution(
@@ -53,6 +55,12 @@ async def create_step_execution(
             status_code=403,
             detail="Invalid subscription plan"
         )
+
+    # =========================================================================
+    # 🟢 NEW ENFORCED CEILING CRITICAL GUARD: MAX RUNTIME HOURS CEILING GATE
+    # =========================================================================
+    # Evaluates and blocks runtime loops across monthly/yearly tracking scopes.
+    require_runtime_hours(db=db, workspace_id=current_agent.workspace_id, plan=plan)
 
     # ============================================
     # TASK ACCESS CONTROL
@@ -246,14 +254,12 @@ async def create_step_execution(
         )
 
     # ============================================
-    # 🟢 DUAL-GUARD LOOKUP SHORTCUT FOR EMPTY PROMPTS
+    # DUAL-GUARD LOOKUP SHORTCUT FOR EMPTY PROMPTS
     # ============================================
     req_input = request.input_data or {}
     has_active_prompt = isinstance(req_input, dict) and bool(str(req_input.get("prompt", "")).strip())
 
     if not has_active_prompt:
-        # Instantly record completed step row directly to relational DB.
-        # This completely short-circuits Celery task queues, Gemini models, and Chroma clients.
         shortcut_step = DurableStep(
             agent_id=current_agent.id,
             workspace_id=current_agent.workspace_id,
@@ -267,7 +273,6 @@ async def create_step_execution(
             completed_at=datetime.utcnow()
         )
         
-        # Build optimized telemetry mock object matching Next.js interfaces
         shortcut_step.output_data = {
             "success": True,
             "result": "Load-test snapshot recorded successfully (Bypassed AI/Vector loop).",
@@ -303,7 +308,6 @@ async def create_step_execution(
         )
         db.commit()
 
-        # Stream asynchronous live update token flags to WebSockets
         await broadcast_message(json.dumps({"type": "mission_updated"}))
 
         return {
@@ -347,9 +351,6 @@ async def create_step_execution(
     # ============================================
     process_step.delay(str(step.id))
 
-    # ============================================
-    # WEBSOCKET EVENT
-    # ============================================
     await broadcast_message(
         json.dumps({"type": "mission_updated"})
     )
@@ -404,9 +405,6 @@ def retry_failed_step(
             detail="Retry limit exceeded"
         )
 
-    # ============================================
-    # USAGE EVENT
-    # ============================================
     create_usage_event(
         db=db,
         agent_id=current_agent.id,
@@ -415,9 +413,6 @@ def retry_failed_step(
         event_type="retry"
     )
 
-    # ============================================
-    # AUDIT LOG
-    # ============================================
     create_audit_log(
         db=db,
         agent_id=current_agent.id,
@@ -425,9 +420,6 @@ def retry_failed_step(
         action="step_retried"
     )
 
-    # ============================================
-    # RESET STEP
-    # ============================================
     new_step = DurableStep(
         agent_id=step.agent_id,
         workspace_id=step.workspace_id,
@@ -443,9 +435,6 @@ def retry_failed_step(
     db.add(new_step)
     db.commit()
 
-    # ============================================
-    # BACKGROUND TASK
-    # ============================================
     process_step.delay(str(new_step.id))
 
     return {

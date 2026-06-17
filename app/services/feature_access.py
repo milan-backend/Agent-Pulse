@@ -1,4 +1,8 @@
 from fastapi import HTTPException
+from sqlalchemy.sql import func
+from datetime import datetime, timedelta
+from app.models.durable_step import DurableStep
+from app.models.workspace_subscription import WorkspaceSubscription
 
 
 def require_feature(
@@ -168,4 +172,56 @@ def require_rag_access(
             )
         )
 
+    return True
+
+def require_runtime_hours(db, workspace_id: str, plan) -> bool:
+    """
+    Thread-safe validator checking if a workspace has enough cumulative
+    runtime compute hours left in its current monthly or yearly subscription window.
+    """
+    # 1. Fetch active subscription details to identify the current billing window start date
+    subscription = (
+        db.query(WorkspaceSubscription)
+        .filter(
+            WorkspaceSubscription.workspace_id == workspace_id,
+            WorkspaceSubscription.status == "active"
+        )
+        .first()
+    )
+    
+    if not subscription:
+        raise HTTPException(status_code=403, detail="No active subscription found.")
+
+    # Self-healing date boundary fallback if billing automation columns aren't populated yet
+    billing_period_start = getattr(subscription, "current_period_start", None)
+    if not billing_period_start:
+        billing_period_start = datetime.utcnow() - timedelta(days=30)
+
+    # 2. Query the relational engine to sum execution time box logs for this specific period
+    total_ms_used = (
+        db.query(func.sum(DurableStep.execution_time_ms))
+        .filter(
+            DurableStep.workspace_id == workspace_id,
+            DurableStep.created_at >= billing_period_start
+        )
+        .scalar()
+    ) or 0
+
+    # Convert milliseconds back to total fractional compute hours
+    total_hours_used = (total_ms_used / 1000) / 3600
+
+    # 3. Pull threshold ceiling constraints directly from the injected plan parameters metadata
+    max_allowed_hours = plan.limits.get("max_runtime_hours", 10)
+
+    # 4. Strict Block Gate: If quota is filled, raise payload error immediately
+    if total_hours_used >= max_allowed_hours:
+        raise HTTPException(
+            status_code=402,
+            detail=(
+                f"Workspace cumulative runtime hours limit exhausted. "
+                f"Used: {round(total_hours_used, 2)} hrs, Limit: {max_allowed_hours} hrs. "
+                f"Please upgrade your active workspace subscription tier to unlock capacity."
+            )
+        )
+    
     return True
