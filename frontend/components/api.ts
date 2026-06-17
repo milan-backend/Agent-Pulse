@@ -555,7 +555,7 @@ export const pauseAgentMission = async (agentId: string) => {
 };
 
 export const resumeAgentMission = async (agentId: string) => {
-  return request(`/mission-control/pause/${agentId}`, {
+  return request(`/mission-control/resume/${agentId}`, {
     method: "POST",
   });
 };

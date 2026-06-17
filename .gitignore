@@ -133,3 +133,10 @@ test_expire.py
 backup_plans.py
 my_injected_plans.txt
 run_billing_test.py
+inspect-db_limits.py
+update_db_plans.py
+verify_updated_plan.py
+update_db_features.py
+check_all_features.py
+free_plan_update.py
+restore__features.py
