@@ -8,7 +8,8 @@ import {
   Copy, 
   X,
   AlertTriangle,
-  ArrowUpRight
+  ArrowUpRight,
+  Timer
 } from "lucide-react";
 import { toast } from "sonner";
 import { createAgent, getDashboardAgents } from "@/components/api";
@@ -16,7 +17,6 @@ import { createAgent, getDashboardAgents } from "@/components/api";
 interface Agent {
   id: string;
   name: string;
-  // If your endpoint yields individual costs or runtimes, we map them optionally
   total_cost?: number; 
   execution_time_ms?: number;
 }
@@ -31,9 +31,10 @@ export default function AgentsPage() {
   const [newAgentName, setNewAgentName] = useState("");
   const [role, setRole] = useState("");
 
-  // 🟢 SUBSCRIPTION TELEMETRY STATE (Calculated dynamically on the fly)
-  const [workspaceCost, setWorkspaceCost] = useState(0);
+  // 🟢 DYNAMIC BACKEND DATABASE TELEMETRY CONFIGURATION STATES
   const [workspaceRuntimeHours, setWorkspaceRuntimeHours] = useState(0);
+  const [runtimeLimitHours, setRuntimeLimitHours] = useState(10.0); // Safe database fallback default
+  const [planTier, setPlanTier] = useState("FREE");
 
   useEffect(() => {
     fetchAgents();
@@ -47,15 +48,14 @@ export default function AgentsPage() {
       setAgents(agentList);
       setRole(data?.role || "viewer");
 
-      // 🟢 COMPUTE LIMITS DIRECTLY FROM DATA TO REUSE EXISTING ENDPOINT PIPELINES
-      // If the dashboard array provides metadata loops, we parse them automatically.
-      // For your active forced backend database simulation row, your database handles validation out-of-band!
-      // We read the global simulation variables cleanly or catch them on pings.
-      const parsedCost = data?.workspace_total_cost ?? data?.total_cost ?? 0;
+      // 🟢 EXTRACT DYNAMIC BOUNDARY TELEMETRY RETURNED NATIVELY FROM THE POSTGRES CORES
       const parsedRuntimeMs = data?.workspace_total_runtime_ms ?? 0;
+      const parsedLimitHours = data?.workspace_runtime_limit_hours ?? 10.0;
+      const parsedTier = data?.plan_tier ?? "FREE";
 
-      setWorkspaceCost(Number(parsedCost));
-      setWorkspaceRuntimeHours(parsedRuntimeMs / 3600000.0);
+      setWorkspaceRuntimeHours(parsedRuntimeMs / 3600000.0); // Exact mathematical transformation to hours
+      setRuntimeLimitHours(Number(parsedLimitHours));
+      setPlanTier(parsedTier.toUpperCase());
 
     } catch (error) {
       console.error(error);
@@ -97,16 +97,9 @@ export default function AgentsPage() {
     toast.success("API Key copied");
   }
 
-  // 🟢 FREE TIER LIMIT THRESHOLDS SETUP
-  const COST_LIMIT = 5.0;
-  const RUNTIME_LIMIT = 10.0;
-
-  // Since you forced the live database simulation row to $6.00 / 11 hours, 
-  // your backend will naturally pass or drop metrics into the view payload parameters.
-  // We explicitly trigger flags based on data context:
-  const isCostExceeded = workspaceCost >= COST_LIMIT;
-  const isRuntimeExceeded = workspaceRuntimeHours >= RUNTIME_LIMIT;
-  const isWorkspaceRestricted = isCostExceeded || isRuntimeExceeded;
+  // 🟢 LIVE EVALUATION OF RESTRICTION METRICS (NO FRONTEND HARDCODING)
+  const isRuntimeExceeded = workspaceRuntimeHours >= runtimeLimitHours;
+  const runtimePercentage = Math.min((workspaceRuntimeHours / runtimeLimitHours) * 100, 100);
 
   return (
     <main className="min-h-screen bg-[#050816] text-white p-10">
@@ -119,19 +112,19 @@ export default function AgentsPage() {
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
-          {/* CREATE AGENT BUTTON (Auto-disabled if layout restriction flags trigger) */}
+          {/* CREATE AGENT BUTTON (Natively locks down action if dynamic runtime quota is depleted) */}
           {["admin", "operator"].includes(role?.toLowerCase?.() || "") && (
             <button
-              disabled={isWorkspaceRestricted}
+              disabled={isRuntimeExceeded}
               onClick={() => setShowModal(true)}
               className="flex items-center gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-6 py-4 text-cyan-300 transition hover:bg-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/10"
             >
               <Plus size={20} />
-              <span className="font-bold">{isWorkspaceRestricted ? "Creation Blocked" : "Create Agent"}</span>
+              <span className="font-bold">{isRuntimeExceeded ? "Runtime Locked" : "Create Agent"}</span>
             </button>
           )}
 
-          {/* TOTAL */}
+          {/* TOTAL HUD COUNTER */}
           <div className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 px-8 py-6">
             <p className="text-sm text-zinc-400">Total Agents</p>
             <h2 className="mt-2 text-5xl font-black text-cyan-300">{agents.length}</h2>
@@ -139,35 +132,55 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* 💥 THE PREMIUM GLOWING ALERTS BANNER BLOCK */}
-      {isWorkspaceRestricted && (
-        <div className="mb-10 w-full rounded-3xl border border-red-500/20 bg-gradient-to-r from-red-950/40 to-red-900/10 p-5 shadow-[0_0_30px_rgba(239,68,68,0.05)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
+      {/* 💥 ADAPTIVE SYSTEM ALERTS BLOCK - TRIP LABELS DYNAMICALLY FOR THE EXACT DETECTED PLAN LEVEL */}
+      {isRuntimeExceeded && (
+        <div className="mb-6 w-full rounded-3xl border border-red-500/20 bg-gradient-to-r from-red-950/40 to-red-900/10 p-5 shadow-[0_0_30px_rgba(239,68,68,0.05)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
           <div className="flex items-start gap-4 min-w-0">
             <div className="h-12 w-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
               <AlertTriangle size={22} className="animate-pulse" />
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-black tracking-tight text-red-200">
-                {isRuntimeExceeded ? "Workspace Runtime Limit Exhausted" : "Free Tier Sandbox Wallet Exhausted"}
+                Workspace Runtime Quota Exhausted ({planTier} PLAN)
               </h3>
               <p className="text-sm text-zinc-400 mt-0.5 font-medium leading-relaxed">
-                {isRuntimeExceeded ? (
-                  <>Your background automation instances have registered a cumulative runtime of <span className="text-red-400 font-bold">{workspaceRuntimeHours.toFixed(1)} hours</span>, crossing your designated <span className="text-zinc-300 font-semibold">{RUNTIME_LIMIT} hr restriction</span>.</>
-                ) : (
-                  <>Your background automation instances have registered a cumulative cost of <span className="text-red-400 font-bold">${workspaceCost.toFixed(2)}</span>, crossing your designated <span className="text-zinc-300 font-semibold">${COST_LIMIT.toFixed(2)} sandbox restriction</span>.</>
-                )}
-                {" "}Task processing states have been temporarily locked across all active channels.
+                Your background orchestration instances have registered a cumulative runtime of <span className="text-red-400 font-bold">{workspaceRuntimeHours.toFixed(1)} hours</span>, crossing your workspace's designated database limit of <span className="text-zinc-300 font-semibold">{runtimeLimitHours.toFixed(1)} hours</span>. Step loop tasks are safely put on hold until deployment scale updates.
               </p>
             </div>
           </div>
           
           <Link 
-            href="/dashboard/billing" // 🎯 Set cleanly to your production billing route!
+            href="/dashboard/billing"
             className="shrink-0 flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-red-600 shadow-md active:scale-95"
           >
-            <span>Upgrade Plan</span>
+            <span>Upgrade Infrastructure</span>
             <ArrowUpRight size={16} />
           </Link>
+        </div>
+      )}
+
+      {/* 📊 THE LIVE CYBERPUNK WORKSPACE RUNTIME PROGRESS BOX */}
+      {!loading && (
+        <div className="mb-10 w-full bg-[#08111f]/30 border border-cyan-500/5 p-6 rounded-3xl backdrop-blur-sm">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2 text-zinc-400 font-medium">
+                <Timer size={16} className="text-cyan-400" />
+                <span>Cumulative Workspace Runtime Usage (<span className="text-cyan-300 font-mono text-xs tracking-wider">{planTier} ACCOUNT</span>)</span>
+              </div>
+              <span className={isRuntimeExceeded ? "text-red-400 font-bold text-base" : "text-cyan-300 font-bold text-base"}>
+                {workspaceRuntimeHours.toFixed(1)} hrs / {runtimeLimitHours.toFixed(1)} hrs
+              </span>
+            </div>
+            
+            {/* Visual Fluid Progress Tracking Bar System */}
+            <div className="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/5">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${isRuntimeExceeded ? "bg-red-500 shadow-[0_0_12px_#ef4444]" : "bg-cyan-500 shadow-[0_0_12px_#06b6d4]"}`}
+                style={{ width: `${runtimePercentage}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
 

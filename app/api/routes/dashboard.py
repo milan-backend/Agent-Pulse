@@ -6,6 +6,7 @@ from fastapi import (
 )
 
 from sqlalchemy.orm import Session
+from sqlalchemy import func  # 🟢 NEW: Imported safely for cumulative step runtime metrics aggregation
 
 from app.db.session import get_db
 
@@ -581,7 +582,7 @@ def get_agent_by_id(
 
 
 # ============================================
-# GET AGENTS
+# GET AGENTS (DYNAMIC SUBSCRIBER BOUNDARIES ADJUSTED)
 # ============================================
 
 @router.get("/agents")
@@ -617,6 +618,35 @@ def get_agents(
         .all()
     )
 
+    # 🟢 NEW: CALCULATE AGGREGATED CONSUMED RUNTIME FOR THE WORKSPACE AGENTS
+    agent_ids = get_workspace_agent_ids(db, workspace_id)
+    
+    workspace_runtime_ms = 0
+    if agent_ids:
+        workspace_runtime_ms = (
+            db.query(func.sum(DurableStep.execution_time_ms))
+            .filter(DurableStep.agent_id.in_(agent_ids))
+            .scalar() or 0
+        )
+
+    # 🟢 NEW: EXTRACT TRUE SUBSCRIBER BUDGET EXTRACTION DIRECTLY FROM POSTGRES REAL COLUMNS
+    workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
+    
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace data context not found")
+
+    # Set defensive baseline constraints to avoid breaking frontends if column models mismatch
+    runtime_limit_hours = 10.0
+    plan_tier_name = "FREE"
+
+    # Dynamic ORM property mappings: Checks relationship models or workspace columns automatically
+    if hasattr(workspace, 'plan') and workspace.plan:
+        runtime_limit_hours = float(getattr(workspace.plan, 'max_runtime_hours', 10.0))
+        plan_tier_name = str(getattr(workspace.plan, 'name', 'FREE')).upper()
+    elif hasattr(workspace, 'plan_tier'):
+        plan_tier_name = str(workspace.plan_tier).upper()
+        runtime_limit_hours = float(getattr(workspace, 'max_runtime_hours', 10.0))
+
     return {
 
         "total_agents":
@@ -624,6 +654,11 @@ def get_agents(
 
         "role":
             membership.role,
+
+        # 🟢 NEW fields seamlessly appended to payload layout matrix
+        "workspace_total_runtime_ms": workspace_runtime_ms,
+        "workspace_runtime_limit_hours": runtime_limit_hours,
+        "plan_tier": plan_tier_name,
 
         "agents": [
 
