@@ -204,7 +204,7 @@ export default function AgentRuntimePage() {
             </div>
             
             <Link 
-              href={`/agent/${agent.id}/settings`} // Or your billing/upgrade route context
+              href={`/dashboard/billing`} // Or your billing/upgrade route context
               className="shrink-0 flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-red-600 shadow-md active:scale-95"
             >
               <span>Upgrade Plan</span>
