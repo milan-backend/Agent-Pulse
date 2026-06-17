@@ -6,7 +6,9 @@ import {
   ChevronRight, 
   Plus, 
   Copy, 
-  X
+  X,
+  AlertTriangle,
+  ArrowUpRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { createAgent, getDashboardAgents } from "@/components/api";
@@ -14,6 +16,9 @@ import { createAgent, getDashboardAgents } from "@/components/api";
 interface Agent {
   id: string;
   name: string;
+  // If your endpoint yields individual costs or runtimes, we map them optionally
+  total_cost?: number; 
+  execution_time_ms?: number;
 }
 
 export default function AgentsPage() {
@@ -26,15 +31,32 @@ export default function AgentsPage() {
   const [newAgentName, setNewAgentName] = useState("");
   const [role, setRole] = useState("");
 
+  // 🟢 SUBSCRIPTION TELEMETRY STATE (Calculated dynamically on the fly)
+  const [workspaceCost, setWorkspaceCost] = useState(0);
+  const [workspaceRuntimeHours, setWorkspaceRuntimeHours] = useState(0);
+
   useEffect(() => {
     fetchAgents();
   }, []);
 
   async function fetchAgents() {
     try {
+      setLoading(true);
       const data = await getDashboardAgents();
-      setAgents(data?.agents || data || []);
+      const agentList: Agent[] = data?.agents || data || [];
+      setAgents(agentList);
       setRole(data?.role || "viewer");
+
+      // 🟢 COMPUTE LIMITS DIRECTLY FROM DATA TO REUSE EXISTING ENDPOINT PIPELINES
+      // If the dashboard array provides metadata loops, we parse them automatically.
+      // For your active forced backend database simulation row, your database handles validation out-of-band!
+      // We read the global simulation variables cleanly or catch them on pings.
+      const parsedCost = data?.workspace_total_cost ?? data?.total_cost ?? 0;
+      const parsedRuntimeMs = data?.workspace_total_runtime_ms ?? 0;
+
+      setWorkspaceCost(Number(parsedCost));
+      setWorkspaceRuntimeHours(parsedRuntimeMs / 3600000.0);
+
     } catch (error) {
       console.error(error);
       toast.error("Failed to fetch agents");
@@ -75,6 +97,17 @@ export default function AgentsPage() {
     toast.success("API Key copied");
   }
 
+  // 🟢 FREE TIER LIMIT THRESHOLDS SETUP
+  const COST_LIMIT = 5.0;
+  const RUNTIME_LIMIT = 10.0;
+
+  // Since you forced the live database simulation row to $6.00 / 11 hours, 
+  // your backend will naturally pass or drop metrics into the view payload parameters.
+  // We explicitly trigger flags based on data context:
+  const isCostExceeded = workspaceCost >= COST_LIMIT;
+  const isRuntimeExceeded = workspaceRuntimeHours >= RUNTIME_LIMIT;
+  const isWorkspaceRestricted = isCostExceeded || isRuntimeExceeded;
+
   return (
     <main className="min-h-screen bg-[#050816] text-white p-10">
       
@@ -86,14 +119,15 @@ export default function AgentsPage() {
         </div>
 
         <div className="flex items-center gap-4 flex-wrap">
-          {/* CREATE AGENT */}
+          {/* CREATE AGENT BUTTON (Auto-disabled if layout restriction flags trigger) */}
           {["admin", "operator"].includes(role?.toLowerCase?.() || "") && (
             <button
+              disabled={isWorkspaceRestricted}
               onClick={() => setShowModal(true)}
-              className="flex items-center gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-6 py-4 text-cyan-300 transition hover:bg-cyan-500/20"
+              className="flex items-center gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-6 py-4 text-cyan-300 transition hover:bg-cyan-500/20 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-cyan-500/10"
             >
               <Plus size={20} />
-              <span className="font-bold">Create Agent</span>
+              <span className="font-bold">{isWorkspaceRestricted ? "Creation Blocked" : "Create Agent"}</span>
             </button>
           )}
 
@@ -104,6 +138,38 @@ export default function AgentsPage() {
           </div>
         </div>
       </div>
+
+      {/* 💥 THE PREMIUM GLOWING ALERTS BANNER BLOCK */}
+      {isWorkspaceRestricted && (
+        <div className="mb-10 w-full rounded-3xl border border-red-500/20 bg-gradient-to-r from-red-950/40 to-red-900/10 p-5 shadow-[0_0_30px_rgba(239,68,68,0.05)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fade-in">
+          <div className="flex items-start gap-4 min-w-0">
+            <div className="h-12 w-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0 text-red-400 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+              <AlertTriangle size={22} className="animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-lg font-black tracking-tight text-red-200">
+                {isRuntimeExceeded ? "Workspace Runtime Limit Exhausted" : "Free Tier Sandbox Wallet Exhausted"}
+              </h3>
+              <p className="text-sm text-zinc-400 mt-0.5 font-medium leading-relaxed">
+                {isRuntimeExceeded ? (
+                  <>Your background automation instances have registered a cumulative runtime of <span className="text-red-400 font-bold">{workspaceRuntimeHours.toFixed(1)} hours</span>, crossing your designated <span className="text-zinc-300 font-semibold">{RUNTIME_LIMIT} hr restriction</span>.</>
+                ) : (
+                  <>Your background automation instances have registered a cumulative cost of <span className="text-red-400 font-bold">${workspaceCost.toFixed(2)}</span>, crossing your designated <span className="text-zinc-300 font-semibold">${COST_LIMIT.toFixed(2)} sandbox restriction</span>.</>
+                )}
+                {" "}Task processing states have been temporarily locked across all active channels.
+              </p>
+            </div>
+          </div>
+          
+          <Link 
+            href="/dashboard/billing" // 🎯 Set cleanly to your production billing route!
+            className="shrink-0 flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-red-600 shadow-md active:scale-95"
+          >
+            <span>Upgrade Plan</span>
+            <ArrowUpRight size={16} />
+          </Link>
+        </div>
+      )}
 
       {/* LOADING */}
       {loading ? (
@@ -124,11 +190,11 @@ export default function AgentsPage() {
               <div className="group rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 transition-all hover:border-cyan-400/40 hover:bg-cyan-500/5">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h2 className="text-3xl font-black text-cyan-300">{agent.name}</h2>
-                    <p className="mt-4 break-all text-sm text-zinc-500">{agent.id}</p>
+                    <h2 className="text-3xl font-black text-cyan-300 transition-colors group-hover:text-cyan-400">{agent.name}</h2>
+                    <p className="mt-4 break-all text-sm text-zinc-500 font-mono">{agent.id}</p>
                   </div>
-                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-300 transition-all group-hover:translate-x-1">
-                    <ChevronRight />
+                  <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-cyan-300 transition-all group-hover:translate-x-1 group-hover:border-cyan-400/40 group-hover:bg-cyan-500/20">
+                    <ChevronRight size={18} />
                   </div>
                 </div>
               </div>
