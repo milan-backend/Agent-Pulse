@@ -629,52 +629,39 @@ def get_agents(
             .scalar() or 0
         )
 
-    # 🟢 NEW: EXTRACT TRUE SUBSCRIBER BUDGET EXTRACTION DIRECTLY FROM POSTGRES REAL COLUMNS
+    # =========================================================================
+    # EXTRACT TRUE SUBSCRIBER BUDGET EXTRACTION FROM INTER-LINKED TABLES
+    # =========================================================================
     workspace = db.query(Workspace).filter(Workspace.id == workspace_id).first()
-    
     if not workspace:
         raise HTTPException(status_code=404, detail="Workspace data context not found")
 
-    # Set defensive baseline constraints to avoid breaking frontends if column models mismatch
     runtime_limit_hours = 10.0
     plan_tier_name = "FREE"
 
-    # Dynamic ORM property mappings: Checks relationship models or workspace columns automatically
-    if hasattr(workspace, 'plan') and workspace.plan:
-        runtime_limit_hours = float(getattr(workspace.plan, 'max_runtime_hours', 10.0))
-        plan_tier_name = str(getattr(workspace.plan, 'name', 'FREE')).upper()
-    elif hasattr(workspace, 'plan_tier'):
-        plan_tier_name = str(workspace.plan_tier).upper()
-        runtime_limit_hours = float(getattr(workspace, 'max_runtime_hours', 10.0))
+    # Navigate the real schema layers: Workspace -> WorkspaceSubscription -> Plan
+    if getattr(workspace, "subscription", None) and workspace.subscription.status == "active":
+        active_sub = workspace.subscription
+        if getattr(active_sub, "plan", None):
+            linked_plan = active_sub.plan
+            plan_tier_name = str(getattr(linked_plan, "name", "FREE")).upper()
+            
+            # Extract out of the database limits JSON structure safely
+            plan_limits = getattr(linked_plan, "limits", {}) or {}
+            runtime_limit_hours = float(plan_limits.get("max_runtime_hours", 10.0))
 
     return {
-
-        "total_agents":
-            len(agents),
-
-        "role":
-            membership.role,
-
-        # 🟢 NEW fields seamlessly appended to payload layout matrix
+        "total_agents": len(agents),
+        "role": membership.role,
         "workspace_total_runtime_ms": workspace_runtime_ms,
         "workspace_runtime_limit_hours": runtime_limit_hours,
         "plan_tier": plan_tier_name,
-
         "agents": [
-
             {
-
-                "id":
-                    str(agent.id),
-
-                "name":
-                    agent.name,
-
-                "status":
-                    agent.status
-
+                "id": str(agent.id),
+                "name": agent.name,
+                "status": agent.status
             }
-
             for agent in agents
         ]
     }

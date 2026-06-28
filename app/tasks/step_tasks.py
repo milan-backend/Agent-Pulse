@@ -559,6 +559,10 @@ def process_step(self, step_id: str):
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
 
+        if step.started_at and step.completed_at:
+            duration_delta = step.completed_at - step.started_at
+            step.execution_time_ms = int(duration_delta.total_seconds() * 1000)
+
         step.output_data = result
         step.status = "completed"
         step.error_message = None  
@@ -573,6 +577,14 @@ def process_step(self, step_id: str):
 
     except Exception as e:
         if step:
+            # 🟢 Record execution time up to the crash point
+            if step.started_at:
+                step.completed_at = datetime.utcnow()
+                duration_delta = step.completed_at - step.started_at
+                step.execution_time_ms = int(duration_delta.total_seconds() * 1000)
+            else:
+                step.completed_at = datetime.utcnow()
+
             step.status = "failed"
             step.error_message = str(e)
             step.output_data = {
@@ -580,7 +592,6 @@ def process_step(self, step_id: str):
                 "reason": "exception",
                 "error": str(e)
             }
-            step.completed_at = datetime.utcnow()
             db.commit()
         raise e
 

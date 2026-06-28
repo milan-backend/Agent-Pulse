@@ -140,3 +140,7 @@ update_db_features.py
 check_all_features.py
 free_plan_update.py
 restore__features.py
+check_workspace_runtime.py
+fetch_user_email.py
+force_pro_fix.py
+update_plan.py
