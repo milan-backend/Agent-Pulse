@@ -559,15 +559,19 @@ def process_step(self, step_id: str):
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
 
+        # 1. Lock down the completion timestamp immediately before any db refresh overrides
         step.completed_at = datetime.utcnow()
         
         if step.started_at and step.completed_at:
             duration_delta = step.completed_at - step.started_at
             step.execution_time_ms = int(duration_delta.total_seconds() * 1000)
 
+        # 2. Assign the remaining metadata strings and tokens cleanly
         step.output_data = result
         step.status = "completed"
         step.error_message = None  
+        
+        # 3. Final commit safely pushes the calculated ms duration to the PostgreSQL disk
         db.commit()
 
         return {
