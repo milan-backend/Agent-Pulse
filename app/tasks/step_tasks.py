@@ -559,6 +559,8 @@ def process_step(self, step_id: str):
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
 
+        step.completed_at = datetime.utcnow()
+        
         if step.started_at and step.completed_at:
             duration_delta = step.completed_at - step.started_at
             step.execution_time_ms = int(duration_delta.total_seconds() * 1000)
@@ -566,7 +568,6 @@ def process_step(self, step_id: str):
         step.output_data = result
         step.status = "completed"
         step.error_message = None  
-        step.completed_at = datetime.utcnow()
         db.commit()
 
         return {
