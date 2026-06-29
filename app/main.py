@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI,Request,Response
 
 from app.db.session import Base, engine
 
@@ -46,6 +46,15 @@ if not frontend_url_env:
 else:
     allowed_origins_list = [url.strip() for url in frontend_url_env.split(",")]
 
+# =====================================================================
+# 🔴 TEMPORARY VIDEO RECORDING PATCH: LOCAL OVERRIDES (REMOVE AFTER TESTING)
+# =====================================================================
+# This ensures that your deployed app accepts requests from your game canvas local server ports
+for local_url in ["http://localhost:5500", "http://127.0.0.1:5500", "http://localhost:3000", "http://127.0.0.1:3000"]:
+    if local_url not in allowed_origins_list:
+        allowed_origins_list.append(local_url)
+# =====================================================================    
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins_list,
@@ -53,6 +62,32 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# =====================================================================
+# 🔴 TEMPORARY VIDEO RECORDING PATCH: PREFLIGHT INTERCEPTOR (REMOVE AFTER TESTING)
+# =====================================================================
+@app.middleware("http")
+async def force_preflight_approval_catch(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = Response(status_code=200)
+        origin = request.headers.get("Origin")
+        
+        if origin in allowed_origins_list:
+            response.headers["Access-Control-Allow-Origin"] = origin
+        else:
+            response.headers["Access-Control-Allow-Origin"] = allowed_origins_list[0] if allowed_origins_list else "*"
+            
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        
+        requested_headers = request.headers.get("Access-Control-Request-Headers", "X-API-Key, Content-Type, Authorization, Accept, Origin, workspace-id")
+        response.headers["Access-Control-Allow-Headers"] = requested_headers
+        return response
+        
+    return await call_next(request)
+# =====================================================================
+
 
 app.include_router(steps.router, prefix="/steps", tags=["Steps"])
 app.include_router(agents.router, prefix="/agents", tags=["Agents"])
