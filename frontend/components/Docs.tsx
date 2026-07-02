@@ -59,47 +59,56 @@ response = requests.post(
 
 print(response.json())`,
 
-    pro_and_enterprise: `# =========================================================================
-# 1. DISCOVER AVAILABLE TOOLS (GET /mcp/tools)
-# Dynamically requests the array of system capability schemas supported by your workspace node
-# =========================================================================
-# Method: GET https://api.agentpulseai.dev/mcp/tools
+    pro_and_enterprise: `import time
+import requests
+import uuid
 
-# =========================================================================
-# 2. DISPATCH WRAPPED TOOL EVENT (POST /mcp/execute)
-# Handles multi-tenant background execution mapping through the Model Context Protocol
-# =========================================================================
+BACKEND_URL = "https://api.agentpulseai.dev"
+AGENT_API_KEY = "ap_agent_xxxxxxxxxxxxxxxxx"
 
-# Example 1: Infrastructure Telemetry (no prompt)
-# Sends an empty arguments data package to log pipelines while completely bypassing AI inference fees
-infra_mcp_payload = {
-  "tool": "execute_task",
-  "arguments": {
-    "task_name": "MCP-Telemetry-Sync",
-    "input_data": {},                     
-    "idempotency_key": str(uuid.uuid4())
-  }
-}
+def fetch_ai_response(user_prompt):
+    headers = {
+        "X-API-Key": AGENT_API_KEY,
+        "Content-Type": "application/json"
+    }
 
-# Example 2: AI Inference (with prompt)
-# Pass structural text parameters inside the tool arguments to activate runtime model generation loops
-inference_mcp_payload = {
-  "tool": "execute_task",
-  "arguments": {
-    "task_name": "MCP-Market-Analysis",
-    "input_data": { 
-        "prompt": "Analyze AI metrics and system execution anomalies" 
-    },
-    "idempotency_key": str(uuid.uuid4())
-  }
-}
+    # Step 1: Send request to AgentPulse to get a unique step_id
+    init_payload = {
+        "tool": "execute_task",
+        "arguments": {
+            "task_name": "Production-Worker-Job",
+            "input_data": { "prompt": user_prompt },
+            "idempotency_key": str(uuid.uuid4())
+        }
+    }
 
-# Response Body format received asynchronously (Job drops directly into queue):
-# {
-#   "message": "Step scheduled",
-#   "step_id": "647127bb-fc97-4955-83d2-b9b303fc4e91",
-#   "status": "pending"
-# }`
+    init_res = requests.post(f"{BACKEND_URL}/mcp/execute", json=init_payload, headers=headers)
+    step_id = init_res.json().get("step_id")
+    if not step_id:
+        return "Initialization Error"
+
+    # Step 2: Poll status endpoint until the task completes
+    status_payload = {
+        "tool": "get_step_status",
+        "arguments": { "step_id": stepId }
+    }
+
+    while True:
+        time.sleep(1.5) # Delay interval between polling cycles
+        status_res = requests.post(f"{BACKEND_URL}/mcp/execute", json=status_payload, headers=headers)
+        
+        if status_res.status_code == 200:
+            status_data = status_res.json()
+            
+            if status_data.get("status") == "completed" or "output_data" in status_data:
+                output_data = status_data.get("output_data", {})
+                
+                # Extract the AI response text from AgentPulse
+                return output_data.get("result")
+
+# Example integration execution call:
+# clean_answer = fetch_ai_response("Your custom prompt query here")
+# print(clean_answer)`
   };
 
   const copyToClipboard = (text: string) => {
@@ -123,33 +132,35 @@ inference_mcp_payload = {
         </p>
       </div>
 
-      {/* 🚀 QUICK START ROADMAP MAP PANEL */}
-      <div className="max-w-6xl mx-auto mb-16 p-6 md:p-8 rounded-3xl border border-slate-900 bg-slate-950/20 backdrop-blur-md">
+      {/* 📊 INTEGRATION REQUEST FLOW ARCHITECTURE */}
+      <div className="max-w-6xl mx-auto mb-16 p-6 md:p-8 rounded-3xl border border-slate-900 bg-slate-950/20 backdrop-blur-md font-mono text-xs text-slate-300">
         <div className="flex items-center gap-2 text-xs font-mono text-cyan-400 font-bold uppercase tracking-wider mb-6">
-          <Play size={14} /> System Quick Start Guide
+          <Play size={14} /> Integration Flow Architecture
         </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
-          {[
-            { step: "01", title: "Create an Agent", desc: "Build a persistent virtual system tracking profile in your workspace." },
-            { step: "02", title: "Copy Agent API Key", desc: "Secure the unique cryptographic signature generated for target stream validation." },
-            { step: "03", title: "Configure AI Provider", desc: "Link your custom OpenAI, Anthropic, or Gemini tokens safely within settings." },
-            { step: "04", title: "Dispatch Tasks", desc: "Fire high-throughput network executions using our sample request templates below." }
-          ].map((item, idx) => (
-            <div key={idx} className="relative group">
-              <div className="text-2xl font-mono font-black text-slate-800 mb-1 group-hover:text-cyan-950 transition-colors">{item.step}</div>
-              <h4 className="text-sm font-bold text-slate-200 mb-1 font-sans">{item.title}</h4>
-              <p className="text-xs text-slate-400 leading-relaxed font-sans">{item.desc}</p>
-            </div>
-          ))}
+        <div className="flex flex-col space-y-1.5 overflow-x-auto pb-4 text-slate-400">
+          <div>Application ──► Send Request to AgentPulse ──► Authenticate Agent API Key</div>
+          <div>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;│</div>
+          <div>Display Response in Application ◄── Receive Final AI Response ◄── Poll Status Endpoint ◄── Return step_id</div>
         </div>
 
-        {/* 🔑 API RECOVERY SECURITY ALERT NOTIFICATION STRIP */}
-        <div className="mt-8 pt-4 border-t border-slate-900/60 flex items-center gap-3 text-xs text-slate-400 font-sans">
-          <RotateCcw size={14} className="text-amber-500 shrink-0" />
-          <span>
-            Lost track of your production token details? If you forget your active API key credentials, you can safely reset or regenerate it at any time directly inside <code className="text-slate-200 font-mono text-[11px] bg-slate-900 px-1 rounded">Agent Settings → Regenerate API Key</code>.
-          </span>
+        {/* STEP BY STEP BREAKDOWN */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-900/60 font-sans">
+          <div>
+            <span className="text-cyan-400 font-mono font-bold block mb-1">Steps 1 & 2</span>
+            <p className="text-xs text-slate-400">Send request using your Agent API Key for authentication.</p>
+          </div>
+          <div>
+            <span className="text-cyan-400 font-mono font-bold block mb-1">Steps 3, 4 & 5</span>
+            <p className="text-xs text-slate-400">Platform retrieves configuration, executes the task, and returns a step_id.</p>
+          </div>
+          <div>
+            <span className="text-cyan-400 font-mono font-bold block mb-1">Steps 6 & 7</span>
+            <p className="text-xs text-slate-400">Poll the status endpoint until the task is complete, then read output_data.result.</p>
+          </div>
+          <div>
+            <span className="text-cyan-400 font-mono font-bold block mb-1">Step 8</span>
+            <p className="text-xs text-slate-400">Isolate and securely display the clean response string in your application frontend.</p>
+          </div>
         </div>
       </div>
 
@@ -217,29 +228,11 @@ inference_mcp_payload = {
 
           <div className="p-5 rounded-xl border border-slate-800 bg-slate-950/40 backdrop-blur-md font-mono text-[11px] space-y-3">
             <div className="text-xs font-sans font-bold text-slate-300 border-b border-slate-900 pb-1.5 uppercase flex items-center gap-2">
-              <RefreshCw size={13} className="text-cyan-400" /> Parameter Validation Specs
+              <RefreshCw size={13} className="text-cyan-400" /> How to Display the Response
             </div>
-
-            <div>
-              <span className="text-cyan-400 font-bold">idempotency_key (String):</span>
-              <p className="text-slate-400 text-xs mt-0.5 font-sans">
-                A unique session hash (UUIDv4) passed per execution block step to ensure structural integrity and block duplicate tracking logs.
-              </p>
-            </div>
-
-            <div>
-              <span className="text-cyan-400 font-bold">task_name (String):</span>
-              <p className="text-slate-400 text-xs mt-0.5 font-sans">
-                The logging profile name for your active runtime session. Consecutive identical names trigger our systemic cooldown buffers to prevent runaway loops.
-              </p>
-            </div>
-
-            <div>
-              <span className="text-cyan-400 font-bold">input_data (Object):</span>
-              <p className="text-slate-400 text-xs mt-0.5 font-sans">
-                Unstructured parameter map block. Keep empty <code className="text-cyan-300 font-mono">{}</code> for zero-prompt telemetry traces. Include a <code className="text-cyan-300 font-mono">&quot;prompt&quot;</code> key context string to execute active model processing.
-              </p>
-            </div>
+            <p className="text-xs text-slate-400 font-sans leading-relaxed">
+              The AI response is returned by AgentPulse through the API. Your application is responsible for displaying that response to the end user. AgentPulse manages execution, monitoring, and runtime protection, while your frontend determines how the response is presented.
+            </p>
           </div>
         </div>
 
@@ -251,7 +244,6 @@ inference_mcp_payload = {
               {activeTab === "free" ? "POST /steps/execute" : "POST /mcp/execute"}
             </span>
 
-            {/* ✅ ALWAYS VISIBLE AND INTERACTIVE COPY CODE COMPONENT TRIGGER */}
             <button
               onClick={() => copyToClipboard(currentSnippet)}
               className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/60 border border-transparent hover:border-slate-700/50 bg-slate-950/40 transition-all flex items-center gap-1.5 text-[11px] font-mono font-bold"
