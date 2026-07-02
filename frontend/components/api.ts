@@ -872,8 +872,6 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         }
 
         let data = await response.json();
-        
-        // Dynamic lookups for step execution tracking keys
         const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
         
         if (!stepId) {
@@ -882,8 +880,8 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
         // 🔄 Active Background Validation Loop checking task status flags
         let attempts = 0;
-        const maxAttempts = 35; // Safe 52-second maximum execution time window
-        let finalOutputData = null;
+        const maxAttempts = 35; 
+        let finalOutputData: any = null;
 
         while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -906,40 +904,46 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
             if (statusResponse.ok) {
                 const checkData = await statusResponse.json();
                 
-                // Unpack deep response layer paths if your endpoint encapsulates payloads inside a "data" property block
+                // Target the core wrapper layout object dynamically
                 const targetObj = checkData.data ? checkData.data : checkData;
-                const statusFlag = targetObj.status || (targetObj.output && targetObj.output.status);
 
-                // Deep check against all possible return positions
-                if (
-                    targetObj.result || 
-                    statusFlag === "completed" || 
-                    statusFlag === "SUCCESS" ||
-                    (targetObj.output && targetObj.output.result)
-                ) {
+                // Stop loop immediately if data or output blocks exist
+                if (targetObj.output_data || targetObj.result || targetObj.output) {
                     finalOutputData = targetObj;
                     break;
                 }
             }
         }
 
-        // 🟢 Robust Data Extraction Layer falling back across your Celery schema properties
         if (!finalOutputData) {
             return "System encountered a generation timeout. Please submit your prompt query again.";
         }
 
+        // 🟢 STRICT TEXT EXTRACTION: Extract ONLY the clean text result string
         let answerText = "";
-        if (finalOutputData.result) {
+        
+        if (finalOutputData.output_data && finalOutputData.output_data.result) {
+            answerText = finalOutputData.output_data.result;
+        } else if (finalOutputData.result) {
             answerText = finalOutputData.result;
         } else if (finalOutputData.output && finalOutputData.output.result) {
             answerText = finalOutputData.output.result;
-        } else if (finalOutputData.output) {
-            answerText = typeof finalOutputData.output === 'string' ? finalOutputData.output : JSON.stringify(finalOutputData.output);
         } else {
-            answerText = JSON.stringify(finalOutputData);
+            // Safe raw backup mapping if keys mismatch
+            try {
+                const parsed = typeof finalOutputData === 'string' ? JSON.parse(finalOutputData) : finalOutputData;
+                answerText = parsed.output_data?.result || parsed.result || "";
+            } catch {
+                answerText = "";
+            }
         }
 
-        // Strip out accidental markdown script bracket notations if present
+        // Fallback string if text extraction returns blank anomalies
+        if (!answerText) {
+            answerText = "Error: System could not parse clean text output context from payload.";
+        }
+
+        // Strip out accidental markdown notation leaks and return purely the string answer
         return answerText.replace(/\[.*?\]/g, "").trim();
 
     } catch (error: any) {
