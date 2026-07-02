@@ -839,3 +839,97 @@ export const agentTasksApi = {
     });
   }
 };
+
+
+// =====================================================================
+// 🤖 AGENTPULSE SYSTEM COPILOT ASYNC QUEUE ROUTER (CELERY POLLING)
+// =====================================================================
+export const askCopilotService = async (userPrompt: string): Promise<string> => {
+    const endpointUrl = "https://api.agentpulseai.dev/mcp/execute";
+    const apiKey = "4a1f331e.spWSB0rpqwWWiI-icX3kCVb86j-GCGSpdd7_xThAKfo";
+
+    const payload = {
+        "tool": "execute_task",
+        "arguments": {
+            "task_name": "Workspace-Copilot-Query",
+            "input_data": { 
+                "prompt": userPrompt 
+            },
+            "idempotency_key": crypto.randomUUID()
+        }
+    };
+
+    try {
+        // ⚡ Task Handshake: Dispatch payload directly to the background Celery Worker queue
+        const response = await fetch(endpointUrl, {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "X-API-Key": apiKey
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server network returned error status: ${response.status}`);
+        }
+
+        let data = await response.json();
+        const stepId = data.step_id || (data.step && data.step.id);
+        
+        if (!stepId) {
+            throw new Error("Mismatched step_id routing parameter context allocation.");
+        }
+
+        // 🔄 Active Background Validation Loop checking task status flags
+        let attempts = 0;
+        const maxAttempts = 15; // 15 attempts * 1.5s = 22.5s maximum execution time ceiling
+
+        while (attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            attempts++;
+
+            const statusPayload = {
+                "tool": "get_step_status",
+                "arguments": { "step_id": stepId }
+            };
+
+            const statusResponse = await fetch(endpointUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-API-Key": apiKey
+                },
+                body: JSON.stringify(statusPayload)
+            });
+
+            if (statusResponse.ok) {
+                const checkData = await statusResponse.json();
+
+                // Break immediately as soon as Celery commits output rows to the db layout
+                if (
+                    checkData.result || 
+                    checkData.status === "completed" || 
+                    (checkData.output && checkData.output.result)
+                ) {
+                    data = checkData;
+                    break;
+                }
+            }
+        }
+
+        // 🟢 Data Extraction Layer from Database schema models
+        let answerText = "";
+        if (data.result) answerText = data.result;
+        else if (data.output && data.output.result) answerText = data.output.result;
+        else if (data.output) answerText = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
+        else answerText = "System encountered a generation timeout. Please submit your prompt query again.";
+
+        // Strip out accidental markdown script bracket notations if present
+        return answerText.replace(/\[.*?\]/g, "").trim();
+
+    } catch (error: any) {
+        console.error("Copilot routing failure:", error);
+        return "⚠️ Connection exception encountered while communicating with the background execution worker node.";
+    }
+};

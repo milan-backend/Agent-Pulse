@@ -14,6 +14,7 @@ import {
   LogOut,
   CreditCard,
   Shield,
+  MessageSquareCode, // 🔮 NEW: Added for Copilot icon styling
 } from "lucide-react";
 import { useEffect } from "react";
 // 💡 Import your centralized secure logout tracking function context
@@ -39,6 +40,11 @@ const navItems = [
     label: "Agents",
     href: "/dashboard/agents",
     icon: Bot,
+  },
+  {
+    label: "AP Copilot", // 🔮 NEW: Integrated Copilot entry point inside the list array
+    href: "/dashboard/copilot",
+    icon: MessageSquareCode,
   },
   {
     label: "Usage Logs",
@@ -114,6 +120,9 @@ export default function DashboardLayout({
               const Icon = item.icon;
               const active = pathname === item.href;
 
+              // Special extra glowing text effect style just for the active copilot link item slot
+              const isCopilotItem = item.href === "/dashboard/copilot";
+
               return (
                 <Link
                   key={item.href}
@@ -121,19 +130,29 @@ export default function DashboardLayout({
                   className={`group flex items-center gap-4 rounded-[24px] px-5 py-5 transition-all border ${
                     active
                       ? "border-cyan-400/30 bg-cyan-500/15 shadow-[0_0_25px_rgba(34,211,238,0.15)]"
-                      : "border-white/5 bg-white/[0.03] hover:bg-white/[0.06]"
+                      : isCopilotItem 
+                        ? "border-cyan-500/10 bg-cyan-950/10 hover:bg-cyan-900/15" // Subtle ambient glow hint for the AI node when inactive
+                        : "border-white/5 bg-white/[0.03] hover:bg-white/[0.06]"
                   }`}
                 >
                   <div
                     className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-all ${
                       active
                         ? "bg-cyan-500/20 text-cyan-300"
-                        : "bg-white/[0.03] text-slate-400 group-hover:text-white"
+                        : isCopilotItem
+                          ? "bg-cyan-950/40 text-cyan-400 group-hover:text-cyan-300"
+                          : "bg-white/[0.03] text-slate-400 group-hover:text-white"
                     }`}
                   >
                     <Icon size={24} />
                   </div>
-                  <span className={`text-lg font-bold ${active ? "text-white" : "text-slate-300"}`}>
+                  <span className={`text-lg font-bold ${
+                    active 
+                      ? "text-white" 
+                      : isCopilotItem 
+                        ? "text-cyan-400/90 group-hover:text-cyan-300" 
+                        : "text-slate-300"
+                  }`}>
                     {item.label}
                   </span>
                 </Link>

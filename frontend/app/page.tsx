@@ -10,6 +10,7 @@ import WhyAgentPulse from "@/components/WhyAgentPulse"; // Build vs Operate Matr
 import EnterpriseTrust from "@/components/EnterpriseTrust"; // Core reliability policies
 import FinalCTA from "@/components/FinalCTA";           // Closing conversion box
 import Footer from "@/components/Footer";               // Updated multi-page footer map[cite: 4, 10]
+import FloatingCopilot from "@/components/FloatingCopilot";
 
 export const metadata = {
   title: "AgentPulse | AI Agent Observability & Governance Platform",
@@ -51,6 +52,9 @@ export default function AgentPulseLandingPage() {
 
       {/* 8. Bottom legal routing network footer layer[cite: 4, 10] */}
       <Footer />
+
+      {/* 🔮 9. INTEGRATED COPILOT LAYER: Accessible right on the landing page */}
+      <FloatingCopilot />
     </div>
   );
 }
