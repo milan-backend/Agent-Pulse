@@ -883,7 +883,7 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
         // 🔄 Active Background Validation Loop checking task status flags
         let attempts = 0;
-        const maxAttempts = 15; // 15 attempts * 1.5s = 22.5s maximum execution time ceiling
+        const maxAttempts = 30; // 30 attempts * 1.5s = 45s maximum execution time ceiling
 
         while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1500));
