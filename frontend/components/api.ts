@@ -841,9 +841,6 @@ export const agentTasksApi = {
 };
 
 
-// =====================================================================
-// 🤖 AGENTPULSE SYSTEM COPILOT ASYNC QUEUE ROUTER (CELERY POLLING)
-// =====================================================================
 export const askCopilotService = async (userPrompt: string): Promise<string> => {
     const endpointUrl = "https://api.agentpulseai.dev/mcp/execute";
     const apiKey = "4a1f331e.spWSB0rpqwWWiI-icX3kCVb86j-GCGSpdd7_xThAKfo";
@@ -875,7 +872,9 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         }
 
         let data = await response.json();
-        const stepId = data.step_id || (data.step && data.step.id);
+        
+        // Dynamic lookups for step execution tracking keys
+        const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
         
         if (!stepId) {
             throw new Error("Mismatched step_id routing parameter context allocation.");
@@ -883,7 +882,8 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
         // 🔄 Active Background Validation Loop checking task status flags
         let attempts = 0;
-        const maxAttempts = 30; // 30 attempts * 1.5s = 45s maximum execution time ceiling
+        const maxAttempts = 35; // Safe 52-second maximum execution time window
+        let finalOutputData = null;
 
         while (attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1500));
@@ -905,25 +905,39 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
             if (statusResponse.ok) {
                 const checkData = await statusResponse.json();
+                
+                // Unpack deep response layer paths if your endpoint encapsulates payloads inside a "data" property block
+                const targetObj = checkData.data ? checkData.data : checkData;
+                const statusFlag = targetObj.status || (targetObj.output && targetObj.output.status);
 
-                // Break immediately as soon as Celery commits output rows to the db layout
+                // Deep check against all possible return positions
                 if (
-                    checkData.result || 
-                    checkData.status === "completed" || 
-                    (checkData.output && checkData.output.result)
+                    targetObj.result || 
+                    statusFlag === "completed" || 
+                    statusFlag === "SUCCESS" ||
+                    (targetObj.output && targetObj.output.result)
                 ) {
-                    data = checkData;
+                    finalOutputData = targetObj;
                     break;
                 }
             }
         }
 
-        // 🟢 Data Extraction Layer from Database schema models
+        // 🟢 Robust Data Extraction Layer falling back across your Celery schema properties
+        if (!finalOutputData) {
+            return "System encountered a generation timeout. Please submit your prompt query again.";
+        }
+
         let answerText = "";
-        if (data.result) answerText = data.result;
-        else if (data.output && data.output.result) answerText = data.output.result;
-        else if (data.output) answerText = typeof data.output === 'string' ? data.output : JSON.stringify(data.output);
-        else answerText = "System encountered a generation timeout. Please submit your prompt query again.";
+        if (finalOutputData.result) {
+            answerText = finalOutputData.result;
+        } else if (finalOutputData.output && finalOutputData.output.result) {
+            answerText = finalOutputData.output.result;
+        } else if (finalOutputData.output) {
+            answerText = typeof finalOutputData.output === 'string' ? finalOutputData.output : JSON.stringify(finalOutputData.output);
+        } else {
+            answerText = JSON.stringify(finalOutputData);
+        }
 
         // Strip out accidental markdown script bracket notations if present
         return answerText.replace(/\[.*?\]/g, "").trim();
