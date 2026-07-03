@@ -14,62 +14,71 @@ import {
   LogOut,
   CreditCard,
   Shield,
-  MessageSquareCode, // 🔮 NEW: Added for Copilot icon styling
+  MessageSquareCode,
 } from "lucide-react";
-import { useEffect } from "react";
-// 💡 Import your centralized secure logout tracking function context
-import { logout as secureServerLogout } from "@/components/api"; 
+import { useEffect, useState } from "react";
+import { logout as secureServerLogout, getWorkspaceMembers, getCurrentUser } from "@/components/api"; 
 
 const navItems = [
   {
     label: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
     label: "Analytics",
     href: "/dashboard/analytics",
     icon: BarChart3,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
     label: "Missions",
     href: "/dashboard/missions",
     icon: Rocket,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
     label: "Agents",
     href: "/dashboard/agents",
     icon: Bot,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
-    label: "AP Copilot", // 🔮 NEW: Integrated Copilot entry point inside the list array
+    label: "AP Copilot",
     href: "/dashboard/copilot",
     icon: MessageSquareCode,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
     label: "Usage Logs",
     href: "/dashboard/usage-logs",
     icon: ScrollText,
+    allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
     label: "Billing",
     href: "/dashboard/billing",
     icon: CreditCard,
+    allowedRoles: ["admin"], // 🔒 Admin Only
   },
   {
     label: "My Plan",
     href: "/dashboard/my-plan",
     icon: Shield,
+    allowedRoles: ["admin"], // 🔒 Admin Only
   },
   {
     label: "Workspace",
     href: "/dashboard/workspace",
     icon: Users,
+    allowedRoles: ["admin"], // 🔒 Admin Only
   },
   {
     label: "Settings",
     href: "/dashboard/settings",
     icon: Settings,
+    allowedRoles: ["admin"], // 🔒 Admin Only
   },
 ];
 
@@ -80,19 +89,50 @@ export default function DashboardLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  
+  // State to hold the current user's role context dynamically
+  const [userRole, setUserRole] = useState<string>("viewer");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
       router.push("/login");
+      return;
     }
+
+    // ⚡ Fetch dynamic roster context to accurately find the current user's role
+    async function determineUserRole() {
+      try {
+        const [me, membersList] = await Promise.all([
+          getCurrentUser(),
+          getWorkspaceMembers()
+        ]);
+        
+        if (me && membersList) {
+          const match = membersList.find(
+            (m: any) => m.user_email === me.email || m.email === me.email
+          );
+          if (match?.role) {
+            setUserRole(match.role.toLowerCase());
+          }
+        }
+      } catch (err) {
+        console.error("DashboardLayout: Error syncing user clearance metrics:", err);
+      }
+    }
+
+    determineUserRole();
   }, [router]);
 
-  // 💡 FIXED: Now routes request parameters straight to your API interceptor layer!
   function handleLogoutExecution() {
     console.log("DashboardLayout: Dispatching atomic log out request sequence...");
     secureServerLogout();
   }
+
+  // 🎯 FILTER LINKS: Only return items where allowedRoles includes the current user's role
+  const filteredNavItems = navItems.filter((item) =>
+    item.allowedRoles.includes(userRole)
+  );
 
   return (
     <div className="min-h-screen bg-[#020817] text-white flex overflow-hidden">
@@ -116,11 +156,9 @@ export default function DashboardLayout({
 
           {/* NAVIGATION */}
           <nav className="space-y-4">
-            {navItems.map((item) => {
+            {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
-
-              // Special extra glowing text effect style just for the active copilot link item slot
               const isCopilotItem = item.href === "/dashboard/copilot";
 
               return (
@@ -131,7 +169,7 @@ export default function DashboardLayout({
                     active
                       ? "border-cyan-400/30 bg-cyan-500/15 shadow-[0_0_25px_rgba(34,211,238,0.15)]"
                       : isCopilotItem 
-                        ? "border-cyan-500/10 bg-cyan-950/10 hover:bg-cyan-900/15" // Subtle ambient glow hint for the AI node when inactive
+                        ? "border-cyan-500/10 bg-cyan-950/10 hover:bg-cyan-900/15"
                         : "border-white/5 bg-white/[0.03] hover:bg-white/[0.06]"
                   }`}
                 >
