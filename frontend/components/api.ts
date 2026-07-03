@@ -362,6 +362,34 @@ export const getCurrentUser = async () => {
   return request("/auth/me");
 };
 
+export const loginWithSSO = async (ssoData: {
+  email: string;
+  name: string;
+  provider: string;
+  provider_id: string;
+}) => {
+  const data = await request("/auth/sso/callback", {
+    method: "POST",
+    body: ssoData,
+  });
+  
+  // Reusing your exact proven local state seeding flow!
+  if (data.access_token) {
+    localStorage.setItem("token", data.access_token);
+    sessionStorage.setItem("authenticated", "true");
+  }
+  if (data.workspace_id) {
+    localStorage.setItem("workspace_id", data.workspace_id);
+  }
+  if (data.user_id) {
+    localStorage.setItem("user_id", data.user_id);
+  }
+  if (data.workspaces) {
+    localStorage.setItem("workspaces", JSON.stringify(data.workspaces || []));
+  }
+  return data;
+};
+
 /* =========================================================
 BILLING (UPDATED WITH DUAL-GATEWAY & INTERVAL CYCLES)
 ========================================================= */
@@ -631,6 +659,20 @@ export const getWorkspaceMembers = async () => {
 export const deleteWorkspaceMember = async (userId: string) => {
   return request(`/workspace/members/${userId}`, {
     method: "DELETE",
+  });
+};
+
+export const inviteWorkspaceMember = async (data: { email: string; role: string; }) => {
+  return request("/workspace/invite-member", {
+    method: "POST",
+    body: data,
+  });
+};
+
+export const acceptWorkspaceInvitation = async (token: string) => {
+  return request("/workspace/accept-invite", {
+    method: "POST",
+    body: { token },
   });
 };
 

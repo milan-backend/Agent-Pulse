@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { 
   getWorkspaceMembers, 
-  createWorkspaceMember, 
+  inviteWorkspaceMember, // 🟢 Updated to call your new invitation service engine
   updateWorkspaceMemberRole, 
   deleteWorkspaceMember, 
   getCurrentUser 
@@ -49,7 +49,6 @@ export default function WorkspaceMembersPage() {
       } catch (err) {
         console.error(err);
       } finally {
-        //  FIXED: Clean execution pathway block
         await loadMembers();
       }
     }
@@ -76,6 +75,7 @@ export default function WorkspaceMembersPage() {
     }
   }
 
+  // 🟢 Fixed invitation pipeline handler
   async function addMember() {
     if (!email.trim()) {
       toast.error("Please enter a valid email address");
@@ -83,8 +83,9 @@ export default function WorkspaceMembersPage() {
     }
     try {
       setAdding(true);
-      const response = await createWorkspaceMember({ email: email.trim(), role });
-      toast.success(response?.message || "Workspace invitation sent");
+      // Calls your fresh invite schema validation endpoint safely
+      const response = await inviteWorkspaceMember({ email: email.trim(), role });
+      toast.success(response?.message || "Workspace invitation link sent to inbox!");
       setEmail("");
       setRole("viewer");
       await loadMembers();
@@ -146,7 +147,7 @@ export default function WorkspaceMembersPage() {
           <p className="text-xs text-zinc-400">Control active user credentials, configure network clearances, and allocate runtime permissions.</p>
         </div>
 
-        {/* SYSTEM SUMMARY MINI STATS (HORIZONTAL DENSE BADGES) */}
+        {/* SYSTEM SUMMARY MINI STATS */}
         <div className="flex items-center gap-3 font-mono text-[11px]">
           <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2 flex items-center gap-2">
             <Users size={14} className="text-cyan-400" />
@@ -220,7 +221,7 @@ export default function WorkspaceMembersPage() {
         </div>
       </div>
 
-      {/* ENTERPRISE HORIZONTAL DATA ROSTER TABLE */}
+      {/* DATA ROSTER TABLE */}
       <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl">
         <div className="px-6 py-4.5 border-b border-slate-800 flex items-center justify-between">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -247,17 +248,14 @@ export default function WorkspaceMembersPage() {
                 members.map((member, index) => (
                   <tr key={member.user_id || index} className="hover:bg-slate-900/10 transition-colors group">
                     
-                    {/* COLUMN 1: EMAIL IDENTIFIER */}
                     <td className="py-4 px-6 font-sans text-sm font-bold text-slate-200 group-hover:text-cyan-400 transition-colors break-all max-w-xs">
                       {member.email}
                     </td>
 
-                    {/* COLUMN 2: NAME REFERENCE */}
                     <td className="py-4 px-6 text-zinc-400 text-xs font-sans font-medium capitalize">
                       {member.name || <span className="text-zinc-600 italic font-mono text-[11px] normal-case">uninitialized</span>}
                     </td>
 
-                    {/* COLUMN 3: ROLE ASSIGNMENT STATUS DROP / TAG */}
                     <td className="py-4 px-6">
                       {isUserAdmin && member.email !== currentUserEmail ? (
                         <select
@@ -281,7 +279,6 @@ export default function WorkspaceMembersPage() {
                       )}
                     </td>
 
-                    {/* COLUMN 4: REMOVAL COMMAND TRIGGER ACTIONS */}
                     <td className="py-4 px-6 text-right">
                       {isUserAdmin && member.email !== currentUserEmail ? (
                         <button

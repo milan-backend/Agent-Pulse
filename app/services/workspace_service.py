@@ -8,6 +8,11 @@ from app.models.workspace_member import (
     WorkspaceMember
 )
 
+from app.models.workspace_invitation import WorkspaceInvitation
+from app.services.email_service import send_workspace_invite_email # assuming this helper exists
+import secrets
+from datetime import datetime, timedelta
+
 from app.models.workspace_subscription import (
     WorkspaceSubscription
 )
@@ -381,4 +386,107 @@ def remove_workspace_member(
 
         "message":
             "Member removed successfully"
+    }
+
+def create_workspace_invitation(db: Session, workspace_id: str, inviter_id: str, payload):
+    # 1. Fetch subscription features metrics to evaluate safety quotas
+    plan = get_workspace_plan(db, workspace_id)
+    features = plan.features or {}
+    limits = plan.limits or {}
+
+    if not features.get("team_collaboration", False):
+        raise HTTPException(status_code=403, detail="Team collaboration features not available on current plan")
+
+    # 2. Check if the target email is already part of this specific workspace members pool
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        already_member = db.query(WorkspaceMember).filter(
+            WorkspaceMember.workspace_id == workspace_id,
+            WorkspaceMember.user_id == existing_user.id
+        ).first()
+        if already_member:
+            raise HTTPException(status_code=400, detail="User is already a member of this workspace")
+
+    # 3. Validate overall seating limit caps
+    current_members = db.query(WorkspaceMember).filter(WorkspaceMember.workspace_id == workspace_id).count()
+    pending_invites = db.query(WorkspaceInvitation).filter(
+        WorkspaceInvitation.workspace_id == workspace_id,
+        WorkspaceInvitation.is_accepted == False,
+        WorkspaceInvitation.expires_at > datetime.utcnow()
+    ).count()
+
+    if (current_members + pending_invites) >= limits.get("max_team_members", 1):
+        raise HTTPException(status_code=403, detail="Workspace team seat allocations are fully exhausted")
+
+    # 4. Construct invitation reference token block with a 7-day expiration lifespan
+    invitation = WorkspaceInvitation(
+        email=payload.email,
+        workspace_id=workspace_id,
+        role=payload.role,
+        token=secrets.token_urlsafe(32),
+        invited_by=inviter_id,
+        expires_at=datetime.utcnow() + timedelta(days=7)
+    )
+    db.add(invitation)
+    db.commit()
+    db.refresh(invitation)
+
+    # 5. Dispatch actual access token link string to user's inbox
+    try:
+        send_workspace_invite_email(to_email=invitation.email, token=invitation.token)
+    except Exception as e:
+        print(f"Mail delivery exception caught: {e}")
+
+    return {
+        "success": True,
+        "message": "Team invitation link generated and sent successfully",
+        "token": invitation.token
+    }
+
+
+def accept_workspace_invitation(db: Session, token: str, user_id: str, user_email: str):
+    # 1. Retrieve confirmation entry flags matching token string parameters
+    invite = db.query(WorkspaceInvitation).filter(
+        WorkspaceInvitation.token == token,
+        WorkspaceInvitation.is_accepted == False
+    ).first()
+
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invitation link is invalid or has already been used")
+
+    if invite.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invitation token expired")
+
+    # 🛡️ SECURITY MATCH CHECK: Ensure the authenticated user matches the invited email context
+    if invite.email.lower() != user_email.lower():
+        raise HTTPException(status_code=403, detail="This invitation link was issued to a different email address")
+
+    # 2. Check for duplicate protection bounds
+    duplicate = db.query(WorkspaceMember).filter(
+        WorkspaceMember.workspace_id == invite.workspace_id,
+        WorkspaceMember.user_id == user_id
+    ).first()
+
+    if duplicate:
+        invite.is_accepted = True
+        db.commit()
+        raise HTTPException(status_code=400, detail="User is already registered inside this workspace")
+
+    # 3. Create the WorkspaceMember assignment row
+    new_member = WorkspaceMember(
+        workspace_id=invite.workspace_id,
+        user_id=user_id,
+        role=invite.role,
+        invited_by=invite.invited_by
+    )
+    db.add(new_member)
+
+    # Flip tracking state marker
+    invite.is_accepted = True
+    db.commit()
+
+    return {
+        "success": True,
+        "message": "Successfully joined the workspace team container",
+        "workspace_id": str(invite.workspace_id)
     }

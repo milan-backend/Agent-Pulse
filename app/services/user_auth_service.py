@@ -425,3 +425,111 @@ def authenticate_user(db: Session, token: str):
         raise HTTPException(status_code=401, detail="User unauthorized or deactivated")
 
     return user
+
+# ============================================
+# SINGLE SIGN-ON (SSO) ENGINE 🔮
+# ============================================
+def login_or_register_sso_user(db: Session, sso_email: str, sso_name: str, provider: str, provider_id: str, response: Response):
+    # 1. Look up user by email to see if they already exist
+    user = db.query(User).filter(User.email == sso_email).first()
+
+    if not user:
+        # 2. User doesn't exist -> Account Provisioning Pipeline
+        user = User(
+            name=sso_name,
+            email=sso_email,
+            password_hash=None,      # No password hash for third-party OAuth identities
+            sso_provider=provider,
+            sso_id=provider_id,
+            is_verified=True,        # Provider verified emails skip activation tokens
+            is_active=True
+        )
+        db.add(user)
+        db.flush() # Secure user.id in memory for workspace generation hooks
+
+        # Provision their standard personal workspace sandbox container
+        workspace = Workspace(
+            name=f"{sso_name}'s Workspace",
+            slug=f"{sso_name.lower().replace(' ','-')}-{secrets.token_hex(3)}",
+            type="personal",
+            owner_id=user.id
+        )
+        db.add(workspace)
+        db.flush()
+
+        # Bind workspace member role mapping
+        membership = WorkspaceMember(
+            workspace_id=workspace.id,
+            user_id=user.id,
+            role="admin"
+        )
+        db.add(membership)
+
+        # Apply fallback free tier plan
+        free_plan = db.query(Plan).filter(Plan.name == "free").first()
+        if not free_plan:
+            raise HTTPException(status_code=500, detail="Default Free plan configuration missing")
+
+        subscription = WorkspaceSubscription(
+            workspace_id=workspace.id,
+            plan_id=free_plan.id,
+            status="active"
+        )
+        db.add(subscription)
+        db.flush()
+    else:
+        # 3. User exists -> Update their identity profiles tracking state if null
+        if not user.sso_provider:
+            user.sso_provider = provider
+            user.sso_id = provider_id
+            
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Account deactivated")
+
+    # 4. Enumerate accessible workspaces for the profile dashboard payload
+    memberships = db.query(WorkspaceMember).filter(WorkspaceMember.user_id == user.id).all()
+    if not memberships:
+        raise HTTPException(status_code=403, detail="No workspace membership parameters found")
+
+    workspace_list = []
+    for member in memberships:
+        ws = db.query(Workspace).filter(Workspace.id == member.workspace_id).first()
+        if ws:
+            workspace_list.append({
+                "workspace_id": str(ws.id),
+                "workspace_name": ws.name,
+                "role": member.role
+            })
+
+    default_membership = memberships[0]
+
+    # 5. Compile standard 15-minute access token and secure HttpOnly cookie
+    access_payload = {
+        "sub": str(user.id),
+        "exp": datetime.utcnow() + timedelta(minutes=15)
+    }
+    access_token = jwt.encode(access_payload, SECRET_KEY, algorithm=ALGORITHM)
+
+    refresh_token_string = secrets.token_urlsafe(64)
+    refresh_expiry = datetime.utcnow() + timedelta(days=7)
+
+    db_refresh_token = RefreshToken(
+        user_id=user.id,
+        token_id=refresh_token_string,
+        expires_at=refresh_expiry,
+        created_at=datetime.utcnow()
+    )
+    db.add(db_refresh_token)
+    db.commit()
+
+    set_secure_refresh_cookie(response, refresh_token_string)
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "workspace_id": str(default_membership.workspace_id),
+        "role": default_membership.role,
+        "workspaces": workspace_list,
+        "message": f"Successfully authenticated via {provider.capitalize()}"
+    }

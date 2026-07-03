@@ -145,3 +145,4 @@ fetch_user_email.py
 force_pro_fix.py
 update_plan.py
 enterprise_yearly_plan.py
+inject_db_changes.py

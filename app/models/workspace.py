@@ -124,3 +124,10 @@ class Workspace(Base):
         uselist=False,
         cascade="all, delete"
     )
+
+
+    invitations = relationship(
+        "WorkspaceInvitation",
+        back_populates="workspace",
+        cascade="all, delete-orphan"
+    )

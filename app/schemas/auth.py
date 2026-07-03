@@ -39,3 +39,10 @@ class DeactivateAccountRequest(
 ):
 
     password: str
+
+
+class SSOLoginRequest(BaseModel):
+    email: EmailStr
+    name: str
+    provider: str      # e.g., "google" or "github"
+    provider_id: str   # The unique ID string sent by Google/GitHub API

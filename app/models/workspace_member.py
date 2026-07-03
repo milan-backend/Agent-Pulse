@@ -73,6 +73,11 @@ class WorkspaceMember(Base):
         back_populates="memberships"
     )
 
+    inviter = relationship(
+        "User",
+        foreign_keys=[invited_by]
+    )
+
     __table_args__ = (
         UniqueConstraint(
             "workspace_id",

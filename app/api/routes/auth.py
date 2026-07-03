@@ -7,7 +7,8 @@ from app.schemas.auth import (
     LoginRequest,
     ForgetPasswordRequest,
     ResetPasswordRequest,
-    DeactivateAccountRequest
+    DeactivateAccountRequest,
+    SSOLoginRequest
 )
 
 from app.services.user_auth_service import (
@@ -19,7 +20,8 @@ from app.services.user_auth_service import (
     refresh_access_token,
     logout_user,
     issue_websocket_ticket,
-    check_rate_limit
+    check_rate_limit,
+    login_or_register_sso_user
 )
 
 from app.api.deps_user import get_current_user
@@ -147,3 +149,29 @@ def deactivate_account(
     current_user.is_active = False
     db.commit()
     return {"message": "Account deactivated successfully"}
+
+
+# ============================================
+# SINGLE SIGN-ON (SSO) CALLBACK HANDLER 🔮
+# ============================================
+@router.post("/sso/callback")
+def sso_callback(
+    request: SSOLoginRequest,
+    fastapi_req: Request,
+    response: Response,
+    db: Session = Depends(get_db)
+):
+    """ Centralized endpoint to authenticate or register users logging in via Google/GitHub """
+    client_ip = fastapi_req.client.host or "unknown"
+    
+    # Reusing your excellent built-in rate-limiting logic block!
+    check_rate_limit(client_ip=client_ip, limit_type="sso", max_requests=10, window_minutes=1)
+    
+    return login_or_register_sso_user(
+        db=db,
+        sso_email=request.email,
+        sso_name=request.name,
+        provider=request.provider,
+        provider_id=request.provider_id,
+        response=response
+    )

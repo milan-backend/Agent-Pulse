@@ -13,7 +13,9 @@ from app.models.user import User
 
 from app.schemas.workspace import (
     AddMemberRequest,
-    UpdateRoleRequest
+    UpdateRoleRequest,
+    InviteMemberRequest,
+    AcceptInviteRequest   
 )
 
 from app.api.deps_user import (
@@ -32,7 +34,9 @@ from app.services.workspace_service import (
     add_workspace_member,
     update_workspace_member_role,
     get_workspace_members,
-    remove_workspace_member
+    remove_workspace_member,
+    create_workspace_invitation,
+    accept_workspace_invitation   
 )
 
 router = APIRouter()
@@ -193,4 +197,50 @@ def delete_workspace_member(
         db=db,
         workspace_id=workspace_id,
         user_id=user_id
+    )
+
+# =========================
+# GENERATE TEAM INVITATION
+# =========================
+@router.post("/invite-member")
+def invite_member(
+    payload: InviteMemberRequest,
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """ Securely issues a workspace verification token loop and emails the teammate """
+    # 1. Look up active membership parameters
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=workspace_id
+    )
+    
+    # 2. Reusing your strict built-in RBAC guard to enforce that only Admins can invite people!
+    require_admin(membership)
+    
+    return create_workspace_invitation(
+        db=db,
+        workspace_id=workspace_id,
+        inviter_id=current_user.id,
+        payload=payload
+    )
+
+
+# =========================
+# ACCEPT TEAM INVITATION
+# =========================
+@router.post("/accept-invite")
+def accept_invite(
+    payload: AcceptInviteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """ Finalizes invitation handshakes and provisions the new WorkspaceMember row configuration """
+    return accept_workspace_invitation(
+        db=db,
+        token=payload.token,
+        user_id=current_user.id,
+        user_email=current_user.email
     )
