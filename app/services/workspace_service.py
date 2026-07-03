@@ -444,49 +444,45 @@ def create_workspace_invitation(db: Session, workspace_id: str, inviter_id: str,
     }
 
 
-def accept_workspace_invitation(db: Session, token: str, user_id: str, user_email: str):
-    # 1. Retrieve confirmation entry flags matching token string parameters
-    invite = db.query(WorkspaceInvitation).filter(
-        WorkspaceInvitation.token == token,
-        WorkspaceInvitation.is_accepted == False
-    ).first()
+# Inside your accept_workspace_invitation service logic block:
 
+def accept_workspace_invitation(db: Session, token: str):
+    # 1. Fetch the invitation row matching the parsed token string container
+    invite = db.query(WorkspaceInvitation).filter(WorkspaceInvitation.token == token).first()
     if not invite:
-        raise HTTPException(status_code=404, detail="Invitation link is invalid or has already been used")
+        raise HTTPException(status_code=404, detail="Invitation link is invalid or has expired.")
+        
+    if invite.is_accepted:
+        raise HTTPException(status_code=400, detail="This invitation context has already been used.")
+        
+    # 2. Check token time expiration rules safely
+    if invite.expires_at and invite.expires_at.replace(tzinfo=None) < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Invitation token has expired.")
 
-    if invite.expires_at < datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Invitation token expired")
+    # 3. Look up if a registered user account already matches the target email parameters
+    user = db.query(User).filter(User.email == invite.email).first()
+    
+    if not user:
+        # 💡 Premium UX Flow: If the user profile doesn't exist yet, return a clean instruction code block
+        # telling the frontend to route them straight to the signup screen with their email pre-filled!
+        return {
+            "status": "pending_registration",
+            "email": invite.email,
+            "message": "Invitation token verified successfully! Please register an account profile to complete onboarding setup."
+        }
 
-    # 🛡️ SECURITY MATCH CHECK: Ensure the authenticated user matches the invited email context
-    if invite.email.lower() != user_email.lower():
-        raise HTTPException(status_code=403, detail="This invitation link was issued to a different email address")
-
-    # 2. Check for duplicate protection bounds
-    duplicate = db.query(WorkspaceMember).filter(
-        WorkspaceMember.workspace_id == invite.workspace_id,
-        WorkspaceMember.user_id == user_id
-    ).first()
-
-    if duplicate:
-        invite.is_accepted = True
-        db.commit()
-        raise HTTPException(status_code=400, detail="User is already registered inside this workspace")
-
-    # 3. Create the WorkspaceMember assignment row
+    # 4. If the user already exists, provision their workspace access right away!
     new_member = WorkspaceMember(
         workspace_id=invite.workspace_id,
-        user_id=user_id,
-        role=invite.role,
-        invited_by=invite.invited_by
+        user_id=user.id,
+        role=invite.role
     )
-    db.add(new_member)
-
-    # Flip tracking state marker
+    
     invite.is_accepted = True
+    db.add(new_member)
     db.commit()
-
+    
     return {
-        "success": True,
-        "message": "Successfully joined the workspace team container",
-        "workspace_id": str(invite.workspace_id)
+        "status": "success",
+        "message": "Successfully linked to the target team workspace cluster environment container!"
     }

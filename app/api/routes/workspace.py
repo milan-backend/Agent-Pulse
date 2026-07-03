@@ -229,18 +229,17 @@ def invite_member(
 
 
 # =========================
-# ACCEPT TEAM INVITATION
+# ACCEPT TEAM INVITATION (UPDATED & PUBLIC 🔓)
 # =========================
 @router.post("/accept-invite")
 def accept_invite(
     payload: AcceptInviteRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db)
+    # 🟢 REMOVED: current_user dependency constraint parameter from here!
 ):
-    """ Finalizes invitation handshakes and provisions the new WorkspaceMember row configuration """
+    """ Finalizes invitation handshakes without forcing a pre-authenticated session barrier """
     return accept_workspace_invitation(
         db=db,
-        token=payload.token,
-        user_id=current_user.id,
-        user_email=current_user.email
+        token=payload.token
+        # 🟢 REMOVED: user_id and user_email pass-throughs
     )
