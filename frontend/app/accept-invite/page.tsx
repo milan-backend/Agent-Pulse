@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ShieldAlert, ShieldCheck, ArrowRight, Activity } from "lucide-react";
 import { acceptWorkspaceInvitation } from "@/components/api";
+import { toast } from "sonner";
 
 function AcceptInviteContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const token = searchParams.get("token");
   
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
@@ -23,6 +25,19 @@ function AcceptInviteContent() {
     async function processInvitation() {
       try {
         const response = await acceptWorkspaceInvitation(token!);
+        
+        // ⚡ CHECK FOR NEW USER REGISTRATION REQUIRED STATUS FLAG
+        if (response?.status === "pending_registration") {
+          toast.info("Invitation verified! Let's set up your account profile.");
+          
+          // Save the token temporarily in browser session storage so we can link it post-signup
+          sessionStorage.setItem("pending_invite_token", token!);
+          
+          // Route them to signup with their invited email pre-filled in query parameters
+          router.push(`/signup?email=${encodeURIComponent(response.email)}`);
+          return;
+        }
+
         setStatus("success");
         setMessage(response?.message || "Successfully joined the team cluster container!");
       } catch (err: any) {
@@ -32,7 +47,7 @@ function AcceptInviteContent() {
     }
     
     processInvitation();
-  }, [token]);
+  }, [token, router]);
 
   return (
     <div className="relative z-10 w-full max-w-md rounded-[40px] border border-cyan-500/20 bg-[linear-gradient(180deg,#071120_0%,#091525_100%)] p-10 text-center shadow-2xl">
@@ -90,7 +105,6 @@ export default function AcceptInvitePage() {
       <div className="absolute top-0 left-0 h-[500px] w-[500px] rounded-full bg-cyan-500/5 blur-3xl" />
       <div className="absolute bottom-0 right-0 h-[500px] w-[500px] rounded-full bg-purple-500/5 blur-3xl" />
       
-      {/* Next.js requires search parameters lookups to be isolated inside Suspense components to prevent static assembly build errors */}
       <Suspense fallback={
         <div className="font-mono text-xs text-cyan-400 flex items-center gap-2 tracking-widest">
           <Loader2 className="animate-spin" size={16} /> INITIALIZING OVERLAY RUNTIME...
