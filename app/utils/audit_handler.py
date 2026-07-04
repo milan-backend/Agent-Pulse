@@ -4,22 +4,20 @@ from fastapi import Request, Response, HTTPException
 from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
-from app.models.user import User  # ⚡ Import the User model directly from your schema definitions
+from app.models.user import User
+from app.models.workspace_member import WorkspaceMember  # 🟢 Step 1: Import your junction model!
 
 class AuditLogRoute(APIRoute):
     def get_route_handler(self) -> Callable:
         original_handler = super().get_route_handler()
 
         async def custom_handler(request: Request) -> Response:
-            # 1. Skip auditing completely for read-only GET requests
             if request.method == "GET":
                 return await original_handler(request)
 
-            # Check if request state has db context, otherwise spin up a standalone session
             has_state_db = hasattr(request.state, "db") and request.state.db is not None
             db: Session = request.state.db if has_state_db else SessionLocal()
             
-            # 2. Safe request body stream caching pipeline
             input_data = None
             if request.method in ["POST", "PUT", "PATCH", "DELETE"]:
                 try:
@@ -29,14 +27,12 @@ class AuditLogRoute(APIRoute):
                         if "password" in input_data:
                             input_data["password"] = "********"
                     
-                    # Reset stream pointer state so downstream Pydantic schemas can read it natively
                     async def receive():
                         return {"type": "http.request", "body": body_bytes, "more_body": False}
                     request._receive = receive
                 except Exception:
                     pass
 
-            # 3. Clean dynamic path parameters out of structural action strings
             path_segments = [s for s in request.url.path.split("/") if s]
             if path_segments:
                 last_segment = path_segments[-1]
@@ -48,7 +44,13 @@ class AuditLogRoute(APIRoute):
             else:
                 action_name = f"{request.method}_ACTION"
 
-            # 4. Core request execution lifecycle
+            # Parse workspace context parameters upfront out of headers or body
+            workspace_id = request.headers.get("workspace-id")
+            if not workspace_id and input_data:
+                workspace_id = input_data.get("workspace_id")
+            if not workspace_id:
+                workspace_id = "UNKNOWN_WORKSPACE"
+
             try:
                 response: Response = await original_handler(request)
                 
@@ -59,56 +61,58 @@ class AuditLogRoute(APIRoute):
                     except Exception:
                         pass
 
-                # 5. 🟢 DYNAMIC IDENTIFICATION & SIGNUP DATA FETCHING PIPELINE
                 db_user_name = None
                 db_user_email = None
-                db_user_role = None  # 🟢 Start as None so we don't accidentally force a false role
+                db_user_role = None  
                 user_id_str = None
 
-                # A. Direct read optimization out of request state wrapper
+                # A. Read basic user profile info out of request state context
                 if hasattr(request.state, "user") and request.state.user:
                     user_obj = request.state.user
                     user_id_str = str(getattr(user_obj, "id", ""))
                     db_user_name = getattr(user_obj, "name", None)
                     db_user_email = getattr(user_obj, "email", None)
-                    db_user_role = getattr(user_obj, "role", None)
 
-                # B. DEEP JWT SECURITY RECOVERY GAP GATE: Hard table queries via real authentication utility
+                # B. JWT Verification Fallback Path if state is blank
                 if not db_user_name:
                     auth_header = request.headers.get("Authorization")
                     if auth_header and auth_header.startswith("Bearer "):
                         try:
                             token = auth_header.split(" ")[1]
                             from app.services.user_auth_service import authenticate_user
-                            
-                            # Directly fetch the complete User model instance straight from the database
                             matched_user = authenticate_user(db=db, token=token)
-                            
                             if matched_user:
                                 user_id_str = str(matched_user.id)
                                 db_user_name = matched_user.name  
                                 db_user_email = matched_user.email
-                                # 🟢 Dynamically query the actual user profile role, fallback to OPERATOR safely if missing
-                                db_user_role = getattr(matched_user, "role", "OPERATOR")
                         except Exception:
                             pass
 
-                # C. Final string fallback logic parsing parameters out of output metrics
+                # 🟢 Step 2: CROSS-TABLE JUNCTION QUERY FOR THE ROLE!
+                # If we successfully captured a user_id and have a valid workspace context, look up their role!
+                if user_id_str and workspace_id != "UNKNOWN_WORKSPACE" and db:
+                    try:
+                        member_record = db.query(WorkspaceMember).filter(
+                            WorkspaceMember.workspace_id == workspace_id,
+                            WorkspaceMember.user_id == user_id_str
+                        ).first()
+                        
+                        if member_record and member_record.role:
+                            # Safely extract the string representation of your WorkspaceRole Enum
+                            db_user_role = str(getattr(member_record.role, "value", member_record.role)).upper()
+                    except Exception as role_err:
+                        print(f"🚨 AUDIT ROLE FETCH ERROR: {str(role_err)}")
+                        pass
+
+                # C. Final string fallback logic if data parsing slips
                 if not db_user_name and output_data and "controlled_by" in output_data:
                     db_user_email = output_data.get("controlled_by")
                     db_user_name = db_user_email.split("@")[0].capitalize()
                     
-                # 🟢 Step 3: Ultimate safe row baseline definition. No hardcoded ADMIN overrides anymore!
+                # Ultimate safe baseline backup if the user isn't found in this specific workspace table yet
                 if not db_user_role:
                     db_user_role = "OPERATOR"
 
-                workspace_id = request.headers.get("workspace-id")
-                if not workspace_id and input_data:
-                    workspace_id = input_data.get("workspace_id")
-                if not workspace_id:
-                    workspace_id = "UNKNOWN_WORKSPACE"
-
-                # 6. Dispatch transaction row write permanently to DB
                 from app.models.audit_log import AuditLog
                 new_log = AuditLog(
                     workspace_id=str(workspace_id),
@@ -127,13 +131,10 @@ class AuditLogRoute(APIRoute):
                 return response
 
             except Exception as exc:
-                # Failure tracing block
                 error_msg = str(exc)
                 if isinstance(exc, HTTPException):
                     error_msg = f"HTTP {exc.status_code}: {exc.detail}"
 
-                workspace_id = request.headers.get("workspace-id") or "UNKNOWN_WORKSPACE"
-                
                 from app.models.audit_log import AuditLog
                 fail_log = AuditLog(
                     workspace_id=str(workspace_id),

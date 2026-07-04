@@ -4,14 +4,13 @@ import React, { useState, useEffect } from "react";
 import { fetchAuditLogs, AuditLogFilters } from "@/components/api";
 import { Shield, ShieldAlert, CheckCircle2, XCircle, Search, Eye } from "lucide-react";
 
-// Local user authentication context resolver hook
 function useAuthUser() {
   const [activeUser, setActiveUser] = useState<{ id: string; name: string; role: string } | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUserId = localStorage.getItem("user_id") || "usr_dev";
-      const savedUserRole = localStorage.getItem("user_role") || "ADMIN"; // Toggle matrix: ADMIN | OPERATOR | VIEWER
+      const savedUserRole = localStorage.getItem("user_role") || "ADMIN"; 
       setActiveUser({
         id: savedUserId,
         name: "User",
@@ -55,13 +54,10 @@ export default function AuditLogsPage() {
         };
         const data = await fetchAuditLogs(queryParams);
         
-        // 🔒 🟢 COMPLETE ROLE-BASED VISIBILITY GUARD FOR OPERATORS (CASE INSENSITIVE)
         if (user?.role?.toUpperCase() === "OPERATOR") {
           const sanitizedLogs = (data.results || []).filter((log: any) => {
             const directRole = (log.user_role || "").toUpperCase();
             const legacyFallbackRole = (log.output_data?.controlled_by) ? "ADMIN" : "OPERATOR";
-            
-            // Strictly exclude all rows belonging to ADMIN roles from the Operator view
             return directRole !== "ADMIN" && legacyFallbackRole !== "ADMIN";
           });
           setLogs(sanitizedLogs);
@@ -79,7 +75,6 @@ export default function AuditLogsPage() {
     if (user && user.role !== "VIEWER") syncAuditTrails();
   }, [page, debouncedSearch, actionFilter, statusFilter, user]);
 
-  // 🛡️ ROLE BLOCK LAYOUT FOR VIEWER SUBSCRIPTIONS
   if (user && user.role === "VIEWER") {
     return (
       <div className="min-h-screen bg-[#020817] text-white flex flex-col items-center justify-center p-8 text-center">
@@ -96,7 +91,6 @@ export default function AuditLogsPage() {
     <div className="min-h-screen bg-[#020817] text-white p-8">
       <div className="max-w-6xl mx-auto">
         
-        {/* Header Block Panel */}
         <div className="rounded-3xl border border-cyan-500/20 bg-[#091525] p-8 mb-8">
           <div className="flex items-center gap-4">
             <div className="h-16 w-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
@@ -110,7 +104,6 @@ export default function AuditLogsPage() {
           </div>
         </div>
 
-        {/* Filter Bar Controls Deck */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div className="relative flex items-center">
             <Search className="absolute left-4 text-slate-500" size={18} />
@@ -147,7 +140,6 @@ export default function AuditLogsPage() {
           </select>
         </div>
 
-        {/* Data Table Panel Grid Layout */}
         <div className="rounded-3xl border border-cyan-500/20 bg-[#091525] overflow-hidden">
           {loading ? (
             <div className="p-16 text-center text-slate-500 text-sm animate-pulse tracking-widest font-mono">RETRIEVING SECURITY MATRIX TRAILS...</div>
@@ -168,21 +160,38 @@ export default function AuditLogsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-sm">
                   {logs.map((log) => {
-                    // Extract safe contextual fallback string wrappers for legacy records
-                    const fallbackEmail = log.user_email || log.output_data?.controlled_by || log.output_data?.email || "user@agentpulse.ai";
+                    const fallbackEmail = log.user_email || log.output_data?.controlled_by || "user@agentpulse.ai";
                     const fallbackName = fallbackEmail.includes("@") 
                       ? fallbackEmail.split('@')[0].charAt(0).toUpperCase() + fallbackEmail.split('@')[0].slice(1)
                       : "Workspace Operator";
                     
                     const determinedRole = log.user_role?.toUpperCase() || "OPERATOR";
 
+                    // 🟢 DYNAMIC COUNTRY SPECIFIC LOCAL TIME ZONE PARSER
+                    const formatLocalTime = (utcString: string) => {
+                      try {
+                        const dateObj = new Date(utcString);
+                        return dateObj.toLocaleString(undefined, {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                          hour12: true
+                        });
+                      } catch {
+                        return new Date(utcString).toLocaleString();
+                      }
+                    };
+
                     return (
                       <tr key={log.id} className="hover:bg-cyan-500/[0.02] transition-colors">
+                        {/* 🟢 TIME ZONE CELL OUTPUT */}
                         <td className="p-5 text-slate-400 font-mono text-xs">
-                          {new Date(log.timestamp).toLocaleString()}
+                          {formatLocalTime(log.timestamp)}
                         </td>
                         
-                        {/* 🟢 OPERATOR PROFILE (PRIORITIZES TRUE SIGNUP VALUE) */}
                         <td className="p-5">
                           <div className="font-bold text-slate-200">
                             {log.user_name || fallbackName}
@@ -192,7 +201,6 @@ export default function AuditLogsPage() {
                           </div>
                         </td>
 
-                        {/* 🟢 MULTI-ROLE SECURITY ACCREDITATION BADGES MATRIX */}
                         <td className="p-5">
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md font-mono border ${
                             determinedRole === "ADMIN" 
@@ -235,7 +243,6 @@ export default function AuditLogsPage() {
             </div>
           )}
 
-          {/* Pagination Navigation Footer */}
           <div className="p-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 bg-slate-900/20">
             <div>Displaying logs chain batch length: <span className="text-cyan-400 font-bold">{logs.length}</span> entries</div>
             <div className="flex gap-2">
@@ -258,7 +265,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      {/* JSON Inspection Modal */}
       {selectedLog && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="bg-[#091525] border border-cyan-500/20 rounded-3xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
