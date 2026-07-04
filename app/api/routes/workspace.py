@@ -36,7 +36,9 @@ from app.services.workspace_service import (
     get_workspace_members,
     remove_workspace_member,
     create_workspace_invitation,
-    accept_workspace_invitation   
+    accept_workspace_invitation,
+    get_active_workspace_invitations,
+    expire_workspace_invitation
 )
 
 from app.utils.audit_handler import AuditLogRoute
@@ -244,4 +246,54 @@ def accept_invite(
         db=db,
         token=payload.token
         # 🟢 REMOVED: user_id and user_email pass-throughs
+    )
+
+# ==========================================
+# GET ACTIVE PENDING INVITATIONS (ADMIN ONLY)
+# ==========================================
+@router.get("/invitations")
+def get_workspace_invitations(
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """ Fetches all unaccepted and unexpired invitations for this workspace """
+    # 1. Reuse your built-in membership validator guard
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=workspace_id
+    )
+    
+    # 2. Reuse your absolute RBAC check to ensure only Admins can query this data stream
+    require_admin(membership)
+    
+    return get_active_workspace_invitations(db=db, workspace_id=workspace_id)
+
+
+# ==========================================
+# REVOKE/EXPIRE PENDING INVITATION (ADMIN ONLY)
+# ==========================================
+@router.delete("/invitations/{invitation_id}")
+def revoke_member_invitation(
+    invitation_id: str,
+    workspace_id: str = Header(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """ Instantly revokes and soft-expires a pending workspace invitation link """
+    # 1. Reuse your built-in membership validator guard
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=workspace_id
+    )
+    
+    # 2. Reuse your absolute RBAC check to ensure only Admins can run this deletion block
+    require_admin(membership)
+    
+    return expire_workspace_invitation(
+        db=db, 
+        workspace_id=workspace_id, 
+        invitation_id=invitation_id
     )

@@ -486,3 +486,75 @@ def accept_workspace_invitation(db: Session, token: str):
         "status": "success",
         "message": "Successfully linked to the target team workspace cluster environment container!"
     }
+
+# 📁 Append this right at the very bottom of app/services/workspace_service.py
+
+def get_active_workspace_invitations(db: Session, workspace_id: str):
+    """
+    Fetches all non-accepted and non-expired pending invitations 
+    for the specific workspace so the Admin can inspect them.
+    """
+    current_time = datetime.utcnow()
+    
+    pending_invites = (
+        db.query(WorkspaceInvitation)
+        .filter(
+            WorkspaceInvitation.workspace_id == workspace_id,
+            WorkspaceInvitation.is_accepted == False,
+            WorkspaceInvitation.expires_at > current_time # Must be in the future to be active!
+        )
+        .order_by(WorkspaceInvitation.created_at.desc())
+        .all()
+    )
+    
+    result = []
+    for invite in pending_invites:
+        result.append({
+            "id": str(invite.id),
+            "email": invite.email,
+            "role": invite.role.value if hasattr(invite.role, "value") else str(invite.role),
+            "created_at": invite.created_at.isoformat(),
+            "expires_at": invite.expires_at.isoformat()
+        })
+        
+    return {
+        "success": True,
+        "invitations": result
+    }
+
+
+def expire_workspace_invitation(db: Session, workspace_id: str, invitation_id: str):
+    """
+    Soft-deletes/revokes a pending invitation by forcing its expires_at 
+    timestamp directly to right now, instantly invalidating the token string.
+    """
+    invitation = (
+        db.query(WorkspaceInvitation)
+        .filter(
+            WorkspaceInvitation.id == invitation_id,
+            WorkspaceInvitation.workspace_id == workspace_id
+        )
+        .first()
+    )
+    
+    if not invitation:
+        raise HTTPException(
+            status_code=404,
+            detail="Target workspace invitation record could not be found."
+        )
+        
+    if invitation.is_accepted:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot revoke an invitation that has already been accepted by a member."
+        )
+
+    # 🟢 SOFT DELETE OPERATION: Update the expiration stamp to right now!
+    invitation.expires_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {
+        "success": True,
+        "message": "Workspace invitation revoked and expired successfully."
+    }

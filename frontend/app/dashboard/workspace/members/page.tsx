@@ -11,14 +11,18 @@ import {
   Crown, 
   Loader2,
   SlidersHorizontal,
-  Briefcase
+  Briefcase,
+  Clock,
+  XCircle
 } from "lucide-react";
 import { 
   getWorkspaceMembers, 
-  inviteWorkspaceMember, // 🟢 Updated to call your new invitation service engine
+  inviteWorkspaceMember, 
   updateWorkspaceMemberRole, 
   deleteWorkspaceMember, 
-  getCurrentUser 
+  getCurrentUser,
+  getWorkspaceInvitations,      // 🟢 Added your new fetch bridge
+  revokeWorkspaceInvitation     // 🟢 Added your new revoke bridge
 } from "@/components/api";
 import { toast } from "sonner";
 
@@ -29,14 +33,25 @@ interface WorkspaceMember {
   role: string;
 }
 
+// 🟢 New Type Interface matching your invitation model keys
+interface PendingInvitation {
+  id: string;
+  email: string;
+  role: string;
+  created_at: string;
+  expires_at: string;
+}
+
 export default function WorkspaceMembersPage() {
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]); // 🟢 State for pending links
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("viewer");
   const [adding, setAdding] = useState(false);
   const [updatingRole, setUpdatingRole] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null); // 🟢 Tracking active revokes
 
   const [currentUserEmail, setCurrentUserEmail] = useState("");
   const [currentUserRole, setCurrentUserRole] = useState<"admin" | "operator" | "viewer">("viewer");
@@ -49,20 +64,28 @@ export default function WorkspaceMembersPage() {
       } catch (err) {
         console.error(err);
       } finally {
-        await loadMembers();
+        await loadWorkspaceData();
       }
     }
     initializePageContext();
   }, [currentUserEmail]);
 
-  async function loadMembers() {
+  // 🟢 Unified Data loader synchronization wrapper
+  async function loadWorkspaceData() {
     try {
       setLoading(true);
-      const data = await getWorkspaceMembers();
-      setMembers(data || []);
+      
+      // 1. Dual async thread synchronization loading members + pending arrays concurrently
+      const [membersData, invitesData] = await Promise.all([
+        getWorkspaceMembers(),
+        getWorkspaceInvitations()
+      ]);
 
-      if (currentUserEmail && data) {
-        const match = data.find((m: any) => m.user_email === currentUserEmail || m.email === currentUserEmail);
+      setMembers(membersData || []);
+      setInvitations(invitesData || []);
+
+      if (currentUserEmail && membersData) {
+        const match = membersData.find((m: any) => m.user_email === currentUserEmail || m.email === currentUserEmail);
         if (match?.role) {
           setCurrentUserRole(match.role.toLowerCase() as any);
         }
@@ -75,7 +98,11 @@ export default function WorkspaceMembersPage() {
     }
   }
 
-  // 🟢 Fixed invitation pipeline handler
+  // 🔄 Legacy operational alignment loader wrapper
+  async function loadMembers() {
+    await loadWorkspaceData();
+  }
+
   async function addMember() {
     if (!email.trim()) {
       toast.error("Please enter a valid email address");
@@ -83,12 +110,11 @@ export default function WorkspaceMembersPage() {
     }
     try {
       setAdding(true);
-      // Calls your fresh invite schema validation endpoint safely
       const response = await inviteWorkspaceMember({ email: email.trim(), role });
       toast.success(response?.message || "Workspace invitation link sent to inbox!");
       setEmail("");
       setRole("viewer");
-      await loadMembers();
+      await loadWorkspaceData(); // Refreshes both active data matrices seamlessly
     } catch (error: any) {
       toast.error(error?.message || "Failed to add user context");
     } finally {
@@ -101,7 +127,7 @@ export default function WorkspaceMembersPage() {
       setUpdatingRole(memberEmail);
       const response = await updateWorkspaceMemberRole(memberEmail, newRole);
       toast.success(response?.message || "Workspace role updated successfully");
-      await loadMembers();
+      await loadWorkspaceData();
     } catch (error: any) {
       toast.error(error?.message || "Failed to modify role context");
     } finally {
@@ -115,11 +141,26 @@ export default function WorkspaceMembersPage() {
       setRemoving(userId);
       const response = await deleteWorkspaceMember(userId);
       toast.success(response?.message || "Member removed successfully");
-      await loadMembers();
+      await loadWorkspaceData();
     } catch (error: any) {
       toast.error(error?.message || "Failed to clear member record");
     } finally {
       setRemoving(null);
+    }
+  }
+
+  // 🟢 🎯 NEW TRIGGER HANDLER: Revokes pending invitation link by soft-expiring it
+  async function handleRevokeInvitation(invitationId: string) {
+    if (!window.confirm("Are you sure you want to revoke and expire this workspace invitation link?")) return;
+    try {
+      setRevoking(invitationId);
+      const response = await revokeWorkspaceInvitation(invitationId);
+      toast.success(response?.message || "Invitation link successfully revoked and expired");
+      await loadWorkspaceData(); // Reloads list so it instantly filters out of your layout loop
+    } catch (error: any) {
+      toast.error(error?.message || "Failed to revoke invitation context");
+    } finally {
+      setRevoking(null);
     }
   }
 
@@ -309,6 +350,87 @@ export default function WorkspaceMembersPage() {
           </table>
         </div>
       </div>
+
+      {/* 🟢 🎯 NEW: PENDING INVITATIONS MATRIX MANAGEMENT PANEL */}
+      {isUserAdmin && (
+        <div className="bg-[#090f1c]/40 border border-slate-800/60 rounded-2xl overflow-hidden shadow-xl animate-fadeIn">
+          <div className="px-6 py-4.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/20">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <Clock size={14} className="text-amber-400" /> Pending Workspace Invitations Links
+            </h3>
+            <span className="text-[10px] font-mono font-bold bg-amber-500/10 border border-amber-500/20 rounded-md px-2 py-0.5 text-amber-400 uppercase">
+              Awaiting Registration
+            </span>
+          </div>
+
+          <div className="overflow-x-auto w-full">
+            <table className="w-full border-collapse text-left text-xs font-mono">
+              <thead>
+                <tr className="border-b border-slate-800/80 bg-slate-950/50 text-zinc-500 uppercase tracking-widest text-[10px]">
+                  <th className="py-4 px-6 font-bold font-mono">Target Recipient Email</th>
+                  <th className="py-4 px-6 font-bold font-mono">Assigned Allocation Clearance</th>
+                  <th className="py-4 px-6 font-bold font-mono">Generation Stamp</th>
+                  <th className="py-4 px-6 font-bold font-mono text-right">Revocation Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/40">
+                {invitations.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-10 text-center text-zinc-600 tracking-wider">NO ACTIVE PENDING INVITATIONS RECORDS FOUND</td>
+                  </tr>
+                ) : (
+                  invitations.map((invite) => (
+                    <tr key={invite.id} className="hover:bg-slate-900/10 transition-colors group">
+                      
+                      <td className="py-4 px-6 font-sans text-sm font-bold text-slate-300 group-hover:text-amber-400 transition-colors break-all max-w-xs">
+                        {invite.email}
+                      </td>
+
+                      <td className="py-4 px-6">
+                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-widest uppercase border inline-block ${
+                          invite.role.toLowerCase() === "admin" ? "bg-cyan-950/40 border-cyan-500/20 text-cyan-400" :
+                          invite.role.toLowerCase() === "operator" ? "bg-amber-950/40 border-amber-500/20 text-amber-400" :
+                          "bg-slate-900/60 border-slate-800 text-slate-400"
+                        }`}>
+                          {invite.role}
+                        </span>
+                      </td>
+
+                      <td className="py-4 px-6 text-zinc-500 text-xs font-mono">
+                        {new Date(invite.created_at).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit"
+                        })}
+                      </td>
+
+                      <td className="py-4 px-6 text-right">
+                        <button
+                          onClick={() => handleRevokeInvitation(invite.id)}
+                          disabled={revoking === invite.id}
+                          className="h-9 px-3 inline-flex items-center gap-1.5 rounded-xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/20 text-rose-400 transition-all font-sans text-xs font-bold active:scale-[0.97]"
+                          title="Invalidate Token Link"
+                        >
+                          {revoking === invite.id ? (
+                            <Loader2 className="animate-spin text-rose-400" size={14} />
+                          ) : (
+                            <>
+                              <XCircle size={14} />
+                              <span>Revoke</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
     </div>
   );

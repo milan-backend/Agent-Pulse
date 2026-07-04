@@ -676,6 +676,19 @@ export const acceptWorkspaceInvitation = async (token: string) => {
   });
 };
 
+export const getWorkspaceInvitations = async () => {
+  const response = await request("/workspace/invitations", {
+    method: "GET",
+  });
+  return response?.invitations || response?.data || response || [];
+};
+
+export const revokeWorkspaceInvitation = async (invitationId: string) => {
+  return request(`/workspace/invitations/${invitationId}`, {
+    method: "DELETE",
+  });
+};
+
 /* =========================================================
 MCP
 ========================================================= */
