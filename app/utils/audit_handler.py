@@ -5,7 +5,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.models.workspace_member import WorkspaceMember  # 🟢 Separate lookup table
+from app.models.workspace_member import WorkspaceMember
 
 class AuditLogRoute(APIRoute):
     def get_route_handler(self) -> Callable:
@@ -50,6 +50,50 @@ class AuditLogRoute(APIRoute):
             if not workspace_id:
                 workspace_id = "UNKNOWN_WORKSPACE"
 
+            # Shared function to resolve identification metrics cleanly
+            def resolve_user_context():
+                u_name, u_email, u_role, u_id = None, None, None, None
+                
+                # A. Read out of request state context
+                if hasattr(request.state, "user") and request.state.user:
+                    user_obj = request.state.user
+                    u_id = str(getattr(user_obj, "id", ""))
+                    u_name = getattr(user_obj, "name", None)
+                    u_email = getattr(user_obj, "email", None)
+
+                # B. Read out of JWT token backup verification
+                if not u_name:
+                    auth_header = request.headers.get("Authorization")
+                    if auth_header and auth_header.startswith("Bearer "):
+                        try:
+                            token = auth_header.split(" ")[1]
+                            from app.services.user_auth_service import authenticate_user
+                            matched_user = authenticate_user(db=db, token=token)
+                            if matched_user:
+                                u_id = str(matched_user.id)
+                                u_name = matched_user.name  
+                                u_email = matched_user.email
+                        except Exception:
+                            pass
+
+                # C. Read cross-table role context strictly from WorkspaceMember junction table
+                if u_id and workspace_id != "UNKNOWN_WORKSPACE" and db:
+                    try:
+                        member_record = db.query(WorkspaceMember).filter(
+                            WorkspaceMember.workspace_id == workspace_id,
+                            WorkspaceMember.user_id == u_id
+                        ).first()
+                        if member_record and member_record.role:
+                            u_role = str(getattr(member_record.role, "value", member_record.role)).upper().strip()
+                    except Exception:
+                        pass
+
+                if not u_role:
+                    u_role = "OPERATOR"
+
+                return u_id, u_name, u_email, u_role
+
+            # Core Execution Track
             try:
                 response: Response = await original_handler(request)
                 
@@ -60,55 +104,12 @@ class AuditLogRoute(APIRoute):
                     except Exception:
                         pass
 
-                # Initialize clear independent tracking variables
-                db_user_name = None
-                db_user_email = None
-                db_user_role = None  
-                user_id_str = None
+                user_id_str, db_user_name, db_user_email, db_user_role = resolve_user_context()
 
-                # 🟢 STEP 1: FETCH IDENTITY METRICS FROM THE STATE OBJECT (USER TABLE CONTEXT)
-                if hasattr(request.state, "user") and request.state.user:
-                    user_obj = request.state.user
-                    user_id_str = str(getattr(user_obj, "id", ""))
-                    db_user_name = getattr(user_obj, "name", None)    # From users table
-                    db_user_email = getattr(user_obj, "email", None)  # From users table
-
-                # 🟢 STEP 2: JWT BACKUP TO EXTRACT REGISTRATION CREDENTIALS (USER TABLE CONTEXT)
-                if not db_user_name:
-                    auth_header = request.headers.get("Authorization")
-                    if auth_header and auth_header.startswith("Bearer "):
-                        try:
-                            token = auth_header.split(" ")[1]
-                            from app.services.user_auth_service import authenticate_user
-                            matched_user = authenticate_user(db=db, token=token)
-                            if matched_user:
-                                user_id_str = str(matched_user.id)
-                                db_user_name = matched_user.name    # From users table
-                                db_user_email = matched_user.email  # From users table
-                        except Exception:
-                            pass
-
-                # 🟢 STEP 3: COMPLETELY SEPARATED LOOKUP TO EXTRACT ROLE FROM WORKSPACE MEMBER TABLE
-                if user_id_str and workspace_id != "UNKNOWN_WORKSPACE" and db:
-                    try:
-                        member_record = db.query(WorkspaceMember).filter(
-                            WorkspaceMember.workspace_id == workspace_id,
-                            WorkspaceMember.user_id == user_id_str
-                        ).first()
-                        
-                        if member_record and member_record.role:
-                            # Read role string exclusively from workspace junction mapping
-                            db_user_role = str(getattr(member_record.role, "value", member_record.role)).upper().strip()
-                    except Exception:
-                        pass
-
-                # Safe structural fallback options if data execution maps are detached
+                # Structural fallback if completely unmapped
                 if not db_user_name and output_data and "controlled_by" in output_data:
                     db_user_email = output_data.get("controlled_by")
                     db_user_name = db_user_email.split("@")[0].capitalize()
-                    
-                if not db_user_role:
-                    db_user_role = "OPERATOR"
 
                 from app.models.audit_log import AuditLog
                 new_log = AuditLog(
@@ -120,6 +121,7 @@ class AuditLogRoute(APIRoute):
                     user_role=str(db_user_role),
                     input_data=input_data,
                     output_data=output_data,
+                    status="SUCCESS",
                     error_message=None  
                 )
                 db.add(new_log)
@@ -132,14 +134,20 @@ class AuditLogRoute(APIRoute):
                 if isinstance(exc, HTTPException):
                     error_msg = f"HTTP {exc.status_code}: {exc.detail}"
 
+                # 🟢 CURE: Resolve the real signup user context inside the exception pathway too!
+                user_id_str, db_user_name, db_user_email, db_user_role = resolve_user_context()
+
                 from app.models.audit_log import AuditLog
                 fail_log = AuditLog(
                     workspace_id=str(workspace_id),
                     action=action_name,
-                    user_name="System Operator",
-                    user_email="operator@agentpulse.ai",
-                    user_role="OPERATOR",
+                    user_id=user_id_str,
+                    # Fallback to defaults ONLY if user identity can't be resolved at all
+                    user_name=db_user_name or "System Operator",
+                    user_email=db_user_email or "operator@agentpulse.ai",
+                    user_role=str(db_user_role),
                     input_data=input_data,
+                    status="FAILURE",
                     error_message=error_msg  
                 )
                 db.add(fail_log)
