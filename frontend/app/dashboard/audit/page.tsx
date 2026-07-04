@@ -11,12 +11,12 @@ function useAuthUser() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUserId = localStorage.getItem("user_id") || "usr_dev";
-      // 🟢 Force incoming string configuration to uppercase and trim whitespaces cleanly
-      const savedUserRole = (localStorage.getItem("user_role") || "ADMIN").toUpperCase().trim(); 
+      // 🟢 Read the exact role from localStorage without overriding it with a hardcoded baseline fallback
+      const savedUserRole = (localStorage.getItem("user_role") || "").toUpperCase().trim(); 
       setActiveUser({
         id: savedUserId,
         name: "User",
-        role: savedUserRole
+        role: savedUserRole // Will be empty string if not found, preventing false overrides
       });
     }
   }, []);
@@ -45,8 +45,6 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     async function syncAuditTrails() {
-      if (!user) return;
-      
       setLoading(true);
       try {
         const queryParams: AuditLogFilters = {
@@ -59,19 +57,19 @@ export default function AuditLogsPage() {
         const data = await fetchAuditLogs(queryParams);
         const rawResults = data.results || [];
 
-        // 🔒 🟢 STRENGTHENED RBAC VISIBILITY FILTER GATEWAY
-        const currentUserRole = user.role.toUpperCase().trim();
+        // 🔒 🟢 Bulletproof Filter: If the user is explicitly an ADMIN, show everything.
+        // Otherwise, for OPERATORS or anyone else, strictly strip out ADMIN records!
+        const currentUserRole = (user?.role || "").toUpperCase().trim();
 
-        if (currentUserRole === "OPERATOR") {
-          // If the logged-in context is strictly an OPERATOR, hide ADMIN log tracks completely
+        if (currentUserRole === "ADMIN") {
+          setLogs(rawResults);
+        } else {
+          // Absolute protection: Operators or unauthenticated states can NEVER pass this block
           const sanitizedLogs = rawResults.filter((log: any) => {
             const rowRole = (log.user_role || "").toUpperCase().trim();
             return rowRole !== "ADMIN";
           });
           setLogs(sanitizedLogs);
-        } else {
-          // If the logged-in context is ADMIN, display absolutely everything (Admin logs + Operator logs)!
-          setLogs(rawResults);
         }
         
         setTotal(data.total || 0);
@@ -177,7 +175,7 @@ export default function AuditLogsPage() {
                     const displayName = log.user_name || displayEmail.split('@')[0].charAt(0).toUpperCase() + displayEmail.split('@')[0].slice(1);
                     const determinedRole = (log.user_role || "OPERATOR").toUpperCase().trim();
 
-                    // 🟢 GEOGRAPHICAL CLOCK TRANSLATION ENGINE
+                    // GEOGRAPHICAL CLOCK TRANSLATION ENGINE
                     const renderLocalCountryTime = (utcTimestampString: string) => {
                       if (!utcTimestampString) return "—";
                       try {
@@ -186,8 +184,6 @@ export default function AuditLogsPage() {
                           : `${utcTimestampString}Z`;
                         
                         const targetDateObj = new Date(cleanUtcString);
-                        
-                        // Automatically shifts to local client machine country time formats natively
                         return targetDateObj.toLocaleString(undefined, {
                           year: "numeric",
                           month: "2-digit",
@@ -204,12 +200,10 @@ export default function AuditLogsPage() {
 
                     return (
                       <tr key={log.id} className="hover:bg-cyan-500/[0.02] transition-colors">
-                        {/* 🟢 LOCALIZED REGIONAL DATE COLUMN */}
                         <td className="p-5 text-slate-400 font-mono text-xs whitespace-nowrap">
                           {renderLocalCountryTime(log.timestamp)}
                         </td>
                         
-                        {/* 🟢 DYNAMIC USER PROFILE CELL */}
                         <td className="p-5">
                           <div className="font-bold text-slate-200">
                             {displayName}
@@ -219,7 +213,6 @@ export default function AuditLogsPage() {
                           </div>
                         </td>
 
-                        {/* 🟢 CONTEXT WORKSPACE MEMBER ROLE BADGES MATRIX */}
                         <td className="p-5">
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md font-mono border ${
                             determinedRole === "ADMIN" 
@@ -236,7 +229,6 @@ export default function AuditLogsPage() {
                           {log.action}
                         </td>
                         
-                        {/* 🟢 EXCEPTION MESSAGE RECOVERY ENGINE */}
                         <td className="p-5">
                           {!log.error_message ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/10">
@@ -287,7 +279,6 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      {/* JSON Inspection Modal */}
       {selectedLog && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="bg-[#091525] border border-cyan-500/20 rounded-3xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl overflow-hidden">
