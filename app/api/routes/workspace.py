@@ -39,7 +39,9 @@ from app.services.workspace_service import (
     accept_workspace_invitation   
 )
 
-router = APIRouter()
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # =========================

@@ -27,7 +27,9 @@ from app.services.kill_service import (
     resume_workspace_agents
 )
 
-router = APIRouter()
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

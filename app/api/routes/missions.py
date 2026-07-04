@@ -14,8 +14,9 @@ from app.models.user import User
 from app.models.workspace import Workspace
 from app.services.feature_access import require_feature
 from app.tasks.step_tasks import process_step
+from app.utils.audit_handler import AuditLogRoute
 
-router = APIRouter(prefix="/missions", tags=["Missions"])
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

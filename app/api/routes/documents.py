@@ -15,8 +15,9 @@ from app.core.workspace_access import get_workspace_membership
 from app.api.rbac import require_admin, require_operator
 from app.core.rag_crypto import encrypt_file_bytes
 from app.services.feature_access import require_rag_access
+from app.utils.audit_handler import AuditLogRoute
 
-router = APIRouter(prefix="/documents", tags=["RAG Documents"])
+router = APIRouter(route_class=AuditLogRoute)
 
 # Allowed extensions for the initial MVP foundation
 ALLOWED_MIME_TYPES = {

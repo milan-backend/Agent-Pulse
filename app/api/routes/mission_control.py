@@ -34,7 +34,9 @@ from app.services.mission_control_service import (
     resume_agent_runtime
 )
 
-router = APIRouter()
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

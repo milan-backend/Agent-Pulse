@@ -14,8 +14,9 @@ from app.api.rbac import require_admin, require_operator
 
 from app.schemas.user_api_key import UserAPIKeyCreate, UserAPIKeyResponse
 from app.services.user_api_key_service import UserAPIKeyService
+from app.utils.audit_handler import AuditLogRoute
 
-router = APIRouter()
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

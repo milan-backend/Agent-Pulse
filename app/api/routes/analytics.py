@@ -25,10 +25,9 @@ from app.services.analytics_service import (
     get_analytics_overview_data
 )
 
-router = APIRouter(
-    prefix="/analytics",
-    tags=["Analytics"]
-)
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # =========================

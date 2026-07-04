@@ -29,7 +29,9 @@ from app.services.agent_service import (
     update_agent_policy_service
 )
 
-router = APIRouter()
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

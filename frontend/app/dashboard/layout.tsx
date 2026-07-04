@@ -57,6 +57,12 @@ const navItems = [
     allowedRoles: ["admin", "operator", "viewer"], // 🔓 Public
   },
   {
+    label: "Audit Trails",
+    href: "/dashboard/audit",
+    icon: Shield, // Reusing your premium Lucide Shield icon block layout!
+    allowedRoles: ["admin", "operator"], // 🔒 Admin and Operator only. Viewer is excluded!
+  },
+  {
     label: "Billing",
     href: "/dashboard/billing",
     icon: CreditCard,

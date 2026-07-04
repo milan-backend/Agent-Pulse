@@ -18,8 +18,9 @@ from app.models.agent import Agent
 from app.models.user_api_key import UserAPIKey
 from app.core.rag_crypto import decrypt_text_string
 from app.services.feature_access import require_feature
+from app.utils.audit_handler import AuditLogRoute
 
-router = APIRouter()
+router = APIRouter(route_class=AuditLogRoute)
 
 # =====================================================================
 # SECURE LAZY INITIALIZATION HELPER: NO HARDCODED WEB PAYLOAD LINKS

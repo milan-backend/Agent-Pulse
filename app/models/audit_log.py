@@ -1,16 +1,7 @@
 import uuid
-
-from sqlalchemy import (
-    Column,
-    String,
-    JSON,
-    DateTime
-)
-
+from sqlalchemy import Column, String, JSON, DateTime
 from datetime import datetime
-
 from app.db.session import Base
-
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
@@ -21,14 +12,22 @@ class AuditLog(Base):
         default=lambda: str(uuid.uuid4())
     )
 
+    # 🟢 NEW: Identity snapshot columns
+    workspace_id = Column(String, nullable=False, index=True)
+    user_id = Column(String, nullable=True, index=True)
+    user_name = Column(String, nullable=True)
+    user_email = Column(String, nullable=True)
+    user_role = Column(String, nullable=True)
+
+    # 🟡 UPDATED: Made nullable=True so we can log non-agent actions too
     agent_id = Column(
         String,
-        nullable=False
+        nullable=True
     )
 
     step_id = Column(
         String,
-        nullable=False
+        nullable=True
     )
 
     action = Column(
@@ -36,11 +35,13 @@ class AuditLog(Base):
     )
 
     input_data = Column(
-        JSON
+        JSON,
+        nullable=True
     )
 
     output_data = Column(
-        JSON
+        JSON,
+        nullable=True
     )
 
     error_message = Column(
@@ -50,5 +51,6 @@ class AuditLog(Base):
 
     timestamp = Column(
         DateTime,
-        default=datetime.utcnow
+        default=datetime.utcnow,
+        index=True
     )

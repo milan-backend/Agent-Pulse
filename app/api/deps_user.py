@@ -1,5 +1,5 @@
 from fastapi import (
-    Depends
+    Depends,Request
 )
 
 from fastapi.security import (
@@ -20,6 +20,7 @@ security = HTTPBearer()
 
 
 def get_current_user(
+        request: Request,
 
     credentials:
         HTTPAuthorizationCredentials
@@ -35,3 +36,8 @@ def get_current_user(
         db=db,
         token=token
     )
+
+    # 🟢 Step 2: Bind the user object straight to the request state layer!
+    request.state.user = user
+
+    return user

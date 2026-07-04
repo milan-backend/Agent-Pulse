@@ -993,3 +993,32 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         return "⚠️ Connection exception encountered while communicating with the background execution worker node.";
     }
 };
+
+
+// 🟢 RE-ENGINEERED WITH GLOBAL REQUEST UTILITY PIPELINE
+export interface AuditLogFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  action?: string;
+  status?: string;
+  start_date?: string;
+  end_date?: string;
+}
+
+export const fetchAuditLogs = async (filters: AuditLogFilters) => {
+  const queryParams = new URLSearchParams();
+  
+  if (filters.page) queryParams.append("page", filters.page.toString());
+  if (filters.limit) queryParams.append("limit", filters.limit.toString());
+  if (filters.search) queryParams.append("search", filters.search);
+  if (filters.action) queryParams.append("action", filters.action);
+  if (filters.status) queryParams.append("status", filters.status);
+  if (filters.start_date) queryParams.append("start_date", filters.start_date);
+  if (filters.end_date) queryParams.append("end_date", filters.end_date);
+
+  // Uses your core token rotation interceptor framework natively!
+  return request(`/api/v1/audit-logs?${queryParams.toString()}`, {
+    method: "GET"
+  });
+};

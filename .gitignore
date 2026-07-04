@@ -146,3 +146,5 @@ force_pro_fix.py
 update_plan.py
 enterprise_yearly_plan.py
 inject_db_changes.py
+upgrade_audit_tables.py
+test_audit_db.py

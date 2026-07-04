@@ -36,7 +36,9 @@ from app.services.analytics_service import (
     get_token_analytics
 )
 
-router = APIRouter()
+from app.utils.audit_handler import AuditLogRoute
+
+router = APIRouter(route_class=AuditLogRoute)
 
 
 # ============================================

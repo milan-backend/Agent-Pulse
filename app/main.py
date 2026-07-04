@@ -1,4 +1,5 @@
 from fastapi import FastAPI,Request,Response
+from app.utils.audit_handler import AuditLogRoute
 
 from app.db.session import Base, engine
 
@@ -19,6 +20,7 @@ from app.api.routes import usage
 from app.api.routes import tasks
 from app.api.routes import user_api_key
 from app.api.routes import documents
+from app.api.routes import audit_routes
 
 from app.api.routes import billing, webhooks
 
@@ -61,14 +63,15 @@ app.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=['Dashboard'])
 app.include_router(ws.router)
-app.include_router(analytics_router)
+app.include_router(analytics_router, prefix="/analytics",tags=["Analytics"])
 app.include_router(kill.router)
 app.include_router(mission_control.router, prefix="/mission-control", tags=["Mission Control"])
 app.include_router(workspace.router, prefix= "/workspace", tags=["Workspace"]) 
-app.include_router(missions.router)
-app.include_router(usage.router)
+app.include_router(missions.router, prefix="/missions", tags=["Missions"])
+app.include_router(usage.router, prefix="/usage", tags=["Usage"])
 app.include_router(tasks.router)
 app.include_router(billing.router, prefix="/billing", tags=["Billing"])
 app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(user_api_key.router, prefix="/api-keys", tags=["API Keys"])
-app.include_router(documents.router)
+app.include_router(documents.router, prefix="/documents", tags=["RAG Documents"])
+app.include_router(audit_routes.router)
