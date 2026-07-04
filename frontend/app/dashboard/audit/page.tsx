@@ -11,12 +11,11 @@ function useAuthUser() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUserId = localStorage.getItem("user_id") || "usr_dev";
-      // 🟢 Reads role dynamically, allowing clear localized debugging
       const savedUserRole = localStorage.getItem("user_role") || "OPERATOR"; 
       setActiveUser({
         id: savedUserId,
         name: "User",
-        role: savedUserRole.toUpperCase()
+        role: savedUserRole.toUpperCase().trim()
       });
     }
   }, []);
@@ -58,8 +57,8 @@ export default function AuditLogsPage() {
         
         const rawResults = data.results || [];
 
-        // 🔒 🟢 STRENGTHENED CLIENT-SIDE RBAC FILTER GATEWAY
-        // If the logged-in user context is an OPERATOR, filter out ADMIN rows meticulously
+        // 🔒 RBAC VISIBILITY FILTER GATEWAY FOR WORKSPACE MEMBERS
+        // If the logged-in context is an OPERATOR, hide ADMIN log tracks completely
         if (user?.role === "OPERATOR") {
           const sanitizedLogs = rawResults.filter((log: any) => {
             const rowRole = (log.user_role || "").toUpperCase().trim();
@@ -80,6 +79,7 @@ export default function AuditLogsPage() {
     if (user && user.role !== "VIEWER") syncAuditTrails();
   }, [page, debouncedSearch, actionFilter, statusFilter, user]);
 
+  // 🛡️ ROLE BLOCK LAYOUT FOR VIEWER SUBSCRIPTIONS
   if (user && user.role === "VIEWER") {
     return (
       <div className="min-h-screen bg-[#020817] text-white flex flex-col items-center justify-center p-8 text-center">
@@ -168,22 +168,22 @@ export default function AuditLogsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-sm">
                   {logs.map((log) => {
-                    const fallbackEmail = log.user_email || "user@agentpulse.ai";
-                    const fallbackName = fallbackEmail.split('@')[0].charAt(0).toUpperCase() + fallbackEmail.split('@')[0].slice(1);
-                    const determinedRole = (log.user_role || "OPERATOR").toUpperCase();
+                    // 🟢 CLEAN SEPARATED FALLBACK CHAIN
+                    const displayEmail = log.user_email || "user@agentpulse.ai";
+                    const displayName = log.user_name || displayEmail.split('@')[0].charAt(0).toUpperCase() + displayEmail.split('@')[0].slice(1);
+                    const determinedRole = (log.user_role || "OPERATOR").toUpperCase().trim();
 
-                    // 🟢 DYNAMIC LOCAL TIME ZONE TRANSLATION ENGINE
+                    // 🟢 GEOGRAPHICAL CLOCK TRANSLATION ENGINE
                     const renderLocalCountryTime = (utcTimestampString: string) => {
                       if (!utcTimestampString) return "—";
                       try {
-                        // Append 'Z' to explicitly force JS engine to treat the string as strict UTC
                         const cleanUtcString = utcTimestampString.endsWith("Z") 
                           ? utcTimestampString 
                           : `${utcTimestampString}Z`;
                         
                         const targetDateObj = new Date(cleanUtcString);
                         
-                        // Automatically uses the local country browser settings (India, USA, Europe etc.)
+                        // Automatically shifts and localizes to Indian Standard Time (IST) or USA clocks based on browser region
                         return targetDateObj.toLocaleString(undefined, {
                           year: "numeric",
                           month: "2-digit",
@@ -200,20 +200,22 @@ export default function AuditLogsPage() {
 
                     return (
                       <tr key={log.id} className="hover:bg-cyan-500/[0.02] transition-colors">
-                        {/* 🟢 DYNAMIC LOCALIZED COUNTRY CLOCK */}
+                        {/* 🟢 LOCALIZED REGIONAL DATE COLUMN */}
                         <td className="p-5 text-slate-400 font-mono text-xs whitespace-nowrap">
                           {renderLocalCountryTime(log.timestamp)}
                         </td>
                         
+                        {/* 🟢 DYNAMIC USER PROFILE COLUMN (NAME & MAIL ID FROM USER TABLE ONLY) */}
                         <td className="p-5">
                           <div className="font-bold text-slate-200">
-                            {log.user_name || fallbackName}
+                            {displayName}
                           </div>
                           <div className="text-xs text-slate-500 font-mono mt-0.5">
-                            {log.user_email || fallbackEmail}
+                            {displayEmail}
                           </div>
                         </td>
 
+                        {/* 🟢 CONTEXT WORKSPACE MEMBER ROLE BADGES MATRIX */}
                         <td className="p-5">
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md font-mono border ${
                             determinedRole === "ADMIN" 

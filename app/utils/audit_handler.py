@@ -5,7 +5,7 @@ from fastapi.routing import APIRoute
 from sqlalchemy.orm import Session
 from app.db.session import SessionLocal
 from app.models.user import User
-from app.models.workspace_member import WorkspaceMember  # 🟢 Step 1: Import your junction model!
+from app.models.workspace_member import WorkspaceMember  # 🟢 Separate lookup table
 
 class AuditLogRoute(APIRoute):
     def get_route_handler(self) -> Callable:
@@ -44,7 +44,6 @@ class AuditLogRoute(APIRoute):
             else:
                 action_name = f"{request.method}_ACTION"
 
-            # Parse workspace context parameters upfront out of headers or body
             workspace_id = request.headers.get("workspace-id")
             if not workspace_id and input_data:
                 workspace_id = input_data.get("workspace_id")
@@ -61,19 +60,20 @@ class AuditLogRoute(APIRoute):
                     except Exception:
                         pass
 
+                # Initialize clear independent tracking variables
                 db_user_name = None
                 db_user_email = None
                 db_user_role = None  
                 user_id_str = None
 
-                # A. Read basic user profile info out of request state context
+                # 🟢 STEP 1: FETCH IDENTITY METRICS FROM THE STATE OBJECT (USER TABLE CONTEXT)
                 if hasattr(request.state, "user") and request.state.user:
                     user_obj = request.state.user
                     user_id_str = str(getattr(user_obj, "id", ""))
-                    db_user_name = getattr(user_obj, "name", None)
-                    db_user_email = getattr(user_obj, "email", None)
+                    db_user_name = getattr(user_obj, "name", None)    # From users table
+                    db_user_email = getattr(user_obj, "email", None)  # From users table
 
-                # B. JWT Verification Fallback Path if state is blank
+                # 🟢 STEP 2: JWT BACKUP TO EXTRACT REGISTRATION CREDENTIALS (USER TABLE CONTEXT)
                 if not db_user_name:
                     auth_header = request.headers.get("Authorization")
                     if auth_header and auth_header.startswith("Bearer "):
@@ -83,13 +83,12 @@ class AuditLogRoute(APIRoute):
                             matched_user = authenticate_user(db=db, token=token)
                             if matched_user:
                                 user_id_str = str(matched_user.id)
-                                db_user_name = matched_user.name  
-                                db_user_email = matched_user.email
+                                db_user_name = matched_user.name    # From users table
+                                db_user_email = matched_user.email  # From users table
                         except Exception:
                             pass
 
-                # 🟢 Step 2: CROSS-TABLE JUNCTION QUERY FOR THE ROLE!
-                # If we successfully captured a user_id and have a valid workspace context, look up their role!
+                # 🟢 STEP 3: COMPLETELY SEPARATED LOOKUP TO EXTRACT ROLE FROM WORKSPACE MEMBER TABLE
                 if user_id_str and workspace_id != "UNKNOWN_WORKSPACE" and db:
                     try:
                         member_record = db.query(WorkspaceMember).filter(
@@ -98,18 +97,16 @@ class AuditLogRoute(APIRoute):
                         ).first()
                         
                         if member_record and member_record.role:
-                            # Safely extract the string representation of your WorkspaceRole Enum
-                            db_user_role = str(getattr(member_record.role, "value", member_record.role)).upper()
-                    except Exception as role_err:
-                        print(f"🚨 AUDIT ROLE FETCH ERROR: {str(role_err)}")
+                            # Read role string exclusively from workspace junction mapping
+                            db_user_role = str(getattr(member_record.role, "value", member_record.role)).upper().strip()
+                    except Exception:
                         pass
 
-                # C. Final string fallback logic if data parsing slips
+                # Safe structural fallback options if data execution maps are detached
                 if not db_user_name and output_data and "controlled_by" in output_data:
                     db_user_email = output_data.get("controlled_by")
                     db_user_name = db_user_email.split("@")[0].capitalize()
                     
-                # Ultimate safe baseline backup if the user isn't found in this specific workspace table yet
                 if not db_user_role:
                     db_user_role = "OPERATOR"
 
@@ -120,7 +117,7 @@ class AuditLogRoute(APIRoute):
                     user_id=user_id_str,
                     user_name=db_user_name or "System Operator",
                     user_email=db_user_email or "operator@agentpulse.ai",
-                    user_role=str(db_user_role).upper(),
+                    user_role=str(db_user_role),
                     input_data=input_data,
                     output_data=output_data,
                     error_message=None  
