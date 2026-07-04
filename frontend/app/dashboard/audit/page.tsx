@@ -11,11 +11,12 @@ function useAuthUser() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUserId = localStorage.getItem("user_id") || "usr_dev";
-      const savedUserRole = localStorage.getItem("user_role") || "OPERATOR"; 
+      // 🟢 Force incoming string configuration to uppercase and trim whitespaces cleanly
+      const savedUserRole = (localStorage.getItem("user_role") || "ADMIN").toUpperCase().trim(); 
       setActiveUser({
         id: savedUserId,
         name: "User",
-        role: savedUserRole.toUpperCase().trim()
+        role: savedUserRole
       });
     }
   }, []);
@@ -44,6 +45,8 @@ export default function AuditLogsPage() {
 
   useEffect(() => {
     async function syncAuditTrails() {
+      if (!user) return;
+      
       setLoading(true);
       try {
         const queryParams: AuditLogFilters = {
@@ -54,18 +57,20 @@ export default function AuditLogsPage() {
           status: statusFilter,
         };
         const data = await fetchAuditLogs(queryParams);
-        
         const rawResults = data.results || [];
 
-        // 🔒 RBAC VISIBILITY FILTER GATEWAY FOR WORKSPACE MEMBERS
-        // If the logged-in context is an OPERATOR, hide ADMIN log tracks completely
-        if (user?.role === "OPERATOR") {
+        // 🔒 🟢 STRENGTHENED RBAC VISIBILITY FILTER GATEWAY
+        const currentUserRole = user.role.toUpperCase().trim();
+
+        if (currentUserRole === "OPERATOR") {
+          // If the logged-in context is strictly an OPERATOR, hide ADMIN log tracks completely
           const sanitizedLogs = rawResults.filter((log: any) => {
             const rowRole = (log.user_role || "").toUpperCase().trim();
             return rowRole !== "ADMIN";
           });
           setLogs(sanitizedLogs);
         } else {
+          // If the logged-in context is ADMIN, display absolutely everything (Admin logs + Operator logs)!
           setLogs(rawResults);
         }
         
@@ -182,7 +187,7 @@ export default function AuditLogsPage() {
                         
                         const targetDateObj = new Date(cleanUtcString);
                         
-                        // Automatically shifts to local client time (IST / USA / Europe) based on browser parameters
+                        // Automatically shifts to local client machine country time formats natively
                         return targetDateObj.toLocaleString(undefined, {
                           year: "numeric",
                           month: "2-digit",
@@ -231,7 +236,7 @@ export default function AuditLogsPage() {
                           {log.action}
                         </td>
                         
-                        {/* 🟢 SAFE EVALUATION VIA THE ERROR_MESSAGE FIELD */}
+                        {/* 🟢 EXCEPTION MESSAGE RECOVERY ENGINE */}
                         <td className="p-5">
                           {!log.error_message ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/10">
