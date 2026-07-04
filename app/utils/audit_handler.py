@@ -59,10 +59,10 @@ class AuditLogRoute(APIRoute):
                     except Exception:
                         pass
 
-                # 5. 🟢 UNIFIED IDENTIFICATION & SIGNUP DATABASE DATA FETCHING PIPELINE
+                # 5. 🟢 DYNAMIC IDENTIFICATION & SIGNUP DATA FETCHING PIPELINE
                 db_user_name = None
                 db_user_email = None
-                db_user_role = "ADMIN"
+                db_user_role = None  # 🟢 Start as None so we don't accidentally force a false role
                 user_id_str = None
 
                 # A. Direct read optimization out of request state wrapper
@@ -71,34 +71,36 @@ class AuditLogRoute(APIRoute):
                     user_id_str = str(getattr(user_obj, "id", ""))
                     db_user_name = getattr(user_obj, "name", None)
                     db_user_email = getattr(user_obj, "email", None)
-                    db_user_role = getattr(user_obj, "role", "ADMIN")
+                    db_user_role = getattr(user_obj, "role", None)
 
-                # B. ⚡ FIXED SECURITY RECOVERY GATE: Use your real authentication service function directly!
+                # B. DEEP JWT SECURITY RECOVERY GAP GATE: Hard table queries via real authentication utility
                 if not db_user_name:
                     auth_header = request.headers.get("Authorization")
                     if auth_header and auth_header.startswith("Bearer "):
                         try:
                             token = auth_header.split(" ")[1]
-                            
-                            # 🟢 Import your real working authentication utility function
                             from app.services.user_auth_service import authenticate_user
                             
-                            # Directly fetch the complete User model instance straight from the 'users' table rows
+                            # Directly fetch the complete User model instance straight from the database
                             matched_user = authenticate_user(db=db, token=token)
                             
                             if matched_user:
                                 user_id_str = str(matched_user.id)
-                                db_user_name = matched_user.name  # ⚡ Pulls exact signup name string natively!
+                                db_user_name = matched_user.name  
                                 db_user_email = matched_user.email
-                                db_user_role = getattr(matched_user, "role", "ADMIN")
-                        except Exception as token_err:
-                            print(f"🚨 AUDIT JWT ERROR: Verification failed -> {str(token_err)}")
+                                # 🟢 Dynamically query the actual user profile role, fallback to OPERATOR safely if missing
+                                db_user_role = getattr(matched_user, "role", "OPERATOR")
+                        except Exception:
                             pass
 
-                # C. Final fallback structure logic parsing parameters out of output metrics
+                # C. Final string fallback logic parsing parameters out of output metrics
                 if not db_user_name and output_data and "controlled_by" in output_data:
                     db_user_email = output_data.get("controlled_by")
                     db_user_name = db_user_email.split("@")[0].capitalize()
+                    
+                # 🟢 Step 3: Ultimate safe row baseline definition. No hardcoded ADMIN overrides anymore!
+                if not db_user_role:
+                    db_user_role = "OPERATOR"
 
                 workspace_id = request.headers.get("workspace-id")
                 if not workspace_id and input_data:
@@ -114,7 +116,7 @@ class AuditLogRoute(APIRoute):
                     user_id=user_id_str,
                     user_name=db_user_name or "System Operator",
                     user_email=db_user_email or "operator@agentpulse.ai",
-                    user_role=str(db_user_role).upper() if db_user_role else "ADMIN",
+                    user_role=str(db_user_role).upper(),
                     input_data=input_data,
                     output_data=output_data,
                     error_message=None  
@@ -138,7 +140,7 @@ class AuditLogRoute(APIRoute):
                     action=action_name,
                     user_name="System Operator",
                     user_email="operator@agentpulse.ai",
-                    user_role="ADMIN",
+                    user_role="OPERATOR",
                     input_data=input_data,
                     error_message=error_msg  
                 )

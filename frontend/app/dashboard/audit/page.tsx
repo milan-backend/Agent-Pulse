@@ -11,10 +11,11 @@ function useAuthUser() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedUserId = localStorage.getItem("user_id") || "usr_dev";
+      const savedUserRole = localStorage.getItem("user_role") || "ADMIN"; // Toggle matrix: ADMIN | OPERATOR | VIEWER
       setActiveUser({
         id: savedUserId,
         name: "User",
-        role: "ADMIN" // ⚡ Roles toggle matrix: ADMIN | OPERATOR | VIEWER
+        role: savedUserRole.toUpperCase()
       });
     }
   }, []);
@@ -54,9 +55,15 @@ export default function AuditLogsPage() {
         };
         const data = await fetchAuditLogs(queryParams);
         
-        // 🔒 RBAC ROW-FILTERING GATEWAY
-        if (user?.role === "OPERATOR") {
-          const sanitizedLogs = (data.results || []).filter((log: any) => log.user_role !== "ADMIN");
+        // 🔒 🟢 COMPLETE ROLE-BASED VISIBILITY GUARD FOR OPERATORS (CASE INSENSITIVE)
+        if (user?.role?.toUpperCase() === "OPERATOR") {
+          const sanitizedLogs = (data.results || []).filter((log: any) => {
+            const directRole = (log.user_role || "").toUpperCase();
+            const legacyFallbackRole = (log.output_data?.controlled_by) ? "ADMIN" : "OPERATOR";
+            
+            // Strictly exclude all rows belonging to ADMIN roles from the Operator view
+            return directRole !== "ADMIN" && legacyFallbackRole !== "ADMIN";
+          });
           setLogs(sanitizedLogs);
         } else {
           setLogs(data.results || []);
@@ -161,13 +168,13 @@ export default function AuditLogsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-sm">
                   {logs.map((log) => {
-                    // Extract safe contextual string rollbacks for older legacy database elements
-                    const fallbackEmail = log.output_data?.controlled_by || log.output_data?.email || "user@agentpulse.ai";
+                    // Extract safe contextual fallback string wrappers for legacy records
+                    const fallbackEmail = log.user_email || log.output_data?.controlled_by || log.output_data?.email || "user@agentpulse.ai";
                     const fallbackName = fallbackEmail.includes("@") 
                       ? fallbackEmail.split('@')[0].charAt(0).toUpperCase() + fallbackEmail.split('@')[0].slice(1)
                       : "Workspace Operator";
                     
-                    const determinedRole = log.user_role?.toUpperCase() || (log.output_data?.controlled_by ? "ADMIN" : "OPERATOR");
+                    const determinedRole = log.user_role?.toUpperCase() || "OPERATOR";
 
                     return (
                       <tr key={log.id} className="hover:bg-cyan-500/[0.02] transition-colors">
@@ -175,7 +182,7 @@ export default function AuditLogsPage() {
                           {new Date(log.timestamp).toLocaleString()}
                         </td>
                         
-                        {/* 🟢 PRIORITIZED REAL PROFILE STRINGS RECOVERY MATRIX */}
+                        {/* 🟢 OPERATOR PROFILE (PRIORITIZES TRUE SIGNUP VALUE) */}
                         <td className="p-5">
                           <div className="font-bold text-slate-200">
                             {log.user_name || fallbackName}
@@ -185,7 +192,7 @@ export default function AuditLogsPage() {
                           </div>
                         </td>
 
-                        {/* 🟢 HIGH-FIDELITY BADGE RENDER FOR YOUR 3 APP ROLES */}
+                        {/* 🟢 MULTI-ROLE SECURITY ACCREDITATION BADGES MATRIX */}
                         <td className="p-5">
                           <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md font-mono border ${
                             determinedRole === "ADMIN" 
