@@ -50,18 +50,15 @@ class AuditLogRoute(APIRoute):
             if not workspace_id:
                 workspace_id = "UNKNOWN_WORKSPACE"
 
-            # Shared function to resolve identification metrics cleanly
             def resolve_user_context():
                 u_name, u_email, u_role, u_id = None, None, None, None
                 
-                # A. Read out of request state context
                 if hasattr(request.state, "user") and request.state.user:
                     user_obj = request.state.user
                     u_id = str(getattr(user_obj, "id", ""))
                     u_name = getattr(user_obj, "name", None)
                     u_email = getattr(user_obj, "email", None)
 
-                # B. Read out of JWT token backup verification
                 if not u_name:
                     auth_header = request.headers.get("Authorization")
                     if auth_header and auth_header.startswith("Bearer "):
@@ -76,7 +73,6 @@ class AuditLogRoute(APIRoute):
                         except Exception:
                             pass
 
-                # C. Read cross-table role context strictly from WorkspaceMember junction table
                 if u_id and workspace_id != "UNKNOWN_WORKSPACE" and db:
                     try:
                         member_record = db.query(WorkspaceMember).filter(
@@ -93,7 +89,6 @@ class AuditLogRoute(APIRoute):
 
                 return u_id, u_name, u_email, u_role
 
-            # Core Execution Track
             try:
                 response: Response = await original_handler(request)
                 
@@ -106,7 +101,6 @@ class AuditLogRoute(APIRoute):
 
                 user_id_str, db_user_name, db_user_email, db_user_role = resolve_user_context()
 
-                # Structural fallback if completely unmapped
                 if not db_user_name and output_data and "controlled_by" in output_data:
                     db_user_email = output_data.get("controlled_by")
                     db_user_name = db_user_email.split("@")[0].capitalize()
@@ -121,8 +115,7 @@ class AuditLogRoute(APIRoute):
                     user_role=str(db_user_role),
                     input_data=input_data,
                     output_data=output_data,
-                    status="SUCCESS",
-                    error_message=None  
+                    error_message=None  # 🟢 No error message means it was a success!
                 )
                 db.add(new_log)
                 db.commit()
@@ -134,7 +127,6 @@ class AuditLogRoute(APIRoute):
                 if isinstance(exc, HTTPException):
                     error_msg = f"HTTP {exc.status_code}: {exc.detail}"
 
-                # 🟢 CURE: Resolve the real signup user context inside the exception pathway too!
                 user_id_str, db_user_name, db_user_email, db_user_role = resolve_user_context()
 
                 from app.models.audit_log import AuditLog
@@ -142,13 +134,12 @@ class AuditLogRoute(APIRoute):
                     workspace_id=str(workspace_id),
                     action=action_name,
                     user_id=user_id_str,
-                    # Fallback to defaults ONLY if user identity can't be resolved at all
                     user_name=db_user_name or "System Operator",
                     user_email=db_user_email or "operator@agentpulse.ai",
                     user_role=str(db_user_role),
                     input_data=input_data,
-                    status="FAILURE",
-                    error_message=error_msg  
+                    output_data=None,
+                    error_message=error_msg  # 🟢 Storing the error trace natively tags it as a FAILURE
                 )
                 db.add(fail_log)
                 db.commit()

@@ -168,7 +168,6 @@ export default function AuditLogsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 text-sm">
                   {logs.map((log) => {
-                    // 🟢 CLEAN SEPARATED FALLBACK CHAIN
                     const displayEmail = log.user_email || "user@agentpulse.ai";
                     const displayName = log.user_name || displayEmail.split('@')[0].charAt(0).toUpperCase() + displayEmail.split('@')[0].slice(1);
                     const determinedRole = (log.user_role || "OPERATOR").toUpperCase().trim();
@@ -183,7 +182,7 @@ export default function AuditLogsPage() {
                         
                         const targetDateObj = new Date(cleanUtcString);
                         
-                        // Automatically shifts and localizes to Indian Standard Time (IST) or USA clocks based on browser region
+                        // Automatically shifts to local client time (IST / USA / Europe) based on browser parameters
                         return targetDateObj.toLocaleString(undefined, {
                           year: "numeric",
                           month: "2-digit",
@@ -205,7 +204,7 @@ export default function AuditLogsPage() {
                           {renderLocalCountryTime(log.timestamp)}
                         </td>
                         
-                        {/* 🟢 DYNAMIC USER PROFILE COLUMN (NAME & MAIL ID FROM USER TABLE ONLY) */}
+                        {/* 🟢 DYNAMIC USER PROFILE CELL */}
                         <td className="p-5">
                           <div className="font-bold text-slate-200">
                             {displayName}
@@ -231,8 +230,10 @@ export default function AuditLogsPage() {
                         <td className="p-5 text-cyan-400 font-mono text-xs font-semibold tracking-tight">
                           {log.action}
                         </td>
+                        
+                        {/* 🟢 SAFE EVALUATION VIA THE ERROR_MESSAGE FIELD */}
                         <td className="p-5">
-                          {log.status === "SUCCESS" ? (
+                          {!log.error_message ? (
                             <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 bg-emerald-500/5 px-2.5 py-1 rounded-full border border-emerald-500/10">
                               <CheckCircle2 size={12} /> Success
                             </span>
