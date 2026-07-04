@@ -22,20 +22,20 @@ export default function Hero() {
     <section className="relative z-10 max-w-7xl mx-auto px-6 pt-28 md:pt-36 text-center">
       {/* Eyebrow Label Badge Layout */}
       <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-500/20 bg-cyan-500/5 text-cyan-300 text-xs font-black tracking-widest uppercase mb-6 backdrop-blur-md">
-        AI Agent Observability & Governance Platform
+        AI Agent Infrastructure Platform
       </div>
 
       {/* Headline Content Block */}
       <h1 className="text-4xl md:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-[1.05]">
-        AI Agents Don&apos;t Fail in Demos. <br />
+        Build, Deploy & Operate AI Agents in Production. <br />
         <span className="bg-gradient-to-r from-red-400 via-orange-500 to-amber-400 bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(239,68,68,0.2)]">
-          They Fail in Production.
+         Powered by Runtime Guardrails.
         </span>
       </h1>
 
       {/* Supporting Narrative Layout Copy */}
       <p className="mt-8 text-slate-400 text-base md:text-xl max-w-3xl mx-auto leading-relaxed">
-        Monitor, control, and debug AI agents in production with execution tracing, budget controls, runtime observability, and safe execution controls.{" "}
+        Create AI agents in minutes, upload your own knowledge, connect your preferred AI provider, generate an API Key, and monitor every execution with built-in-runtime guardrails and observability.{" "}
         <span className="text-slate-200 block mt-2 font-medium">
           See every mission, understand every decision, prevent runaway costs, and confidently operate AI agents at scale.
         </span>

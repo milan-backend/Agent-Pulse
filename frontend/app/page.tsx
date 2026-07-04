@@ -13,7 +13,7 @@ import Footer from "@/components/Footer";               // Updated multi-page fo
 import FloatingCopilot from "@/components/FloatingCopilot";
 
 export const metadata = {
-  title: "AgentPulse | AI Agent Observability & Governance Platform",
+  title: "AgentPulse | AI Agent Infrastructure Platform",
   description: "Monitor, control, and debug autonomous AI agents in production with trace logging, BYOK security, and budget controls.",
 };
 
