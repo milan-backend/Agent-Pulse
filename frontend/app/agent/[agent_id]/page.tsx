@@ -165,12 +165,18 @@ export default function AgentRuntimePage() {
             <Link href={`/agent/${agent.id}/knowledge`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-emerald-400 hover:border-emerald-500/20 hover:bg-emerald-500/5">  
               <FileText size={18} className="text-zinc-500" /> 
               <span>Agent Knowledge</span>  
-            </Link>  
-            
+            </Link> 
+
             <Link href={`/agent/${agent.id}/tasks`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-purple-300 hover:border-purple-500/20 hover:bg-purple-500/5">  
               <Activity size={18} className="text-zinc-500" /> 
               <span>Agent Tasks</span>  
             </Link>  
+
+            {/*  THIS NEW LINK HERE TO SHOW THE BUTTON ON THE MAIN OVERVIEW SIDEBAR */}
+            <Link href={`/agent/${agent.id}/monitor`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-cyan-400 hover:border-cyan-500/20 hover:bg-cyan-500/5">  
+              <Cpu size={18} className="text-zinc-500 group-hover:text-cyan-400" /> 
+              <span>Pipeline Monitor</span>  
+            </Link> 
           </div>  
         </div>
 

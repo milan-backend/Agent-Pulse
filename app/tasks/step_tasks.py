@@ -104,6 +104,14 @@ def process_step(self, step_id: str):
         step.status = "running"
         step.started_at = datetime.utcnow()
         db.commit()
+        #  This LINE HERE: This tells the frontend to turn the RAM/CPU lights on instantly!
+        from app.api.routes.ws import broadcast_message
+        import asyncio
+        import json
+        try:
+            asyncio.run(broadcast_message(json.dumps({"type": "mission_updated", "step_id": step_id, "status": "running"})))
+        except Exception:
+            pass
 
         # REFRESH STATE
         db.refresh(agent)

@@ -28,6 +28,8 @@ from app.services.agent_service import (
     regenerate_agent_api_key,
     update_agent_policy_service
 )
+from app.services.step_service import get_agent_pipeline_history
+
 
 from app.utils.audit_handler import AuditLogRoute
 
@@ -199,3 +201,40 @@ def update_agent_settings(
             "model_name": getattr(agent, "model_name", None)
         }
     }
+
+# ============================================
+# FETCH AGENT PIPELINES PIPES MONITOR STREAM
+# ============================================
+@router.get("/{agent_id}/pipelines", status_code=status.HTTP_200_OK)
+def read_agent_execution_pipelines(
+    agent_id: str,
+    status: str = None,
+    search: str = None,
+    workspace_id: str = Header(...), # Reuses your strict header validation gate
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """ Exposes pipeline execution trails filtered by status/task names for the agent monitor panel """
+    try:
+        clean_ws_id = UUID(str(workspace_id).strip())
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid workspace_id UUID format.")
+
+    # 1. Enforce active membership bounds check natively
+    membership = get_workspace_membership(
+        db=db,
+        user_id=current_user.id,
+        workspace_id=clean_ws_id
+    )
+    
+    # 2. Reusing your built-in Operator clearance validator check
+    require_operator(membership)
+    
+    # 3. Stream data right from our step history execution matrix layer
+    return get_agent_pipeline_history(
+        db=db,
+        agent_id=agent_id,
+        workspace_id=str(clean_ws_id),
+        status=status,
+        search=search
+    )

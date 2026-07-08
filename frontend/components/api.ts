@@ -606,6 +606,22 @@ export const resumeAllAgents = async () => {
   });
 };
 
+export const getAgentPipelineHistory = async (
+  agentId: string, 
+  filters: { status?: string; search?: string } = {}
+) => {
+  const queryParams = new URLSearchParams();
+  if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
+  if (filters.search && filters.search.trim() !== "") queryParams.append("search", filters.search);
+
+  const queryString = queryParams.toString();
+  const endpoint = `/agents/${agentId}/pipelines${queryString ? `?${queryString}` : ""}`;
+  
+  return request(endpoint, {
+    method: "GET"
+  });
+};
+
 /* =========================================================
 STEPS
 ========================================================= */

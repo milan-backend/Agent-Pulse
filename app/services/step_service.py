@@ -476,3 +476,46 @@ async def get_step_execution_status(
         "completed_at": (str(step.completed_at) if step.completed_at else None),
         "created_at": (str(step.created_at) if step.created_at else None)
     }
+
+def get_agent_pipeline_history(db: Session, agent_id: str, workspace_id: str, status: str = None, search: str = None):
+    """
+    Queries the DurableStep execution table to extract historical or live pipelines 
+    belonging to a specific agent within a secure workspace container boundary.
+    """
+    # Query steps that belong to this specific agent and workspace channel
+    query = db.query(DurableStep).filter(
+        DurableStep.agent_id == agent_id,
+        DurableStep.workspace_id == workspace_id
+    )
+    
+    # 🎯 Filter tab selection handler (All, Completed, Failed, Running)
+    if status and status.lower() != "all":
+        if status.lower() == "running":
+            query = query.filter(DurableStep.status.in_(["pending", "running"]))
+        else:
+            query = query.filter(DurableStep.status == status.lower())
+            
+    # 🔍 Search engine lookup pattern matching task names dynamically
+    if search and str(search).strip():
+        query = query.filter(DurableStep.task_name.ilike(f"%{str(search).strip()}%"))
+        
+    # Return the latest pipeline instances first
+    executed_steps = query.order_by(DurableStep.created_at.desc()).all()
+    
+    pipelines_list = []
+    for step in executed_steps:
+        pipelines_list.append({
+            "step_id": str(step.id),
+            "task_name": step.task_name,
+            "status": step.status,
+            "error_message": step.error_message,
+            "created_at": step.created_at.isoformat() if step.created_at else None,
+            "execution_time_ms": getattr(step, "execution_time_ms", 0),
+            # Optional: returns the static telemetry timeline node if it exists
+            "telemetry_timeline": step.output_data.get("telemetry_timeline") if isinstance(step.output_data, dict) else None
+        })
+        
+    return {
+        "success": True,
+        "pipelines": pipelines_list
+    }
