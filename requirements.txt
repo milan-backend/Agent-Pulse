@@ -31,3 +31,5 @@ pypdf
 python-multipart
 
 razorpay
+
+nltk
