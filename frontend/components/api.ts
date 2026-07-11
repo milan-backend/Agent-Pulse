@@ -1071,12 +1071,27 @@ export const askCopilotStreamService = async (
     const reader = streamResponse.body.getReader();
     const decoder = new TextDecoder("utf-8");
 
-    while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
 
-        const textChunk = decoder.decode(value, { stream: true });
-        onChunkReceived(textChunk); // Instantly bubbles text piece back to your React view layer
+            // 🎯 FIXED: Keeping the decoder stream frame open preserves text bytes context 
+            // and flushes them to the React view immediately without browser buffering blocks!
+            const textChunk = decoder.decode(value, { stream: true });
+            if (textChunk) {
+                onChunkReceived(textChunk);
+            }
+        }
+        
+        // Finalize any trailing chunk strings cleanly
+        const finalChunk = decoder.decode();
+        if (finalChunk) {
+            onChunkReceived(finalChunk);
+        }
+    } catch (streamError) {
+        console.error("Critical error inside read stream buffer loop:", streamError);
+        throw streamError;
     }
 };
 
