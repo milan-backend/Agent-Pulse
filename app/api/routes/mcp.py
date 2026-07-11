@@ -30,10 +30,11 @@ from app.services.feature_access import (
     require_feature
 )
 
+import os
 import redis
+import ssl
 import asyncio
 from fastapi.responses import StreamingResponse
-import os
 
 router = APIRouter()
 
@@ -275,13 +276,17 @@ async def mcp_stream_tokens(
     require_feature(workspace, "mcp_access")
 
     async def event_generator():
-        redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
         
-        # 🎯 FIX: Using the exact lowercase string string "none" to completely 
-        # bypass the invalid flag error when connecting from Railway to Render
+        # 🎯 Clean the URL string to strip the problematic text query parameter
+        if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
+            redis_url_str = raw_redis_url.split("?")[0]
+        else:
+            redis_url_str = raw_redis_url
+            
         ssl_options = {}
         if redis_url_str.startswith("rediss://"):
-            ssl_options["ssl_cert_reqs"] = "none"
+            ssl_options["ssl_cert_reqs"] = ssl.CERT_NONE
             
         rc = redis.Redis.from_url(redis_url_str, decode_responses=True, **ssl_options)
         pubsub = rc.pubsub()
@@ -289,7 +294,7 @@ async def mcp_stream_tokens(
         
         try:
             while True:
-                # Read messages traveling through the cross-platform Redis pipe
+                # Read live messages pushing through the cross-platform Redis channel
                 message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message:
                     token = message['data']

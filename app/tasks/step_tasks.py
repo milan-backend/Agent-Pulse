@@ -514,15 +514,21 @@ def process_step(self, step_id: str):
                 llm_start_time = time.time()
                 
                 import redis
-                redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                import ssl
+                import os
                 
-                # 🎯 FIX: Explicitly setup string flags to prevent "Invalid SSL Certificate Requirements Flag: CERT_NONE"
+                raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                
+                # 🎯 Clean the URL string to strip the problematic query parameter
+                if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
+                    redis_url_str = raw_redis_url.split("?")[0]
+                else:
+                    redis_url_str = raw_redis_url
+                
                 ssl_options = {}
                 if redis_url_str.startswith("rediss://"):
-                    # The standalone redis client strictly expects the lowercase text string "none" to skip verification checks
-                    ssl_options["ssl_cert_reqs"] = "none"
+                    ssl_options["ssl_cert_reqs"] = ssl.CERT_NONE
                 
-                # Initialize the client securely using our dynamic connection flags
                 redis_client = redis.Redis.from_url(redis_url_str, **ssl_options)
                 
                 # Initialize the official GenAI streaming interface
