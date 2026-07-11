@@ -250,6 +250,10 @@ async def mcp_execute(
         detail="Unknown tool"
     )
 
+# ============================================
+# REAL-TIME TOKEN STREAMING ROUTE
+# ============================================
+
 @router.get("/stream/{step_id}")
 async def mcp_stream_tokens(
     step_id: str,
@@ -258,7 +262,7 @@ async def mcp_stream_tokens(
 ):
     """
     Subscribes to the live Redis Pub/Sub channel for a given step_id
-    and flushes tokens directly to the frontend interface browser.
+    and flushes incoming Gemini tokens directly to the user's browser.
     """
     workspace = (
         db.query(Workspace)
@@ -272,17 +276,20 @@ async def mcp_stream_tokens(
 
     async def event_generator():
         redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        
+        # 🎯 FIX: Using the exact lowercase string string "none" to completely 
+        # bypass the invalid flag error when connecting from Railway to Render
+        ssl_options = {}
         if redis_url_str.startswith("rediss://"):
-            rc = redis.Redis.from_url(redis_url_str, ssl_cert_reqs=None, decode_responses=True)
-        else:
-            rc = redis.Redis.from_url(redis_url_str, decode_responses=True)
+            ssl_options["ssl_cert_reqs"] = "none"
             
+        rc = redis.Redis.from_url(redis_url_str, decode_responses=True, **ssl_options)
         pubsub = rc.pubsub()
         pubsub.subscribe(f"stream:{step_id}")
         
         try:
             while True:
-                # Check for updates pushed into the channel by the background Celery worker loop
+                # Read messages traveling through the cross-platform Redis pipe
                 message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message:
                     token = message['data']

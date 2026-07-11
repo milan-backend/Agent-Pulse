@@ -513,14 +513,17 @@ def process_step(self, step_id: str):
                 # 🚀 TRACK 5: RAW LLM NETWORK WORKPLACE GENERATION METRIC
                 llm_start_time = time.time()
                 
-                # Connect to Redis using the existing Render environment URL securely with SSL support
                 import redis
                 redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                
+                # 🎯 FIX: Explicitly setup string flags to prevent "Invalid SSL Certificate Requirements Flag: CERT_NONE"
+                ssl_options = {}
                 if redis_url_str.startswith("rediss://"):
-                    # Render production redis instances require SSL parameters explicitly passed
-                    redis_client = redis.Redis.from_url(redis_url_str, ssl_cert_reqs=None)
-                else:
-                    redis_client = redis.Redis.from_url(redis_url_str)
+                    # The standalone redis client strictly expects the lowercase text string "none" to skip verification checks
+                    ssl_options["ssl_cert_reqs"] = "none"
+                
+                # Initialize the client securely using our dynamic connection flags
+                redis_client = redis.Redis.from_url(redis_url_str, **ssl_options)
                 
                 # Initialize the official GenAI streaming interface
                 ai_client = genai.Client(api_key=gemini_api_key)
