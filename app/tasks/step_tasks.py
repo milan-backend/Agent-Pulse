@@ -309,10 +309,8 @@ def process_step(self, step_id: str):
                     "event_name": "KNOWLEDGE_RETRIEVAL",
                     "collection_human_name": "rag_enterprise_vectors_v1",
                     "similarity_threshold_used": 0.45,
-                    "query_expansion_time_ms": 0.0,
                     "query_embedding_time_ms": 0.0,
                     "vector_search_time_ms": 0.0,
-                    "reranking_and_decay_time_ms": 0.0,
                     "candidate_chunks_evaluated": 0,
                     "chunks_returned_count": 0,
                     "retrieval_similarity_hit_rate_percent": 0.0,
@@ -343,12 +341,10 @@ def process_step(self, step_id: str):
                             
                         ai_client = genai.Client(api_key=gemini_api_key)
                         
-                        # 🚀 TRACK 1: DYNAMIC LOCAL ONTOLOGY QUERY EXPANSION METRIC
-                        expansion_start = time.time()
+                        # 🚀 OPTIMIZATION 1: RUN DYNAMIC LOCAL ONTOLOGY QUERY EXPANSION ("Feels Alive")
                         enriched_prompt = dynamically_expand_query_intent_local(prompt)
-                        rag_telemetry_node["query_expansion_time_ms"] = round((time.time() - expansion_start) * 1000, 3)
                         
-                        # 🚀 TRACK 2: VECTOR EMBEDDING GENERATION AND CACHE CHECK METRIC
+                        # 🚀 OPTIMIZATION 2: VECTOR EMBEDDING MEMORY CACHE BLOCK (Saves 300ms network runtime latency)
                         embed_start_time = time.time()
                         cache_hash_key = f"{current_workspace_id}_{hash(enriched_prompt)}"
                         
@@ -374,6 +370,7 @@ def process_step(self, step_id: str):
                                         contents=enriched_prompt
                                     )
                                     query_vector = query_vector_resp.embeddings[0].values
+                            # Seed cache
                             GLOBAL_VECTOR_CACHE[cache_hash_key] = query_vector
                                 
                         rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
@@ -383,8 +380,8 @@ def process_step(self, step_id: str):
                         collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
                         
                         if collection:
-                            # 🚀 TRACK 3: CHROMADB RAW VECTOR SPACE RETRIEVAL QUERY
                             search_start_time = time.time()
+                            # Query 6 entries to provide window overhead buffer context for re-ranking steps
                             agent_results = collection.query(
                                 query_embeddings=[query_vector],
                                 n_results=6,
@@ -422,14 +419,16 @@ def process_step(self, step_id: str):
                                 dists_list = workspace_results.get("distances", [[]])[0] if workspace_results.get("distances") else []
                                 rag_telemetry_node["candidate_chunks_evaluated"] += len(docs_list)
 
-                            # 🚀 TRACK 4: EXPONENTIAL RE-RANKING MATH ENGINE PERFORMANCE
-                            rerank_start = time.time()
+                            # 🚀 OPTIMIZATION 3: NATIVE EXPONENTIAL TIME-DECAY RE-RANKING CORE
                             scored_candidates_list = []
                             for idx, encrypted_chunk in enumerate(docs_list):
                                 meta_data = metas_list[idx] if idx < len(metas_list) else {}
                                 raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                                 
+                                # Convert similarity distance to cosine scale mapping metric safely
                                 base_similarity = max(0.0, (1.0 - float(raw_distance)))
+
+                                # Pull document creation dates from unencrypted metadata layers
                                 doc_date_raw = meta_data.get("last_updated", "2026-01-01")
                                 try:
                                     chunk_timestamp = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
@@ -437,6 +436,7 @@ def process_step(self, step_id: str):
                                 except Exception:
                                     age_hours = 0.0
                                 
+                                # Apply the exponential decay formula to penalize old logs context files
                                 lambda_decay = 0.005
                                 freshness_multiplier = float(2.71828 ** (-lambda_decay * age_hours))
                                 final_time_adjusted_score = base_similarity * freshness_multiplier
@@ -448,8 +448,10 @@ def process_step(self, step_id: str):
                                     "adjusted_score": final_time_adjusted_score
                                 })
 
+                            # Sort dataset by our time-decay calculations top-to-bottom descending
                             scored_candidates_list.sort(key=lambda x: x["adjusted_score"], reverse=True)
 
+                            # 🚀 OPTIMIZATION 4: DYNAMIC TEXT BUDGET TRUNCATION GUARDRAILS (Cost Efficiency Matrix)
                             accumulated_chars = 0
                             strict_character_ceiling = 4000
                             
@@ -460,6 +462,7 @@ def process_step(self, step_id: str):
                                 if not passes_cutoff:
                                     continue
 
+                                # Drop low-priority chunks if the text budget ceiling has been met
                                 if accumulated_chars >= strict_character_ceiling:
                                     continue
                                     
@@ -487,12 +490,11 @@ def process_step(self, step_id: str):
                                 })
 
                             rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
+                            
                             if rag_telemetry_node["chunks_returned_count"] > 0:
                                 rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
                                     (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
                                 )
-                                
-                            rag_telemetry_node["reranking_and_decay_time_ms"] = round((time.time() - rerank_start) * 1000, 2)
 
                     except Exception as chroma_err:
                         print(f"⚠️ Vector search exception caught in worker: {str(chroma_err)}")
@@ -510,71 +512,13 @@ def process_step(self, step_id: str):
                         f"USER INSTRUCTION TASK: {prompt}"
                     )
 
-                # 🚀 TRACK 5: RAW LLM NETWORK WORKPLACE GENERATION METRIC
-                llm_start_time = time.time()
-                
-                import redis
-                import ssl
-                # 🎯 REMOVED local 'import os' to prevent Python variable shadowing!
-                
-                raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-                
-                # Clean the URL string to strip the problematic query parameter
-                if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
-                    redis_url_str = raw_redis_url.split("?")[0]
-                else:
-                    redis_url_str = raw_redis_url
-                
-                ssl_options = {}
-                if redis_url_str.startswith("rediss://"):
-                    ssl_options["ssl_cert_reqs"] = ssl.CERT_NONE
-                
-                redis_client = redis.Redis.from_url(redis_url_str, **ssl_options)
-                
-                # 🎯 Fix the unbound local variable error: Resolve key safely right here inline
-                if 'gemini_api_key' not in locals() or not gemini_api_key:
-                    gemini_api_key = os.getenv("GEMINI_API_KEY")
-                    if not gemini_api_key and resolved_key_record:
-                        from app.core.crypto import decrypt_api_key
-                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
-
-                if not gemini_api_key:
-                    raise ValueError("CRITICAL: GEMINI_API_KEY could not be resolved for streaming pipeline initialization.")
-
-                # Initialize the official GenAI streaming interface
-                ai_client = genai.Client(api_key=gemini_api_key)
-                
-                try:
-                    response_stream = ai_client.models.generate_content_stream(
-                        model=active_model_target,
-                        contents=final_prompt_payload
-                    )
-                    
-                    # Iterate through individual chunks as they come from the Gemini GPU chips
-                    output_fragments = []
-                    for chunk in response_stream:
-                        if chunk.text:
-                            output_fragments.append(chunk.text)
-                            # Broadcast the word token chunk immediately via Pub/Sub to the frontend listener
-                            redis_client.publish(f"stream:{str(step.id)}", chunk.text)
-                    
-                    # Combine fragments into the full response string for your database tracking metrics
-                    output = "".join(output_fragments)
-                    
-                    # Publish the special signature token indicating the stream has finished successfully
-                    redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
-                    
-                except Exception as stream_execution_error:
-                    error_str = str(stream_execution_error)
-                    # 🎯 BYOK Rate Limit Intercept Logic: Catch 429 only if running on system tier
-                    if "429" in error_str and tier_source == "system":
-                        friendly_msg = "⚠️ The system shared sandbox tier key has exhausted its rate limit bounds. Please add your own custom Gemini API Key inside your dashboard settings workspace panel to bypass cluster congestion."
-                        redis_client.publish(f"stream:{str(step.id)}", friendly_msg)
-                        redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
-                        raise ValueError(friendly_msg)
-                    raise stream_execution_error
-                
-                llm_generation_latency_ms = round((time.time() - llm_start_time) * 1000, 2)
+                output, tier_status_msg = generate_llm_response(
+                    prompt=final_prompt_payload,
+                    db=db,
+                    workspace_id=current_workspace_id,
+                    agent_id=agent_id_raw,
+                    model_name=active_model_target
+                )
                 
                 completion_usage = calculate_usage(
                    prompt=final_prompt_payload,
@@ -699,7 +643,6 @@ def process_step(self, step_id: str):
         llm_telemetry_node = {
             "event_name": "LLM Model Response Generation",
             "status": "SUCCESS",
-            "llm_generation_network_time_ms": llm_generation_latency_ms,
             "meta": {
                 "model_utilized": active_model_target if active_model_target else "gemini-2.5-flash-lite",
                 "prompt_tokens_consumed": int(completion_usage.get("prompt_tokens", 0)),
