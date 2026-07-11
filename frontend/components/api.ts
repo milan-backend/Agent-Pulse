@@ -1039,7 +1039,6 @@ export const askCopilotStreamService = async (
         }
     };
 
-    // 1. Initiate the background job via your existing tool handshake execution pipeline
     const response = await fetch(executeUrl, {
         method: "POST",
         headers: { 
@@ -1056,41 +1055,33 @@ export const askCopilotStreamService = async (
     
     if (!stepId) throw new Error("Routing context allocation identifier is missing");
 
-    // 2. Open up a connection directly to our new FastAPI Server-Sent Event streaming route
     const streamUrl = `https://api.agentpulseai.dev/mcp/stream/${stepId}`;
     const streamResponse = await fetch(streamUrl, {
         method: "GET",
         headers: {
-            "X-API-Key": apiKey // Assures same tenant authentication permissions pass securely
+            "X-API-Key": apiKey
         }
     });
 
     if (!streamResponse.body) throw new Error("No readable stream response payload available");
 
-    // 3. Handle stream chunks as they arrive live from Redis
-    const reader = streamResponse.body.getReader();
-    const decoder = new TextDecoder("utf-8");
+    // 🎯 FIX: Pipe through TextDecoderStream explicitly to force immediate unbuffered browser flushing
+    const reader = streamResponse.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
 
     try {
         while (true) {
             const { value, done } = await reader.read();
             if (done) break;
 
-            // 🎯 FIXED: Keeping the decoder stream frame open preserves text bytes context 
-            // and flushes them to the React view immediately without browser buffering blocks!
-            const textChunk = decoder.decode(value, { stream: true });
-            if (textChunk) {
-                onChunkReceived(textChunk);
+            if (value) {
+                // Instantly force transmission of raw text directly to view frame state rows
+                onChunkReceived(value);
             }
         }
-        
-        // Finalize any trailing chunk strings cleanly
-        const finalChunk = decoder.decode();
-        if (finalChunk) {
-            onChunkReceived(finalChunk);
-        }
     } catch (streamError) {
-        console.error("Critical error inside read stream buffer loop:", streamError);
+        console.error("Critical error inside piped stream buffer loop:", streamError);
         throw streamError;
     }
 };
