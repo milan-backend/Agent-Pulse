@@ -309,8 +309,10 @@ def process_step(self, step_id: str):
                     "event_name": "KNOWLEDGE_RETRIEVAL",
                     "collection_human_name": "rag_enterprise_vectors_v1",
                     "similarity_threshold_used": 0.45,
+                    "query_expansion_time_ms": 0.0,
                     "query_embedding_time_ms": 0.0,
                     "vector_search_time_ms": 0.0,
+                    "reranking_and_decay_time_ms": 0.0,
                     "candidate_chunks_evaluated": 0,
                     "chunks_returned_count": 0,
                     "retrieval_similarity_hit_rate_percent": 0.0,
@@ -341,10 +343,12 @@ def process_step(self, step_id: str):
                             
                         ai_client = genai.Client(api_key=gemini_api_key)
                         
-                        # 🚀 OPTIMIZATION 1: RUN DYNAMIC LOCAL ONTOLOGY QUERY EXPANSION ("Feels Alive")
+                        # 🚀 TRACK 1: DYNAMIC LOCAL ONTOLOGY QUERY EXPANSION METRIC
+                        expansion_start = time.time()
                         enriched_prompt = dynamically_expand_query_intent_local(prompt)
+                        rag_telemetry_node["query_expansion_time_ms"] = round((time.time() - expansion_start) * 1000, 3)
                         
-                        # 🚀 OPTIMIZATION 2: VECTOR EMBEDDING MEMORY CACHE BLOCK (Saves 300ms network runtime latency)
+                        # 🚀 TRACK 2: VECTOR EMBEDDING GENERATION AND CACHE CHECK METRIC
                         embed_start_time = time.time()
                         cache_hash_key = f"{current_workspace_id}_{hash(enriched_prompt)}"
                         
@@ -370,7 +374,6 @@ def process_step(self, step_id: str):
                                         contents=enriched_prompt
                                     )
                                     query_vector = query_vector_resp.embeddings[0].values
-                            # Seed cache
                             GLOBAL_VECTOR_CACHE[cache_hash_key] = query_vector
                                 
                         rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
@@ -380,8 +383,8 @@ def process_step(self, step_id: str):
                         collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
                         
                         if collection:
+                            # 🚀 TRACK 3: CHROMADB RAW VECTOR SPACE RETRIEVAL QUERY
                             search_start_time = time.time()
-                            # Query 6 entries to provide window overhead buffer context for re-ranking steps
                             agent_results = collection.query(
                                 query_embeddings=[query_vector],
                                 n_results=6,
@@ -419,16 +422,14 @@ def process_step(self, step_id: str):
                                 dists_list = workspace_results.get("distances", [[]])[0] if workspace_results.get("distances") else []
                                 rag_telemetry_node["candidate_chunks_evaluated"] += len(docs_list)
 
-                            # 🚀 OPTIMIZATION 3: NATIVE EXPONENTIAL TIME-DECAY RE-RANKING CORE
+                            # 🚀 TRACK 4: EXPONENTIAL RE-RANKING MATH ENGINE PERFORMANCE
+                            rerank_start = time.time()
                             scored_candidates_list = []
                             for idx, encrypted_chunk in enumerate(docs_list):
                                 meta_data = metas_list[idx] if idx < len(metas_list) else {}
                                 raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                                 
-                                # Convert similarity distance to cosine scale mapping metric safely
                                 base_similarity = max(0.0, (1.0 - float(raw_distance)))
-
-                                # Pull document creation dates from unencrypted metadata layers
                                 doc_date_raw = meta_data.get("last_updated", "2026-01-01")
                                 try:
                                     chunk_timestamp = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
@@ -436,7 +437,6 @@ def process_step(self, step_id: str):
                                 except Exception:
                                     age_hours = 0.0
                                 
-                                # Apply the exponential decay formula to penalize old logs context files
                                 lambda_decay = 0.005
                                 freshness_multiplier = float(2.71828 ** (-lambda_decay * age_hours))
                                 final_time_adjusted_score = base_similarity * freshness_multiplier
@@ -448,10 +448,8 @@ def process_step(self, step_id: str):
                                     "adjusted_score": final_time_adjusted_score
                                 })
 
-                            # Sort dataset by our time-decay calculations top-to-bottom descending
                             scored_candidates_list.sort(key=lambda x: x["adjusted_score"], reverse=True)
 
-                            # 🚀 OPTIMIZATION 4: DYNAMIC TEXT BUDGET TRUNCATION GUARDRAILS (Cost Efficiency Matrix)
                             accumulated_chars = 0
                             strict_character_ceiling = 4000
                             
@@ -462,7 +460,6 @@ def process_step(self, step_id: str):
                                 if not passes_cutoff:
                                     continue
 
-                                # Drop low-priority chunks if the text budget ceiling has been met
                                 if accumulated_chars >= strict_character_ceiling:
                                     continue
                                     
@@ -490,11 +487,12 @@ def process_step(self, step_id: str):
                                 })
 
                             rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
-                            
                             if rag_telemetry_node["chunks_returned_count"] > 0:
                                 rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
                                     (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
                                 )
+                                
+                            rag_telemetry_node["reranking_and_decay_time_ms"] = round((time.time() - rerank_start) * 1000, 2)
 
                     except Exception as chroma_err:
                         print(f"⚠️ Vector search exception caught in worker: {str(chroma_err)}")
@@ -512,6 +510,8 @@ def process_step(self, step_id: str):
                         f"USER INSTRUCTION TASK: {prompt}"
                     )
 
+                # 🚀 TRACK 5: RAW LLM NETWORK WORKPLACE GENERATION METRIC
+                llm_start_time = time.time()
                 output, tier_status_msg = generate_llm_response(
                     prompt=final_prompt_payload,
                     db=db,
@@ -519,6 +519,7 @@ def process_step(self, step_id: str):
                     agent_id=agent_id_raw,
                     model_name=active_model_target
                 )
+                llm_generation_latency_ms = round((time.time() - llm_start_time) * 1000, 2)
                 
                 completion_usage = calculate_usage(
                    prompt=final_prompt_payload,
@@ -643,6 +644,7 @@ def process_step(self, step_id: str):
         llm_telemetry_node = {
             "event_name": "LLM Model Response Generation",
             "status": "SUCCESS",
+            "llm_generation_network_time_ms": llm_generation_latency_ms,
             "meta": {
                 "model_utilized": active_model_target if active_model_target else "gemini-2.5-flash-lite",
                 "prompt_tokens_consumed": int(completion_usage.get("prompt_tokens", 0)),
