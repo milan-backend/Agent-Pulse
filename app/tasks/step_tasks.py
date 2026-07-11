@@ -515,11 +515,11 @@ def process_step(self, step_id: str):
                 
                 import redis
                 import ssl
-                import os
+                # 🎯 REMOVED local 'import os' to prevent Python variable shadowing!
                 
                 raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
                 
-                # 🎯 Clean the URL string to strip the problematic query parameter
+                # Clean the URL string to strip the problematic query parameter
                 if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
                     redis_url_str = raw_redis_url.split("?")[0]
                 else:
