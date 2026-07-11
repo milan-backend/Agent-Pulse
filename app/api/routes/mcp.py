@@ -30,6 +30,11 @@ from app.services.feature_access import (
     require_feature
 )
 
+import redis
+import asyncio
+from fastapi.responses import StreamingResponse
+import os
+
 router = APIRouter()
 
 
@@ -244,3 +249,50 @@ async def mcp_execute(
         status_code=400,
         detail="Unknown tool"
     )
+
+@router.get("/stream/{step_id}")
+async def mcp_stream_tokens(
+    step_id: str,
+    db: Session = Depends(get_db),
+    current_agent: Agent = Depends(get_current_agent)
+):
+    """
+    Subscribes to the live Redis Pub/Sub channel for a given step_id
+    and flushes tokens directly to the frontend interface browser.
+    """
+    workspace = (
+        db.query(Workspace)
+        .filter(Workspace.id == current_agent.workspace_id)
+        .first()
+    )
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Workspace context mismatch")
+        
+    require_feature(workspace, "mcp_access")
+
+    async def event_generator():
+        redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        if redis_url_str.startswith("rediss://"):
+            rc = redis.Redis.from_url(redis_url_str, ssl_cert_reqs=None, decode_responses=True)
+        else:
+            rc = redis.Redis.from_url(redis_url_str, decode_responses=True)
+            
+        pubsub = rc.pubsub()
+        pubsub.subscribe(f"stream:{step_id}")
+        
+        try:
+            while True:
+                # Check for updates pushed into the channel by the background Celery worker loop
+                message = pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message:
+                    token = message['data']
+                    if token == "[DONE]":
+                        break
+                    yield token
+                await asyncio.sleep(0.01)
+        except Exception:
+            pass
+        finally:
+            pubsub.unsubscribe(f"stream:{step_id}")
+
+    return StreamingResponse(event_generator(), media_type="text/plain")

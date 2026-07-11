@@ -1023,6 +1023,63 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
     }
 };
 
+export const askCopilotStreamService = async (
+    userPrompt: string, 
+    onChunkReceived: (chunk: string) => void
+): Promise<void> => {
+    const executeUrl = "https://api.agentpulseai.dev/mcp/execute";
+    const apiKey = "4a1f331e.spWSB0rpqwWWiI-icX3kCVb86j-GCGSpdd7_xThAKfo";
+
+    const payload = {
+        "tool": "execute_task",
+        "arguments": {
+            "task_name": "Workspace-Copilot-Query",
+            "input_data": { "prompt": userPrompt },
+            "idempotency_key": crypto.randomUUID()
+        }
+    };
+
+    // 1. Initiate the background job via your existing tool handshake execution pipeline
+    const response = await fetch(executeUrl, {
+        method: "POST",
+        headers: { 
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error("Stream connection handshake failed");
+    
+    const data = await response.json();
+    const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
+    
+    if (!stepId) throw new Error("Routing context allocation identifier is missing");
+
+    // 2. Open up a connection directly to our new FastAPI Server-Sent Event streaming route
+    const streamUrl = `https://api.agentpulseai.dev/mcp/stream/${stepId}`;
+    const streamResponse = await fetch(streamUrl, {
+        method: "GET",
+        headers: {
+            "X-API-Key": apiKey // Assures same tenant authentication permissions pass securely
+        }
+    });
+
+    if (!streamResponse.body) throw new Error("No readable stream response payload available");
+
+    // 3. Handle stream chunks as they arrive live from Redis
+    const reader = streamResponse.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+
+    while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        const textChunk = decoder.decode(value, { stream: true });
+        onChunkReceived(textChunk); // Instantly bubbles text piece back to your React view layer
+    }
+};
+
 
 // 🟢 RE-ENGINEERED WITH GLOBAL REQUEST UTILITY PIPELINE
 export interface AuditLogFilters {

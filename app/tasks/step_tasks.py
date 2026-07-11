@@ -512,13 +512,37 @@ def process_step(self, step_id: str):
 
                 # 🚀 TRACK 5: RAW LLM NETWORK WORKPLACE GENERATION METRIC
                 llm_start_time = time.time()
-                output, tier_status_msg = generate_llm_response(
-                    prompt=final_prompt_payload,
-                    db=db,
-                    workspace_id=current_workspace_id,
-                    agent_id=agent_id_raw,
-                    model_name=active_model_target
+                
+                # Connect to Redis using the existing Render environment URL securely with SSL support
+                import redis
+                redis_url_str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                if redis_url_str.startswith("rediss://"):
+                    # Render production redis instances require SSL parameters explicitly passed
+                    redis_client = redis.Redis.from_url(redis_url_str, ssl_cert_reqs=None)
+                else:
+                    redis_client = redis.Redis.from_url(redis_url_str)
+                
+                # Initialize the official GenAI streaming interface
+                ai_client = genai.Client(api_key=gemini_api_key)
+                response_stream = ai_client.models.generate_content_stream(
+                    model=active_model_target,
+                    contents=final_prompt_payload
                 )
+                
+                # Iterate through individual chunks as they come from the Gemini GPU chips
+                output_fragments = []
+                for chunk in response_stream:
+                    if chunk.text:
+                        output_fragments.append(chunk.text)
+                        # Broadcast the word token chunk immediately via Pub/Sub to the frontend listener
+                        redis_client.publish(f"stream:{str(step.id)}", chunk.text)
+                
+                # Combine fragments into the full response string for your database tracking metrics
+                output = "".join(output_fragments)
+                
+                # Publish the special signature token indicating the stream has finished successfully
+                redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
+                
                 llm_generation_latency_ms = round((time.time() - llm_start_time) * 1000, 2)
                 
                 completion_usage = calculate_usage(

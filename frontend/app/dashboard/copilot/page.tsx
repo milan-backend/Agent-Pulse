@@ -37,28 +37,49 @@ export default function DashboardCopilotPage() {
     const userMessageText = queryText.trim();
     setInput("");
     
-    // Commit user's prompt frame to array state layout
+    // Commit user's message bubble layout safely to array state rows
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), type: "user", text: userMessageText }]);
     setIsLoading(true);
 
+    const systemMessageId = crypto.randomUUID();
+    let accumulatedText = "";
+
     try {
-      // Execute the async Celery background queue worker polling sequence
-      const copilotResponse = await askCopilotService(userMessageText);
-      
-      setMessages((prev) => [
-        ...prev, 
-        { id: crypto.randomUUID(), type: "system", text: copilotResponse }
-      ]);
+      // Import and invoke our streaming client method wrapper natively
+      const { askCopilotStreamService } = await import("@/components/api");
+
+      // Inject the empty initial AI bubble onto the interface layout right away
+      setMessages((prev) => [...prev, { id: systemMessageId, type: "system", text: "" }]);
+
+      await askCopilotStreamService(userMessageText, (chunkText: string) => {
+        // Turn off loading text indicators once first characters drop into view space
+        setIsLoading(false);
+        
+        accumulatedText += chunkText;
+        
+        // ⚡ TYPE THE RESPONSE WORD-BY-WORD! (Instant delivery experience under 400ms)
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === systemMessageId ? { ...msg, text: accumulatedText } : msg
+          )
+        );
+      });
+
     } catch (error) {
+      setIsLoading(false);
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), type: "system", text: "⚠️ An operational processing timeout or connection exception occurred. Please try sending your query again." }
+        { 
+          id: crypto.randomUUID(), 
+          type: "system", 
+          text: "⚠️ An operational processing timeout or connection exception occurred. Please try sending your query again." 
+        }
       ]);
     } finally {
       setIsLoading(false);
     }
   };
-
+  
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleQuerySubmission(input);
