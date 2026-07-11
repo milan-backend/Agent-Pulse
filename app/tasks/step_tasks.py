@@ -531,26 +531,48 @@ def process_step(self, step_id: str):
                 
                 redis_client = redis.Redis.from_url(redis_url_str, **ssl_options)
                 
+                # 🎯 Fix the unbound local variable error: Resolve key safely right here inline
+                if 'gemini_api_key' not in locals() or not gemini_api_key:
+                    gemini_api_key = os.getenv("GEMINI_API_KEY")
+                    if not gemini_api_key and resolved_key_record:
+                        from app.core.crypto import decrypt_api_key
+                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+
+                if not gemini_api_key:
+                    raise ValueError("CRITICAL: GEMINI_API_KEY could not be resolved for streaming pipeline initialization.")
+
                 # Initialize the official GenAI streaming interface
                 ai_client = genai.Client(api_key=gemini_api_key)
-                response_stream = ai_client.models.generate_content_stream(
-                    model=active_model_target,
-                    contents=final_prompt_payload
-                )
                 
-                # Iterate through individual chunks as they come from the Gemini GPU chips
-                output_fragments = []
-                for chunk in response_stream:
-                    if chunk.text:
-                        output_fragments.append(chunk.text)
-                        # Broadcast the word token chunk immediately via Pub/Sub to the frontend listener
-                        redis_client.publish(f"stream:{str(step.id)}", chunk.text)
-                
-                # Combine fragments into the full response string for your database tracking metrics
-                output = "".join(output_fragments)
-                
-                # Publish the special signature token indicating the stream has finished successfully
-                redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
+                try:
+                    response_stream = ai_client.models.generate_content_stream(
+                        model=active_model_target,
+                        contents=final_prompt_payload
+                    )
+                    
+                    # Iterate through individual chunks as they come from the Gemini GPU chips
+                    output_fragments = []
+                    for chunk in response_stream:
+                        if chunk.text:
+                            output_fragments.append(chunk.text)
+                            # Broadcast the word token chunk immediately via Pub/Sub to the frontend listener
+                            redis_client.publish(f"stream:{str(step.id)}", chunk.text)
+                    
+                    # Combine fragments into the full response string for your database tracking metrics
+                    output = "".join(output_fragments)
+                    
+                    # Publish the special signature token indicating the stream has finished successfully
+                    redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
+                    
+                except Exception as stream_execution_error:
+                    error_str = str(stream_execution_error)
+                    # 🎯 BYOK Rate Limit Intercept Logic: Catch 429 only if running on system tier
+                    if "429" in error_str and tier_source == "system":
+                        friendly_msg = "⚠️ The system shared sandbox tier key has exhausted its rate limit bounds. Please add your own custom Gemini API Key inside your dashboard settings workspace panel to bypass cluster congestion."
+                        redis_client.publish(f"stream:{str(step.id)}", friendly_msg)
+                        redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
+                        raise ValueError(friendly_msg)
+                    raise stream_execution_error
                 
                 llm_generation_latency_ms = round((time.time() - llm_start_time) * 1000, 2)
                 
