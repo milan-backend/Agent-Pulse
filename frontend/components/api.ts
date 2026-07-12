@@ -1038,7 +1038,6 @@ export const askCopilotStreamService = async (
         }
     };
 
-    // 1. Initiate the background job via your existing tool handshake execution pipeline
     const response = await fetch(executeUrl, {
         method: "POST",
         headers: { 
@@ -1055,7 +1054,6 @@ export const askCopilotStreamService = async (
     
     if (!stepId) throw new Error("Routing context allocation identifier is missing");
 
-    // 2. Open up a connection directly to our FastAPI Server-Sent Event streaming route
     const streamUrl = `${API_URL}/mcp/stream/${stepId}`;
     const streamResponse = await fetch(streamUrl, {
         method: "GET",
@@ -1066,10 +1064,12 @@ export const askCopilotStreamService = async (
 
     if (!streamResponse.body) throw new Error("No readable stream response payload available");
 
-    // 3. Pipe chunks through TextDecoderStream to prevent multi-byte encoding cuts
     const reader = streamResponse.body
         .pipeThrough(new TextDecoderStream())
         .getReader();
+
+    // 🎯 Use a buffer accumulation window to handle fragmented network packages cleanly
+    let streamBuffer = "";
 
     try {
         while (true) {
@@ -1077,15 +1077,26 @@ export const askCopilotStreamService = async (
             if (done) break;
 
             if (value) {
-                // Parse out standard Server-Sent Event 'data: ' text tokens cleanly
-                const cleanLines = value
-                    .split("\n")
-                    .filter(line => line.startsWith("data: "))
-                    .map(line => line.replace(/^data:\s*/, ""))
-                    .join("\n");
+                streamBuffer += value;
+                const lines = streamBuffer.split("\n");
+                
+                // Keep the last partial item in the buffer frame window
+                streamBuffer = lines.pop() || "";
 
-                if (cleanLines) {
-                    onChunkReceived(cleanLines);
+                for (const line of lines) {
+                    const cleanLine = line.trim();
+                    if (!cleanLine) continue;
+
+                    if (cleanLine.startsWith("data: ")) {
+                        const extractedToken = cleanLine.replace(/^data:\s*/, "");
+                        
+                        if (extractedToken === "[DONE]") {
+                            return;
+                        }
+                        
+                        // ⚡ Instant raw state transmission update loop triggers immediately
+                        onChunkReceived(extractedToken);
+                    }
                 }
             }
         }
