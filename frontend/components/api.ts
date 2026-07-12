@@ -914,15 +914,15 @@ export const agentTasksApi = {
 
 
 export const askCopilotService = async (userPrompt: string): Promise<string> => {
-    const endpointUrl = `${API_URL}/mcp/execute`;
+    const endpointUrl = "https://api.agentpulseai.dev/mcp/execute";
     const apiKey = COPILOT_API_KEY;
 
     const payload = {
         "tool": "execute_task",
         "arguments": {
             "task_name": "Workspace-Copilot-Query",
-            "input_data": { 
-                "prompt": userPrompt 
+            "input_data": {
+                "prompt": userPrompt
             },
             "idempotency_key": crypto.randomUUID()
         }
@@ -932,7 +932,7 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         // ⚡ Task Handshake: Dispatch payload directly to the background Celery Worker queue
         const response = await fetch(endpointUrl, {
             method: "POST",
-            headers: { 
+            headers: {
                 "Content-Type": "application/json",
                 "X-API-Key": apiKey
             },
@@ -944,15 +944,18 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         }
 
         let data = await response.json();
-        const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
-        
+        const stepId =
+            data.step_id ||
+            (data.step && data.step.id) ||
+            (data.data && data.data.step_id);
+
         if (!stepId) {
             throw new Error("Mismatched step_id routing parameter context allocation.");
         }
 
         // 🔄 Active Background Validation Loop checking task status flags
         let attempts = 0;
-        const maxAttempts = 35; 
+        const maxAttempts = 35;
         let finalOutputData: any = null;
 
         while (attempts < maxAttempts) {
@@ -961,7 +964,9 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
             const statusPayload = {
                 "tool": "get_step_status",
-                "arguments": { "step_id": stepId }
+                "arguments": {
+                    "step_id": stepId
+                }
             };
 
             const statusResponse = await fetch(endpointUrl, {
@@ -975,7 +980,7 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
             if (statusResponse.ok) {
                 const checkData = await statusResponse.json();
-                
+
                 // Target the core wrapper layout object dynamically
                 const targetObj = checkData.data ? checkData.data : checkData;
 
@@ -993,7 +998,7 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
 
         // 🟢 STRICT TEXT EXTRACTION: Extract ONLY the clean text result string
         let answerText = "";
-        
+
         if (finalOutputData.output_data && finalOutputData.output_data.result) {
             answerText = finalOutputData.output_data.result;
         } else if (finalOutputData.result) {
@@ -1003,106 +1008,31 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
         } else {
             // Safe raw backup mapping if keys mismatch
             try {
-                const parsed = typeof finalOutputData === 'string' ? JSON.parse(finalOutputData) : finalOutputData;
-                answerText = parsed.output_data?.result || parsed.result || "";
+                const parsed =
+                    typeof finalOutputData === "string"
+                        ? JSON.parse(finalOutputData)
+                        : finalOutputData;
+
+                answerText =
+                    parsed.output_data?.result ||
+                    parsed.result ||
+                    "";
             } catch {
                 answerText = "";
             }
         }
 
+        // Fallback string if text extraction returns blank anomalies
         if (!answerText) {
             answerText = "Error: System could not parse clean text output context from payload.";
         }
 
+        // Strip out accidental markdown notation leaks and return purely the string answer
         return answerText.replace(/\[.*?\]/g, "").trim();
 
     } catch (error: any) {
         console.error("Copilot routing failure:", error);
         return "⚠️ Connection exception encountered while communicating with the background execution worker node.";
-    }
-};
-
-export const askCopilotStreamService = async (
-    userPrompt: string, 
-    onChunkReceived: (chunk: string) => void
-): Promise<void> => {
-    const executeUrl = `${API_URL}/mcp/execute`;
-    const apiKey = COPILOT_API_KEY;
-
-    const payload = {
-        "tool": "execute_task",
-        "arguments": {
-            "task_name": "Workspace-Copilot-Query",
-            "input_data": { "prompt": userPrompt },
-            "idempotency_key": crypto.randomUUID()
-        }
-    };
-
-    const response = await fetch(executeUrl, {
-        method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
-            "X-API-Key": apiKey
-        },
-        body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) throw new Error("Stream connection handshake failed");
-    
-    const data = await response.json();
-    const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
-    
-    if (!stepId) throw new Error("Routing context allocation identifier is missing");
-
-    const streamUrl = `${API_URL}/mcp/stream/${stepId}`;
-    const streamResponse = await fetch(streamUrl, {
-        method: "GET",
-        headers: {
-            "X-API-Key": apiKey
-        }
-    });
-
-    if (!streamResponse.body) throw new Error("No readable stream response payload available");
-
-    const reader = streamResponse.body
-        .pipeThrough(new TextDecoderStream())
-        .getReader();
-
-    // 🎯 Use a buffer accumulation window to handle fragmented network packages cleanly
-    let streamBuffer = "";
-
-    try {
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            if (value) {
-                streamBuffer += value;
-                const lines = streamBuffer.split("\n");
-                
-                // Keep the last partial item in the buffer frame window
-                streamBuffer = lines.pop() || "";
-
-                for (const line of lines) {
-                    const cleanLine = line.trim();
-                    if (!cleanLine) continue;
-
-                    if (cleanLine.startsWith("data: ")) {
-                        const extractedToken = cleanLine.replace(/^data:\s*/, "");
-                        
-                        if (extractedToken === "[DONE]") {
-                            return;
-                        }
-                        
-                        // ⚡ Instant raw state transmission update loop triggers immediately
-                        onChunkReceived(extractedToken);
-                    }
-                }
-            }
-        }
-    } catch (streamError) {
-        console.error("Critical error inside piped stream buffer loop:", streamError);
-        throw streamError;
     }
 };
 

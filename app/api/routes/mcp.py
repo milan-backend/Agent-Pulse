@@ -30,13 +30,6 @@ from app.services.feature_access import (
     require_feature
 )
 
-import os
-import asyncio
-import redis
-import ssl
-from fastapi import APIRouter, Header, HTTPException
-from fastapi.responses import StreamingResponse
-
 router = APIRouter()
 
 
@@ -250,59 +243,4 @@ async def mcp_execute(
     raise HTTPException(
         status_code=400,
         detail="Unknown tool"
-    )
-
-
-@router.get("/stream/{step_id}")
-async def mcp_stream_tokens(step_id: str, x_api_key: str = Header(None)):
-    """
-    Subscribes to the live task Redis channel, broadcasting tokens
-    straight down an EventPipe stream while bypassing reverse-proxy cache layers.
-    """
-    raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
-        redis_url_str = raw_redis_url.split("?")[0]
-    else:
-        redis_url_str = raw_redis_url
-        
-    ssl_options = {}
-    if redis_url_str.startswith("rediss://"):
-        ssl_options["ssl_cert_reqs"] = ssl.CERT_NONE
-
-    redis_client = redis.Redis.from_url(redis_url_str, decode_responses=True, **ssl_options)
-    pubsub_instance = redis_client.pubsub()
-    pubsub_instance.subscribe(f"stream:{step_id}")
-
-    async def event_generator():
-        try:
-            while True:
-                # Poll the Redis pub/sub framework for incoming message frames
-                message_node = pubsub_instance.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                
-                if message_node and message_node.get("type") == "message":
-                    token_payload = message_node.get("data", "")
-                    
-                    if token_payload == "[DONE]":
-                        break
-                        
-                    # ⚡ Standard Server-Sent Events structure formatting string sequence
-                    yield f"data: {token_payload}\n\n"
-                    
-                await asyncio.sleep(0.01)
-        finally:
-            pubsub_instance.unsubscribe(f"stream:{step_id}")
-            pubsub_instance.close()
-
-    # 🎯 CRITICAL HEADERS: Blocks corporate load balancers from buffering response content sets
-    anti_buffering_headers = {
-        "X-Accel-Buffering": "no",
-        "Cache-Control": "no-cache, no-store, must-revalidate",
-        "Pragma": "no-cache",
-        "Connection": "keep-alive"
-    }
-
-    return StreamingResponse(
-        event_generator(), 
-        media_type="text/event-stream", 
-        headers=anti_buffering_headers
     )

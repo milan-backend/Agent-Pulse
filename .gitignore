@@ -148,3 +148,4 @@ enterprise_yearly_plan.py
 inject_db_changes.py
 upgrade_audit_tables.py
 test_audit_db.py
+streaming_service.py
