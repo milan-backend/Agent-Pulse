@@ -512,14 +512,55 @@ def process_step(self, step_id: str):
                         f"USER INSTRUCTION TASK: {prompt}"
                     )
 
-                output, tier_status_msg = generate_llm_response(
-                    prompt=final_prompt_payload,
-                    db=db,
-                    workspace_id=current_workspace_id,
-                    agent_id=agent_id_raw,
-                    model_name=active_model_target
+                # ⚡  THE NEW LOGIC HERE:
+                llm_start_time = time.time()
+                
+                import redis
+                import ssl
+                
+                raw_redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+                if "?ssl_cert_reqs=CERT_NONE" in raw_redis_url:
+                    redis_url_str = raw_redis_url.split("?")[0]
+                else:
+                    redis_url_str = raw_redis_url
+                
+                ssl_options = {}
+                if redis_url_str.startswith("rediss://"):
+                    ssl_options["ssl_cert_reqs"] = ssl.CERT_NONE
+                
+                redis_client = redis.Redis.from_url(redis_url_str, **ssl_options)
+                
+                if 'gemini_api_key' not in locals() or not gemini_api_key:
+                    gemini_api_key = os.getenv("GEMINI_API_KEY")
+                    if not gemini_api_key and resolved_key_record:
+                        from app.core.crypto import decrypt_api_key
+                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+
+                # Dynamically maps the key notification banner text 
+                if tier_source == "agent":
+                    tier_status_msg = "Notice: Running via Agent-Specific Custom API Provider."
+                elif tier_source == "workspace":
+                    tier_status_msg = "Notice: Running via Workspace-Level Shared API Provider."
+                else:
+                    tier_status_msg = "Notice: Running on System Shared Sandbox Tier (Platform API Key)."
+
+                # Call our centralized engine
+                from app.services.streaming_service import execute_provider_stream
+                output = execute_provider_stream(
+                    active_model_target=active_model_target,
+                    final_prompt_payload=final_prompt_payload,
+                    gemini_api_key=gemini_api_key,
+                    redis_client=redis_client,
+                    step_id=str(step.id),
+                    tier_source=tier_source
                 )
                 
+                # Signal completion to Redis
+                redis_client.publish(f"stream:{str(step.id)}", "[DONE]")
+                
+                llm_generation_latency_ms = round((time.time() - llm_start_time) * 1000, 2)
+                
+                # Re-calculate usage tokens metrics
                 completion_usage = calculate_usage(
                    prompt=final_prompt_payload,
                    completion=output,

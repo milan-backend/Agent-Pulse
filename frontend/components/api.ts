@@ -914,7 +914,7 @@ export const agentTasksApi = {
 
 
 export const askCopilotService = async (userPrompt: string): Promise<string> => {
-    const endpointUrl = "https://api.agentpulseai.dev/mcp/execute";
+    const endpointUrl = `${API_URL}/mcp/execute`;
     const apiKey = COPILOT_API_KEY;
 
     const payload = {
@@ -1010,17 +1010,88 @@ export const askCopilotService = async (userPrompt: string): Promise<string> => 
             }
         }
 
-        // Fallback string if text extraction returns blank anomalies
         if (!answerText) {
             answerText = "Error: System could not parse clean text output context from payload.";
         }
 
-        // Strip out accidental markdown notation leaks and return purely the string answer
         return answerText.replace(/\[.*?\]/g, "").trim();
 
     } catch (error: any) {
         console.error("Copilot routing failure:", error);
         return "⚠️ Connection exception encountered while communicating with the background execution worker node.";
+    }
+};
+
+export const askCopilotStreamService = async (
+    userPrompt: string, 
+    onChunkReceived: (chunk: string) => void
+): Promise<void> => {
+    const executeUrl = `${API_URL}/mcp/execute`;
+    const apiKey = COPILOT_API_KEY;
+
+    const payload = {
+        "tool": "execute_task",
+        "arguments": {
+            "task_name": "Workspace-Copilot-Query",
+            "input_data": { "prompt": userPrompt },
+            "idempotency_key": crypto.randomUUID()
+        }
+    };
+
+    // 1. Initiate the background job via your existing tool handshake execution pipeline
+    const response = await fetch(executeUrl, {
+        method: "POST",
+        headers: { 
+            "Content-Type": "application/json",
+            "X-API-Key": apiKey
+        },
+        body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) throw new Error("Stream connection handshake failed");
+    
+    const data = await response.json();
+    const stepId = data.step_id || (data.step && data.step.id) || (data.data && data.data.step_id);
+    
+    if (!stepId) throw new Error("Routing context allocation identifier is missing");
+
+    // 2. Open up a connection directly to our FastAPI Server-Sent Event streaming route
+    const streamUrl = `${API_URL}/mcp/stream/${stepId}`;
+    const streamResponse = await fetch(streamUrl, {
+        method: "GET",
+        headers: {
+            "X-API-Key": apiKey
+        }
+    });
+
+    if (!streamResponse.body) throw new Error("No readable stream response payload available");
+
+    // 3. Pipe chunks through TextDecoderStream to prevent multi-byte encoding cuts
+    const reader = streamResponse.body
+        .pipeThrough(new TextDecoderStream())
+        .getReader();
+
+    try {
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            if (value) {
+                // Parse out standard Server-Sent Event 'data: ' text tokens cleanly
+                const cleanLines = value
+                    .split("\n")
+                    .filter(line => line.startsWith("data: "))
+                    .map(line => line.replace(/^data:\s*/, ""))
+                    .join("\n");
+
+                if (cleanLines) {
+                    onChunkReceived(cleanLines);
+                }
+            }
+        }
+    } catch (streamError) {
+        console.error("Critical error inside piped stream buffer loop:", streamError);
+        throw streamError;
     }
 };
 

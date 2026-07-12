@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Sparkles, Send, ArrowRight, Bot, Shield, Key, Database, Cpu, Terminal } from "lucide-react";
-import { askCopilotService } from "@/components/api"; // Centralized API endpoint connection wrapper
+// Centralized API endpoint connection wrappers natively supporting streaming
+import { askCopilotService, askCopilotStreamService } from "@/components/api"; 
 
 interface Message {
   id: string;
@@ -16,7 +17,7 @@ export default function DashboardCopilotPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Production-focused onboarding quick suggestions
+  // Production-focused onboarding quick suggestions[cite: 4]
   const quickSuggestions = [
     { text: "How do I create an AI agent?", icon: Bot },
     { text: "How does Knowledge (RAG) work?", icon: Database },
@@ -26,7 +27,7 @@ export default function DashboardCopilotPage() {
     { text: "Where can I monitor tasks?", icon: Terminal },
   ];
 
-  // Keep focus and view pinned to current exchange frames smoothly
+  // Keep focus and view pinned to current exchange frames smoothly[cite: 4]
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
@@ -37,22 +38,40 @@ export default function DashboardCopilotPage() {
     const userMessageText = queryText.trim();
     setInput("");
     
-    // Commit user's prompt frame to array state layout
+    // Commit user's prompt frame to array state layout[cite: 4]
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), type: "user", text: userMessageText }]);
     setIsLoading(true);
 
+    const systemMessageId = crypto.randomUUID();
+
     try {
-      // Execute the async Celery background queue worker polling sequence
-      const copilotResponse = await askCopilotService(userMessageText);
-      
-      setMessages((prev) => [
-        ...prev, 
-        { id: crypto.randomUUID(), type: "system", text: copilotResponse }
-      ]);
+      // 1️⃣ Inject the empty initial AI response target bubble frame immediately
+      setMessages((prev) => [...prev, { id: systemMessageId, type: "system", text: "" }]);
+
+      // 2️⃣ Invoke the streaming service to pipe text down character-by-character
+      await askCopilotStreamService(userMessageText, (chunkText: string) => {
+        // Turn off the spinner loader once the first stream tokens drop into view space
+        setIsLoading(false); 
+        
+        // Use a functional state updater to dynamically append character fragments seamlessly
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === systemMessageId 
+              ? { ...msg, text: msg.text + chunkText } 
+              : msg
+          )
+        );
+      });
+
     } catch (error) {
+      setIsLoading(false);
       setMessages((prev) => [
         ...prev,
-        { id: crypto.randomUUID(), type: "system", text: "⚠️ An operational processing timeout or connection exception occurred. Please try sending your query again." }
+        { 
+          id: crypto.randomUUID(), 
+          type: "system", 
+          text: "⚠️ An operational processing timeout or connection exception occurred. Please try sending your query again." 
+        }
       ]);
     } finally {
       setIsLoading(false);
@@ -67,11 +86,11 @@ export default function DashboardCopilotPage() {
   return (
     <div className="flex h-[calc(100vh-8rem)] w-full max-w-5xl mx-auto flex-col bg-[#020817] text-slate-100 antialiased">
       
-      {/* 🧵 CHAT AREA COMPONENT WINDOW */}
+      {/* 🧵 CHAT AREA COMPONENT WINDOW[cite: 4] */}
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 custom-chat-scrollbar">
         {messages.length === 0 ? (
           
-          /* 👋 PROFESSIONAL WELCOME SCREEN & CORE PRIMITIVES GRID */
+          /* 👋 PROFESSIONAL WELCOME SCREEN & CORE PRIMITIVES GRID[cite: 4] */
           <div className="h-full flex flex-col justify-center items-center max-w-2xl mx-auto text-center pt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.1)] mb-6">
               <Sparkles size={26} className="text-cyan-400" />
@@ -82,7 +101,7 @@ export default function DashboardCopilotPage() {
             </h1>
             
             <p className="mt-4 text-sm md:text-base text-slate-400 leading-relaxed font-normal">
-              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.
+              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.[cite: 4]
             </p>
             
             <div className="mt-5 flex items-center space-x-2 text-xs font-mono text-slate-500 bg-slate-900/40 px-3 py-1.5 rounded-full border border-slate-800/60">
@@ -90,7 +109,7 @@ export default function DashboardCopilotPage() {
               <span>All answers derived directly from official platform documentation</span>
             </div>
 
-            {/* 💡 PRODUCT ACTION SUGGESTIONS TILES */}
+            {/* 💡 PRODUCT ACTION SUGGESTIONS TILES[cite: 4] */}
             <div className="mt-12 w-full grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
               {quickSuggestions.map((suggestion, index) => {
                 const SuggestionIcon = suggestion.icon;
@@ -114,7 +133,7 @@ export default function DashboardCopilotPage() {
           </div>
         ) : (
           
-          /* 💬 IMMERSIVE INTERACTIVE CHAT FLOW BUBBLES */
+          /* 💬 IMMERSIVE INTERACTIVE CHAT FLOW BUBBLES[cite: 4] */
           <div className="space-y-6 max-w-3xl mx-auto w-full">
             {messages.map((msg) => (
               <div
@@ -133,7 +152,7 @@ export default function DashboardCopilotPage() {
               </div>
             ))}
 
-            {/* ⚡ CLEAN LOADING THINKING INDICATOR */}
+            {/* ⚡ CLEAN LOADING THINKING INDICATOR[cite: 4] */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-[#090f1a] text-slate-400 border border-slate-800 max-w-[85%] px-5 py-4 rounded-2xl text-xs md:text-sm flex items-center space-x-3 shadow-sm">
@@ -151,7 +170,7 @@ export default function DashboardCopilotPage() {
         )}
       </div>
 
-      {/* 📥 USER TEXT PROMPT INTERFACE LAYER */}
+      {/* 📥 USER TEXT PROMPT INTERFACE LAYER[cite: 4] */}
       <div className="p-4 bg-[#020817] border-t border-slate-900">
         <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto w-full flex flex-col space-y-2">
           <div className="flex items-center space-x-3 relative">
@@ -172,14 +191,14 @@ export default function DashboardCopilotPage() {
             </button>
           </div>
           
-          {/* Subtle Platform Attribution Footer */}
+          {/* Subtle Platform Attribution Footer[cite: 4] */}
           <div className="text-center text-[10px] font-mono text-slate-600 tracking-wider pt-1.5 uppercase select-none">
             🔒 Multi-Tenant Context Shielding Active • Powered by an AgentPulse Agent
           </div>
         </form>
       </div>
 
-      {/* Inline Styled CSS for custom scrollbar cleanup */}
+      {/* Inline Styled CSS for custom scrollbar cleanup[cite: 4] */}
       <style jsx global>{`
         .custom-chat-scrollbar::-webkit-scrollbar {
           width: 5px;
