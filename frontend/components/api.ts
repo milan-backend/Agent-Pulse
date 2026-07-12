@@ -1,4 +1,5 @@
 export const API_URL = process.env.NEXT_PUBLIC_API_URL!;
+export const COPILOT_API_KEY = process.env.NEXT_PUBLIC_COPILOT_API_KEY!;
 
 type RequestOptions = {
   method?: string;
@@ -914,7 +915,7 @@ export const agentTasksApi = {
 
 export const askCopilotService = async (userPrompt: string): Promise<string> => {
     const endpointUrl = "https://api.agentpulseai.dev/mcp/execute";
-    const apiKey = "4a1f331e.spWSB0rpqwWWiI-icX3kCVb86j-GCGSpdd7_xThAKfo";
+    const apiKey = COPILOT_API_KEY;
 
     const payload = {
         "tool": "execute_task",
