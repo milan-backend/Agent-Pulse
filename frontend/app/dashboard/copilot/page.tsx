@@ -40,7 +40,7 @@ export default function DashboardCopilotPage() {
     setIsLoading(true);
 
     try {
-      // 🔄 Running clean, stable non-streaming function payload check[cite: 2]
+      // 🔄 Running clean, stable non-streaming function payload check]
       const copilotResponse = await askCopilotService(userMessageText);
       
       setMessages((prev) => [
@@ -82,7 +82,7 @@ export default function DashboardCopilotPage() {
             </h1>
             
             <p className="mt-4 text-sm md:text-base text-slate-400 leading-relaxed font-normal">
-              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.[cite: 2]
+              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.
             </p>
             
             <div className="mt-5 flex items-center space-x-2 text-xs font-mono text-slate-500 bg-slate-900/40 px-3 py-1.5 rounded-full border border-slate-800/60">
