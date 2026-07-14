@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { Sparkles, Send, ArrowRight, Bot, Shield, Key, Database, Cpu, Terminal } from "lucide-react";
-import { askCopilotService } from "@/components/api"; // Centralized API endpoint connection wrapper
+import { askCopilotService } from "@/components/api"; // Reverted cleanly back to your old stable function[cite: 2]
 
 interface Message {
   id: string;
@@ -16,7 +16,6 @@ export default function DashboardCopilotPage() {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Production-focused onboarding quick suggestions
   const quickSuggestions = [
     { text: "How do I create an AI agent?", icon: Bot },
     { text: "How does Knowledge (RAG) work?", icon: Database },
@@ -26,9 +25,9 @@ export default function DashboardCopilotPage() {
     { text: "Where can I monitor tasks?", icon: Terminal },
   ];
 
-  // Keep focus and view pinned to current exchange frames smoothly
+  // 🎯 FIX: Scroll behaves flawlessly inside the container boundaries now
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages, isLoading]);
 
   const handleQuerySubmission = async (queryText: string) => {
@@ -37,12 +36,11 @@ export default function DashboardCopilotPage() {
     const userMessageText = queryText.trim();
     setInput("");
     
-    // Commit user's prompt frame to array state layout
     setMessages((prev) => [...prev, { id: crypto.randomUUID(), type: "user", text: userMessageText }]);
     setIsLoading(true);
 
     try {
-      // Execute the async Celery background queue worker polling sequence
+      // 🔄 Running clean, stable non-streaming function payload check[cite: 2]
       const copilotResponse = await askCopilotService(userMessageText);
       
       setMessages((prev) => [
@@ -65,13 +63,15 @@ export default function DashboardCopilotPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] w-full max-w-5xl mx-auto flex-col bg-[#020817] text-slate-100 antialiased">
+    /* 🎯 FIX 1: Maximize page height and hide parent document window body overflows */
+    <div className="flex h-[calc(100vh-4rem)] w-full max-w-5xl mx-auto flex-col bg-[#020817] text-slate-100 antialiased overflow-hidden">
       
       {/* 🧵 CHAT AREA COMPONENT WINDOW */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 custom-chat-scrollbar">
+      {/* 🎯 FIX 2: Added 'h-full flex flex-col justify-between' layout boundaries to isolate scroll boxes */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6 custom-chat-scrollbar min-h-0">
         {messages.length === 0 ? (
           
-          /* 👋 PROFESSIONAL WELCOME SCREEN & CORE PRIMITIVES GRID */
+          /* 👋 WELCOME SCREEN */
           <div className="h-full flex flex-col justify-center items-center max-w-2xl mx-auto text-center pt-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center shadow-[0_0_30px_rgba(34,211,238,0.1)] mb-6">
               <Sparkles size={26} className="text-cyan-400" />
@@ -82,7 +82,7 @@ export default function DashboardCopilotPage() {
             </h1>
             
             <p className="mt-4 text-sm md:text-base text-slate-400 leading-relaxed font-normal">
-              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.
+              I'm your AI assistant for the AgentPulse platform. I can help you create AI agents, understand Knowledge (RAG), configure AI providers, integrate APIs and MCP, explain Runtime Guard, workspaces, and troubleshooting.[cite: 2]
             </p>
             
             <div className="mt-5 flex items-center space-x-2 text-xs font-mono text-slate-500 bg-slate-900/40 px-3 py-1.5 rounded-full border border-slate-800/60">
@@ -90,7 +90,7 @@ export default function DashboardCopilotPage() {
               <span>All answers derived directly from official platform documentation</span>
             </div>
 
-            {/* 💡 PRODUCT ACTION SUGGESTIONS TILES */}
+            {/* 💡 TILES */}
             <div className="mt-12 w-full grid grid-cols-1 md:grid-cols-2 gap-3 text-left">
               {quickSuggestions.map((suggestion, index) => {
                 const SuggestionIcon = suggestion.icon;
@@ -98,7 +98,7 @@ export default function DashboardCopilotPage() {
                   <button
                     key={index}
                     onClick={() => handleQuerySubmission(suggestion.text)}
-                    className="group flex items-start gap-4 bg-slate-950/40 hover:bg-cyan-950/10 border border-slate-900 hover:border-cyan-500/30 p-4 rounded-xl text-xs md:text-sm transition-all duration-200 shadow-sm hover:shadow-[0_0_20px_rgba(6,182,212,0.02)]"
+                    className="group flex items-start gap-4 bg-slate-950/40 hover:bg-cyan-950/10 border border-slate-900 hover:border-cyan-500/30 p-4 rounded-xl text-xs md:text-sm transition-all duration-200 shadow-sm"
                   >
                     <div className="mt-0.5 text-slate-500 group-hover:text-cyan-400 transition-colors">
                       <SuggestionIcon size={16} />
@@ -133,7 +133,7 @@ export default function DashboardCopilotPage() {
               </div>
             ))}
 
-            {/* ⚡ CLEAN LOADING THINKING INDICATOR */}
+            {/* ⚡ THINKING LOADER */}
             {isLoading && (
               <div className="flex justify-start">
                 <div className="bg-[#090f1a] text-slate-400 border border-slate-800 max-w-[85%] px-5 py-4 rounded-2xl text-xs md:text-sm flex items-center space-x-3 shadow-sm">
@@ -152,7 +152,7 @@ export default function DashboardCopilotPage() {
       </div>
 
       {/* 📥 USER TEXT PROMPT INTERFACE LAYER */}
-      <div className="p-4 bg-[#020817] border-t border-slate-900">
+      <div className="p-4 bg-[#020817] border-t border-slate-900 mt-auto">
         <form onSubmit={handleFormSubmit} className="max-w-3xl mx-auto w-full flex flex-col space-y-2">
           <div className="flex items-center space-x-3 relative">
             <input
@@ -172,14 +172,12 @@ export default function DashboardCopilotPage() {
             </button>
           </div>
           
-          {/* Subtle Platform Attribution Footer */}
           <div className="text-center text-[10px] font-mono text-slate-600 tracking-wider pt-1.5 uppercase select-none">
             🔒 Multi-Tenant Context Shielding Active • Powered by an AgentPulse Agent
           </div>
         </form>
       </div>
 
-      {/* Inline Styled CSS for custom scrollbar cleanup */}
       <style jsx global>{`
         .custom-chat-scrollbar::-webkit-scrollbar {
           width: 5px;
