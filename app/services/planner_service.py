@@ -9,18 +9,24 @@ from app.services.intent_service import IntentAnalysisSchema
 # 📊 Pydantic Structural Blueprint For Routing Engine Output
 # =====================================================================
 
-class DocumentRouteSelection(BaseModel):
-    document_id: str = Field(description="The UUID string of the chosen document.")
-    reason: str = Field(description="Why this specific file is chosen to answer the query.")
-
 class RetrievalBlueprintSchema(BaseModel):
-    selected_documents: List[DocumentRouteSelection] = Field(description="Target files to vector search. Empty if no match.")
-    vector_search_terms: List[str] = Field(description="Search terms mapping to the investigation.")
-    prefer_latest: bool = Field(default=True)
-    prefer_approved: bool = Field(default=True)
-    max_chunks: int = Field(default=10)
-    planner_notes: str = Field(description="Strategic notes explaining the combined routing strategy.")
+    selected_document_ids: List[str] = Field(
+        description="UUIDs of the selected documents."
+    )
 
+    selection_reasons: List[str] = Field(
+        description="Reason corresponding to each selected document."
+    )
+
+    vector_search_terms: List[str]
+
+    prefer_latest: bool = True
+
+    prefer_approved: bool = True
+
+    max_chunks: int = 10
+
+    planner_notes: str
 
 # =====================================================================
 # 🧠 The Retrieval Planner AI Execution Service
@@ -38,11 +44,12 @@ def execute_retrieval_planning_triage(
     """
     if not lightweight_candidates:
         return RetrievalBlueprintSchema(
-            selected_documents=[], 
-            vector_search_terms=[], 
+            selected_document_ids=[],
+            selection_reasons=[],
+            vector_search_terms=[],
             max_chunks=10,
-            planner_notes="No candidate profiles reached the planner tier."
-        )
+            planner_notes="..."
+)
 
     gemini_key = os.getenv("INTENT_API_KEY")
     if not gemini_key:
@@ -135,8 +142,7 @@ def execute_retrieval_planning_triage(
         existing_terms = set(str(t).lower().strip() for t in parsed_blueprint.vector_search_terms)
         enriched_terms = list(parsed_blueprint.vector_search_terms)
         
-        for selected_doc in parsed_blueprint.selected_documents:
-            target_id = selected_doc.document_id
+        for target_id in parsed_blueprint.selected_document_ids:
             matched_cand = next((c for c in lightweight_candidates if str(c["id"]) == str(target_id)), None)
             
             if matched_cand:
