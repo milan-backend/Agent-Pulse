@@ -362,8 +362,8 @@ def process_step(self, step_id: str):
                         print(retrieval_blueprint.model_dump())
                         print("========================================")
 
-                        
-                        rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_documents)
+
+                        rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_documents_ids)
                         rag_telemetry_node["blueprint_notes"] = retrieval_blueprint.planner_notes
                     except Exception as planner_err:
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
@@ -371,8 +371,8 @@ def process_step(self, step_id: str):
                 # =====================================================================
                 # 🎯 COMPONENT 5: TARGETED VECTOR SEARCH ENGINE OPERATIONS ONLY
                 # =====================================================================
-                if retrieval_blueprint and retrieval_blueprint.selected_documents:
-                    target_doc_ids = [str(d.document_id) for d in retrieval_blueprint.selected_documents]
+                if retrieval_blueprint and retrieval_blueprint.selected_documents_ids:
+                    target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
                     
                     # Merge original prompt instruction with planner vector search queries
                     combined_search_queries = [prompt] + retrieval_blueprint.vector_search_terms

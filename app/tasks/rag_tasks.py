@@ -166,21 +166,18 @@ def process_document_embedding(document_id: str):
                     chunk_meta = run_phase_b_chunk_extraction(chunk_data["text"], intelligence_client)
                     
                     for entity in chunk_meta.entities:
-                        entity_key = f"{entity.name.lower().strip()}_{entity.entity_type.lower().strip()}"
-                        if entity_key not in seen_entity_keys:
-                            seen_entity_keys.add(entity_key)
-                            aggregated_entities.append({"name": entity.name, "entity_type": entity.entity_type})
+                        entity = str(entity).strip()
+
+                        if entity and entity not in seen_entity_keys:
+                           seen_entity_keys.add(entity)
+                           aggregated_entities.append(entity)
                             
                     for rel in chunk_meta.relationships:
-                        rel_key = f"{rel.source.lower().strip()}_{rel.relation.lower().strip()}_{rel.target.lower().strip()}"
-                        if rel_key not in seen_relationship_keys:
-                            seen_relationship_keys.add(rel_key)
-                            aggregated_relationships.append({
-                                "source": rel.source,
-                                "relation": rel.relation,
-                                "target": rel.target,
-                                "confidence": rel.confidence
-                            })
+                        rel = str(rel).strip()
+
+                        if rel and rel not in seen_relationship_keys:
+                           seen_relationship_keys.add(rel)
+                           aggregated_relationships.append(rel)
                             
                     aggregated_facts.extend([f for f in chunk_meta.facts if f not in aggregated_facts])
                     aggregated_keywords.extend([k for k in chunk_meta.retrieval_keywords if k not in aggregated_keywords])
@@ -243,7 +240,7 @@ def process_document_embedding(document_id: str):
         metadatas = []
         
         current_timestamp_iso = datetime.utcnow().strftime("%Y-%m-%d")
-        
+
         # 5. Process each plain text chunk[cite: 5]
         for index, chunk_payload in enumerate(processed_chunks_pool):
             plain_text_content = chunk_payload["text"]
