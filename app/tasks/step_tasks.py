@@ -363,7 +363,7 @@ def process_step(self, step_id: str):
                         print("========================================")
 
 
-                        rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_documents_ids)
+                        rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_document_ids)
                         rag_telemetry_node["blueprint_notes"] = retrieval_blueprint.planner_notes
                     except Exception as planner_err:
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
