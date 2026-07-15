@@ -158,6 +158,10 @@ def process_document_embedding(document_id: str):
             doc.document_status = phase_a_meta.document_status
             doc.knowledge_schema_version = 1
             
+            # Ensure sorting compatibility metrics have defaults mapped
+            doc.version = "1.0.0"
+            doc.approved = True
+            
             # --- PHASE B: CHUNK LEVEL GRAPH EXTRACTION & PYTHON AGGREGATION ---
             print(f"🧬 Commencing Phase B Aggregation across {len(processed_chunks_pool)} localized segments...")
             
@@ -228,7 +232,11 @@ def process_document_embedding(document_id: str):
             
         except Exception as pipeline_err:
             db.rollback()
-            print(f"❌ Critical architectural pipeline extraction rollback triggered: {str(pipeline_err)}")
+            error_str = f"Dual-Phase Extraction Error: {str(pipeline_err)}"
+            print(f"❌ Critical architectural pipeline extraction rollback triggered: {error_str}")
+            
+            # 🎯 FORCE BREAK: Bubble the extraction crash directly to the main failure handler
+            raise ValueError(error_str)
         # =====================================================================
 
         # 4. Initialize Cloud-Native Vector Engine Connection Dynamic Link
@@ -333,6 +341,7 @@ def process_document_embedding(document_id: str):
         db.rollback()
         if doc:
             doc.status = "failed"
+            doc.error_message = str(error)
             db.commit()
         print(f"❌ Background pipeline failure for file record verification: {str(error)}")
         return False
