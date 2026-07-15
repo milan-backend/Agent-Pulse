@@ -113,7 +113,7 @@ def run_phase_a_document_extraction(global_document_sample: str, client: genai.C
     )
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=f"Analyze the following document context sample and extract global document metadata columns:\n\n{global_document_sample}",
         config={
             "system_instruction": system_instruction,
@@ -144,7 +144,7 @@ def run_phase_b_chunk_extraction(chunk_text: str, client: genai.Client) -> Chunk
     
     # FIXED: Replaced non-existent variable {chunk} with matching function parameter {chunk_text}
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=f"Execute structural indexing and factual extraction across the following targeted text chunk:\n\n{chunk_text}",
         config={
             "system_instruction": system_instruction,

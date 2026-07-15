@@ -64,7 +64,7 @@ def analyze_user_query_intent(user_prompt: str) -> IntentAnalysisSchema:
     )
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=f"Analyze the following user question string and extract its target search intent schema:\n\n{user_prompt}",
         config={
             "system_instruction": system_instruction,
