@@ -16,6 +16,10 @@ class DocumentLevelMetadataSchema(BaseModel):
     planner_summary: str = Field(description="A dense, highly technical synthesis optimized strictly for an upstream AI Retrieval Planner, detailing what core data can be located here.")
     departments: List[str] = Field(description="List of corporate organizational divisions that own or use this document, e.g., ['Finance', 'Executive']")
     topics: List[str] = Field(description="Top 3-6 macro high-level categorical concepts present across the text payload")
+    
+    # 🎯 PROBLEM 1 FIX: Populating document-level operational questions
+    questions_this_document_can_answer: List[str] = Field(description="Generate 3–8 concrete business operational questions that could be answered directly from this entire document context window.")
+    
     classification_confidence: str = Field(description="Confidence classification routing assessment score. MUST choose strictly from: ['High', 'Medium', 'Low']")
 
 
@@ -52,6 +56,11 @@ def calculate_document_authority(doc_type: str) -> int:
     if "board meeting" in dt: return 100
     if "policy" in dt or "handbook" in dt or "manual" in dt: return 95
     if "financial" in dt or "audit" in dt: return 92
+    
+    # 🎯 PROBLEM 4 FIX: Expanding the mapping matrix to catch strategic corporate assets
+    # Elevates 'Executive Business Report', 'Sales Report', etc., so they don't default to 50
+    if "executive" in dt or "report" in dt or "sales" in dt or "strategy" in dt: return 90
+    
     if "success" in dt or "support" in dt: return 88
     if "notes" in dt or "memo" in dt: return 55
     if "draft" in dt: return 35
@@ -107,6 +116,7 @@ def run_phase_a_document_extraction(global_document_sample: str, client: genai.C
         "AI Retrieval Planner to verify if this document fits macro intent parameters. Optimize for machine lookups.\n\n"
         "⚠️ RULES & ALIGNMENT STRATEGIES:\n"
         "- Classify the overall document properties from a macro perspective using the text sample.\n"
+        "- Generate 3-8 highly specific, clear, practical business questions that this entire document context sample contains the exact data to answer.\n"
         "- Do NOT provide friendly summaries, text evaluations, or human narrative flows.\n"
         "- If standard classification labels (for role, type, status) do not fit perfectly due to unique corporate formatting, "
         "output the closest possible description instead."
@@ -142,7 +152,6 @@ def run_phase_b_chunk_extraction(chunk_text: str, client: genai.Client) -> Chunk
         "- Select confidence values strictly from ['High', 'Medium', 'Low']."
     )
     
-    # FIXED: Replaced non-existent variable {chunk} with matching function parameter {chunk_text}
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite",
         contents=f"Execute structural indexing and factual extraction across the following targeted text chunk:\n\n{chunk_text}",

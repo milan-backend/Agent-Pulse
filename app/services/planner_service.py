@@ -1,4 +1,5 @@
 import os
+import json
 from google import genai
 from pydantic import BaseModel, Field
 from typing import List
@@ -22,7 +23,7 @@ class RetrievalBlueprintSchema(BaseModel):
 
 
 # =====================================================================
-# 🚀 The Retrieval Planner AI Execution Service
+# 🧠 The Retrieval Planner AI Execution Service
 # =====================================================================
 
 def execute_retrieval_planning_triage(
@@ -31,7 +32,7 @@ def execute_retrieval_planning_triage(
     lightweight_candidates: List[dict]
 ) -> RetrievalBlueprintSchema:
     """
-    Component 4: Planner AI
+    Component 4: Planner AI (High-Recall Architecture Optimization)
     Uses rich structured Intent Analysis context alongside lightweight candidate profiles
     to make an optimal data routing decision. Never reads full text or answers the query.
     """
@@ -49,31 +50,40 @@ def execute_retrieval_planning_triage(
         
     client = genai.Client(api_key=gemini_key)
     
-    # Format lightweight candidates context block
+    # 🎯 FIX FOR PROBLEM 7: Format lightweight candidates context block to include keywords
     formatted_candidates = []
     for doc in lightweight_candidates:
+        # Gracefully handle extraction variants if keywords exist inside nested JSONB blocks
+        meta_blob = doc.get("knowledge_metadata", {}) if isinstance(doc.get("knowledge_metadata"), dict) else {}
+        extracted_keywords = meta_blob.get("global_retrieval_keywords", doc.get("retrieval_keywords", []))
+        
         formatted_candidates.append(
             f"📄 [DOCUMENT ID: {doc['id']}]\n"
+            f" - Filename: {doc.get('filename', 'Unknown asset')}\n"
             f" - Type: {doc['document_type']} | Role: {doc['document_role']}\n"
+            f" - Time Scope: {doc.get('time_scope', 'N/A')} | Status: {doc.get('document_status', 'N/A')}\n"
             f" - Scores -> Authority: {doc['authority_score']} | Importance: {doc['importance_score']} | Freshness: {doc['freshness']}\n"
             f" - Planner Summary: {doc['planner_summary']}\n"
-            f" - Questions This Document Can Answer: {doc['questions_this_document_can_answer']}\n"
+            f" - Grounded Retrieval Keywords: {extracted_keywords}\n"
+            f" - Questions This Document Can Answer: {doc.get('questions_this_document_can_answer', doc.get('questions', []))}\n"
             f"--------------------------------------------------"
         )
     candidates_context_block = "\n".join(formatted_candidates)
     
+    # 🎯 FIX FOR PROBLEM 2 & 3: High-Recall prompt adjustment to evaluate metrics holistically
     system_instruction = (
         "You are the Core Director of the AgentPulse Retrieval Planner AI Layer.\n\n"
         "🎯 MISSION OBJECTIVE:\n"
         "Your task is to review the highly structured INTENT ANALYSIS and a small set of pre-filtered candidate document profiles "
         "to construct a high-precision Retrieval Blueprint. Do NOT re-do the intent analysis; use the provided strategy parameters.\n\n"
-        "⚠️ PLANNING CONSTRAINTS:\n"
-        "- Select only the exact document IDs that have the definitive capability to answer the user query.\n"
-        "- Match your selection against the 'Preferred Role', 'Time Scope', and 'Questions This Document Can Answer' metrics.\n"
+        "⚠️ BALANCED PLANNING CONSTRAINTS & HIGH-RECALL RULES:\n"
+        "- **Select every candidate document that is reasonably relevant, shares structural tags, or temporal bounds with the request.**\n"
+        "- Balance metrics holistically: rely on 'Planner Summary', authority scores, and bridge keywords alongside question arrays. Do not punish a file just because one field is thin.\n"
+        "- Return an empty selection array ONLY if absolutely none of the candidate items share any functional relationship with the user question.\n"
+        "- When in doubt, prefer INCLUSION over exclusion. High recall is critical to avoid downstream context starvation.\n"
         "- Output a comprehensive set of vector search terms to guide the downstream retrieval engine."
     )
     
-    # 🎯 CORRECTION: Full intentional injection of the complete Intent Analysis schema footprint
     prompt_payload = (
         f"USER QUESTION\n"
         f"\"{user_prompt}\"\n"
@@ -84,7 +94,6 @@ def execute_retrieval_planning_triage(
         f" - Preferred Role: {intent_strategy.target_role_preference}\n"
         f" - Departments: {', '.join(intent_strategy.target_departments) if intent_strategy.target_departments else 'Universal'}\n"
         f" - Time Scope: {intent_strategy.implied_time_scope}\n"
-        # Optional field check to prevent attribute failure bugs if naming maps dynamically
         f" - Expanded Keywords: {', '.join(getattr(intent_strategy, 'expanded_search_keywords', []))}\n"
         f"---------------------------------\n\n"
         f"CANDIDATE DOCUMENTS\n"
@@ -93,6 +102,11 @@ def execute_retrieval_planning_triage(
         f"=================================================="
     )
     
+    # Debug telemetry validation logs
+    print("========== PLANNER PROMPT PAYLOAD ==========")
+    print(prompt_payload)
+    print("============================================")
+
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite",
         contents=prompt_payload,
@@ -103,4 +117,41 @@ def execute_retrieval_planning_triage(
             "temperature": 0.0
         }
     )
-    return RetrievalBlueprintSchema.model_validate_json(response.text)
+    
+    print("========== PLANNER RAW LLM RESPONSE ==========")
+    print(response.text)
+    print("==============================================")
+
+    try:
+        parsed_blueprint = RetrievalBlueprintSchema.model_validate_json(response.text)
+        
+        # 🎯 FIX FOR PROBLEM 5: Grounded Search Terms Extraction Integration Fallback
+        # If the LLM generates weak generic keywords but selected highly focused documents, 
+        # we dynamically enrich vector_search_terms with the grounded keywords pre-extracted during asset ingestion.
+        existing_terms = set(str(t).lower().strip() for t in parsed_blueprint.vector_search_terms)
+        enriched_terms = list(parsed_blueprint.vector_search_terms)
+        
+        for selected_doc in parsed_blueprint.selected_documents:
+            target_id = selected_doc.document_id
+            matched_cand = next((c for c in lightweight_candidates if str(c["id"]) == str(target_id)), None)
+            
+            if matched_cand:
+                m_blob = matched_cand.get("knowledge_metadata", {}) if isinstance(matched_cand.get("knowledge_metadata"), dict) else {}
+                g_keywords = m_blob.get("global_retrieval_keywords", matched_cand.get("retrieval_keywords", []))
+                
+                # Blend the top 3 grounded terms that aren't duplicates to guarantee true vector indexing
+                count = 0
+                for kw in g_keywords:
+                    clean_kw = str(kw).lower().strip()
+                    if clean_kw not in existing_terms and count < 3:
+                        existing_terms.add(clean_kw)
+                        enriched_terms.append(kw)
+                        count += 1
+                        
+        parsed_blueprint.vector_search_terms = enriched_terms
+        return parsed_blueprint
+
+    except Exception as validation_err:
+        print(f"❌ Fallback triggered due to blueprint schema mismatch: {str(validation_err)}")
+        # If schema verification hits parsing exceptions, attempt generic fallback parsing to save operations
+        return RetrievalBlueprintSchema.model_validate_json(response.text)

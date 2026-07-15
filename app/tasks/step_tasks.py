@@ -155,7 +155,7 @@ def process_step(self, step_id: str):
         step.status = "running"
         step.started_at = datetime.utcnow()
         db.commit()
-        #  This LINE HERE: This tells the frontend to turn the RAM/CPU lights on instantly!
+        
         from app.api.routes.ws import broadcast_message
         import asyncio
         import json
@@ -333,11 +333,14 @@ def process_step(self, step_id: str):
                 # Extract target departments array from intent triage layers
                 target_depts = intent_strategy.target_departments if intent_strategy else []
 
-                # Execute deterministic backend filtering out of AI space (thousands -> max 8)
+                # 🎯 PROBLEM 6 FIX: Bind the dynamic intent vectors into the SQL filter pipeline call
                 lightweight_candidates = RegistryFilterService.extract_top_candidates(
                     db=db,
                     workspace_id=current_workspace_id,
-                    target_departments=target_depts
+                    target_departments=target_depts,
+                    intent_time_scope=intent_strategy.implied_time_scope if intent_strategy else None,
+                    intent_document_type=intent_strategy.main_topic if intent_strategy else None,
+                    intent_document_role=intent_strategy.target_role_preference if intent_strategy else None
                 )
                 
                 rag_telemetry_node["sql_pruned_candidates"] = len(lightweight_candidates)
@@ -407,7 +410,6 @@ def process_step(self, step_id: str):
 
                                 search_results = collection.query(
                                     query_embeddings=[term_vector],
-                                    # Request slightly more for reranking pool overhead buffers
                                     n_results=min(retrieval_blueprint.max_chunks + 4, 12),
                                     where={
                                         "$and": [
@@ -624,25 +626,19 @@ def process_step(self, step_id: str):
             "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
         }
 
-        # 1. Capture current time using a native Python variable first
         execution_end_time = datetime.utcnow()
         step.completed_at = execution_end_time
         
-        # 2. Run the math directly using an explicit fallback if started_at isn't loaded
         start_anchor = step.started_at if step.started_at else datetime.utcnow()
         duration_delta = execution_end_time - start_anchor
         
-        # 3. Force update the integer value directly into the column mapping
         step.execution_time_ms = int(duration_delta.total_seconds() * 1000)
 
-        # 4. Assign the remaining metadata properties
         step.output_data = result
         step.status = "completed"
         step.error_message = None  
         
-        # 5. Force save straight to PostgreSQL disk
         db.commit()
-        # =====================================================================
 
         return {
             "status": "completed",
@@ -652,7 +648,6 @@ def process_step(self, step_id: str):
 
     except Exception as e:
         if step:
-            # 🟢 Record execution time up to the crash point
             if step.started_at:
                 step.completed_at = datetime.utcnow()
                 duration_delta = step.completed_at - step.started_at
