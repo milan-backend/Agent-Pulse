@@ -371,7 +371,7 @@ def process_step(self, step_id: str):
                 # =====================================================================
                 # 🎯 COMPONENT 5: TARGETED VECTOR SEARCH ENGINE OPERATIONS ONLY
                 # =====================================================================
-                if retrieval_blueprint and retrieval_blueprint.selected_documents_ids:
+                if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
                     
                     # Merge original prompt instruction with planner vector search queries
