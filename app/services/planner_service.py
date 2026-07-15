@@ -44,9 +44,9 @@ def execute_retrieval_planning_triage(
             planner_notes="No candidate profiles reached the planner tier."
         )
 
-    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY")
+    gemini_key = os.getenv("INTENT_API_KEY")
     if not gemini_key:
-        raise ValueError("CRITICAL: INTELLIGENCE_LAYER_API_KEY environment variable is missing.")
+        raise ValueError("CRITICAL: INTENT_API_KEY environment variable is missing.")
         
     client = genai.Client(api_key=gemini_key)
     
