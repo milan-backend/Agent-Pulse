@@ -115,7 +115,7 @@ def execute_retrieval_planning_triage(
     print("============================================")
 
     response = client.models.generate_content(
-        model="gemini-2.0-flash",  # 🎯 Standard SDK production model
+        model="gemini-3.5-flash",  # 🎯 Current flagship production model
         contents=prompt_payload,
         config={
             "system_instruction": system_instruction,
