@@ -13,6 +13,15 @@ from app.models.uploaded_document import UploadedDocument
 from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
+# 🟢 IMPORT THE INTEL LAYER EXTRACTION PIPELINES
+from app.services.extraction_service import (
+    get_intelligence_client,
+    run_phase_a_document_extraction,
+    run_phase_b_chunk_extraction,
+    calculate_document_authority,
+    calculate_compound_importance
+)
+
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
 if not CELERY_BROKER:
@@ -54,7 +63,6 @@ def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_siz
     chunks_with_meta = []
     
     stride = chunk_size - chunk_overlap
-    # Safeguard against short text blocks falling into an infinite execution trap
     if stride <= 0:
         stride = chunk_size
 
@@ -86,7 +94,6 @@ def process_document_embedding(document_id: str):
             print(f"❌ Ingestion aborted: Document string UUID '{document_id}' not found inside Postgres context row.")
             return False
             
-        # Resolve user explicit identifier metadata safely to provide "Uploaded By" telemetry logs
         uploader_email = "Unknown System Operator"
         if doc.uploaded_by:
             user_row = db.query(User).filter(User.id == doc.uploaded_by).first()
@@ -100,17 +107,15 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        # 3. Extract text content string based on target MIME Type extension variations, capturing local page coordinates
+        # 3. Extract text content string based on target MIME Type extension variations
         processed_chunks_pool = []
         
-        # SUPPORTED FILE TYPE 1: Plain Text (.txt) Ingestion Gateway Handler
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
             processed_chunks_pool.extend(
                 chunk_text_by_page(text=extracted_text, page_num=1, source_filename=doc.filename)
             )
             
-        # SUPPORTED FILE TYPE 2: Multi-page Portable Documents (.pdf) Ingestion Gateway Handler
         elif doc.mime_type == "application/pdf":
             pdf_stream = io.BytesIO(raw_file_bytes)
             reader = PdfReader(pdf_stream)
@@ -124,6 +129,107 @@ def process_document_embedding(document_id: str):
             
         if not processed_chunks_pool:
             raise ValueError("Zero human-readable text contents could be extracted from this asset resource.")
+
+        # =====================================================================
+        # 🎯 ADVANCED ARCHITECTURE UPGRADE: DUAL-PHASE EXTRACT & COMPILATION
+        # =====================================================================
+        try:
+            print(f"🧠 Commencing Enterprise Knowledge Extraction Pipeline for Document ID: {doc.id}")
+            
+            # Reconstruct an aggregate global window sample of the document text footprint
+            full_raw_text_recon = " ".join([c["text"] for c in processed_chunks_pool])
+            global_sample_window = full_raw_text_recon[:40000]
+            
+            # Initialize a single shared Gemini client context for optimal network efficiency
+            intelligence_client = get_intelligence_client()
+            
+            # --- PHASE A: DOCUMENT LEVEL EXTRACTION (RUNS ONCE PER DOCUMENT) ---
+            print(f"📡 Executing Phase A Global Metadata Extraction for: {doc.filename}")
+            phase_a_meta = run_phase_a_document_extraction(global_sample_window, intelligence_client)
+            
+            # Save Phase A Primitives straight to first-class PostgreSQL columns
+            doc.document_type = phase_a_meta.document_type
+            doc.document_role = phase_a_meta.document_role
+            doc.departments = phase_a_meta.departments
+            doc.topics = phase_a_meta.topics
+            doc.document_purpose = phase_a_meta.document_purpose
+            doc.planner_summary = phase_a_meta.planner_summary
+            doc.time_scope = phase_a_meta.time_scope
+            doc.document_status = phase_a_meta.document_status
+            doc.knowledge_schema_version = 1
+            
+            # --- PHASE B: CHUNK LEVEL GRAPH EXTRACTION & PYTHON AGGREGATION ---
+            print(f"🧬 Commencing Phase B Aggregation across {len(processed_chunks_pool)} localized segments...")
+            
+            aggregated_entities = []
+            aggregated_relationships = []
+            aggregated_facts = []
+            aggregated_keywords = []
+            aggregated_questions = []
+            
+            seen_entity_keys = set()
+            seen_relationship_keys = set()
+            
+            for chunk_data in processed_chunks_pool:
+                try:
+                    chunk_meta = run_phase_b_chunk_extraction(chunk_data["text"], intelligence_client)
+                    
+                    for entity in chunk_meta.entities:
+                        entity_key = f"{entity.name.lower().strip()}_{entity.entity_type.lower().strip()}"
+                        if entity_key not in seen_entity_keys:
+                            seen_entity_keys.add(entity_key)
+                            aggregated_entities.append({"name": entity.name, "entity_type": entity.entity_type})
+                            
+                    for rel in chunk_meta.relationships:
+                        rel_key = f"{rel.source.lower().strip()}_{rel.relation.lower().strip()}_{rel.target.lower().strip()}"
+                        if rel_key not in seen_relationship_keys:
+                            seen_relationship_keys.add(rel_key)
+                            aggregated_relationships.append({
+                                "source": rel.source,
+                                "relation": rel.relation,
+                                "target": rel.target,
+                                "confidence": rel.confidence
+                            })
+                            
+                    aggregated_facts.extend([f for f in chunk_meta.facts if f not in aggregated_facts])
+                    aggregated_keywords.extend([k for k in chunk_meta.retrieval_keywords if k not in aggregated_keywords])
+                    aggregated_questions.extend([q for q in chunk_meta.questions_this_document_can_answer if q not in aggregated_questions])
+                    
+                except Exception as chunk_err:
+                    print(f"⚠️ Warning: Granular segment skipped due to extraction variance: {str(chunk_err)}")
+                    continue
+
+            # --- CALCULATE SYSTEM BALANCED PERFORMANCE WEIGHTS ---
+            base_authority = calculate_document_authority(phase_a_meta.document_type)
+            compound_importance = calculate_compound_importance(
+                meta_a=phase_a_meta,
+                answers_count=len(aggregated_questions),
+                relationships_count=len(aggregated_relationships)
+            )
+            
+            doc.authority_score = base_authority
+            doc.importance_score = compound_importance
+            
+            # --- PACK DEEP INTELLIGENCE POOL INTO COMPACT KNOWLEDGE_METADATA COLUMN ---
+            doc.knowledge_metadata = {
+                "entities": aggregated_entities,
+                "relationships": aggregated_relationships,
+                "facts": aggregated_facts,
+                "retrieval_keywords": aggregated_keywords,
+                "questions_this_document_can_answer": aggregated_questions,
+                "metrics": [],
+                "confidence": {
+                    "classification_confidence": phase_a_meta.classification_confidence
+                }
+            }
+            
+            db.commit()
+            print(f"🟢 Knowledge Registry Pipeline Complete for '{doc.filename}'! Role: {doc.document_role} | Importance: {doc.importance_score}")
+            
+        except Exception as pipeline_err:
+            db.rollback()
+            print(f"❌ Critical architectural pipeline extraction rollback triggered: {str(pipeline_err)}")
+        # =====================================================================
 
         # 4. Initialize Cloud-Native Vector Engine Connection Dynamic Link
         chroma_client = get_chroma_client()
@@ -144,7 +250,7 @@ def process_document_embedding(document_id: str):
         ai_client = genai.Client(api_key=gemini_api_key)
         
         ids = []
-        embeddings = []  # 🎯 Explicit vector tracking store array
+        embeddings = []
         documents = []
         metadatas = []
         
@@ -163,7 +269,6 @@ def process_document_embedding(document_id: str):
             # -----------------------------------------------------------------
             raw_vector_array = None
             
-            # Try Option 1: Mainline target identifier string
             try:
                 vector_response = ai_client.models.embed_content(
                     model="gemini-embedding-2",
@@ -173,7 +278,6 @@ def process_document_embedding(document_id: str):
             except Exception as e1:
                 print(f"⚠️ 'gemini-embedding-2' route failed, falling back to legacy paths: {str(e1)}")
                 
-                # Try Option 2: Stable fallback version profile
                 try:
                     vector_response = ai_client.models.embed_content(
                         model="text-embedding-004",
@@ -183,7 +287,6 @@ def process_document_embedding(document_id: str):
                 except Exception as e2:
                     print(f"⚠️ 'text-embedding-004' route failed, attempting baseline recovery: {str(e2)}")
                     
-                    # Try Option 3: Absolute baseline fallback string
                     vector_response = ai_client.models.embed_content(
                         model="text-embedding-005",
                         contents=plain_text_content
@@ -203,7 +306,6 @@ def process_document_embedding(document_id: str):
             ids.append(chunk_id)
             documents.append(masked_payload_string) 
             
-            # Metadata indices remain plaintext for fast conditional scoping
             metadatas.append({
                 "workspace_id": str(doc.workspace_id),
                 "agent_id": str(doc.agent_id) if doc.agent_id else "None",
@@ -214,16 +316,14 @@ def process_document_embedding(document_id: str):
                 "uploaded_by": uploader_email                              
             })
             
-        # 6. Push custom embeddings along with masked documents over to ChromaDB
         if ids:
             collection.add(
                 ids=ids,
-                embeddings=embeddings,  # ✅ Chroma uses real text vectors for search
-                documents=documents,     # ✅ SECURE: The raw stored field strictly contains your encrypted string
+                embeddings=embeddings,
+                documents=documents,
                 metadatas=metadatas
             )
             
-        # 7. Mark processing execution transaction as ready inside PostgreSQL
         doc.status = "ready"
         db.commit()
         print(f"🚀 Success: Cloud server ingestion complete for '{doc.filename}'. Loaded {len(ids)} text embeddings with secure ciphertext records.")

@@ -21,6 +21,9 @@ from app.services.llm_service import generate_llm_response
 from app.services.tokenizer_service import calculate_usage
 from app.services.usage_service import create_usage_event
 from app.services.user_api_key_service import UserAPIKeyService
+from app.services.intent_service import analyze_user_query_intent
+from app.services.registry_filter_service import RegistryFilterService
+from app.services.planner_service import execute_retrieval_planning_triage
 
 import re
 import nltk
@@ -249,6 +252,20 @@ def process_step(self, step_id: str):
             else:
                 prompt = str(step.input_data)
 
+            # =====================================================================
+            # 🧠 COMPONENT 4: INTENT UNDERSTANDING TRIAGE LAYER
+            # =====================================================================
+            intent_strategy = None
+            if prompt and str(prompt).strip():
+                try:
+                    print(f"📡 Executing Intent Triage Layer for Step ID: {step.id}")
+                    # Capture the structured retrieval strategy blueprint from Gemini
+                    intent_strategy = analyze_user_query_intent(prompt)
+                    print(f"🎯 Intent Diagnosed: {intent_strategy.intent_type} | Topic: {intent_strategy.main_topic}")
+                except Exception as intent_err:
+                    print(f"⚠️ Non-fatal Intent Layer fallback executed: {str(intent_err)}")
+            # =====================================================================    
+
             tier_status_msg = "Notice: Running on System Shared Sandbox Tier."
 
             if not prompt or not str(prompt).strip():
@@ -299,217 +316,161 @@ def process_step(self, step_id: str):
                         f"in the workspace provider array list, and no system environment variables are active. Execution denied."
                     )
 
-                # ========================================================
-                # ADVANCED HIERARCHICAL CONTEXT RETRIEVAL (RAG LOOKUP)
-                # ========================================================
+                # =====================================================================
+                # 🗄️ COMPONENT 3: DETERMINISTIC REGISTRY FILTER SERVICE (SQL ONLY)
+                # =====================================================================
                 context_fragments = []
                 documents_influencing_list = []
                 
                 rag_telemetry_node = {
-                    "event_name": "KNOWLEDGE_RETRIEVAL",
-                    "collection_human_name": "rag_enterprise_vectors_v1",
-                    "similarity_threshold_used": 0.45,
-                    "query_embedding_time_ms": 0.0,
-                    "vector_search_time_ms": 0.0,
-                    "candidate_chunks_evaluated": 0,
-                    "chunks_returned_count": 0,
-                    "retrieval_similarity_hit_rate_percent": 0.0,
-                    "documents": []
+                    "event_name": "PLANNED_KNOWLEDGE_RETRIEVAL",
+                    "sql_initial_candidates": 0,
+                    "sql_pruned_candidates": 0,
+                    "planner_selected_count": 0,
+                    "blueprint_notes": ""
                 }
 
-                # 🟢 PERMANENT GUARD: Check relational PostgreSQL context before running heavy vector functions
-                workspace_document_count = (
-                    db.query(UploadedDocument)
-                    .filter(UploadedDocument.workspace_id == uuid.UUID(current_workspace_id))
-                    .count()
+                # Extract target departments array from intent triage layers
+                target_depts = intent_strategy.target_departments if intent_strategy else []
+
+                # Execute deterministic backend filtering out of AI space (thousands -> max 8)
+                lightweight_candidates = RegistryFilterService.extract_top_candidates(
+                    db=db,
+                    workspace_id=current_workspace_id,
+                    target_departments=target_depts
                 )
+                
+                rag_telemetry_node["sql_pruned_candidates"] = len(lightweight_candidates)
 
-                # 🎯 STRATEGIC OVERRIDE: Skip ChromaDB completely if the workspace has no files uploaded!
-                if workspace_document_count == 0:
-                    print(f"ℹ️ Workspace {current_workspace_id} has 0 documents. Skipping ChromaDB lookup lane entirely.")
-                    rag_telemetry_node["collection_human_name"] = "rag_enterprise_vectors_v1 (No Uploads)"
-                else:
+                # =====================================================================
+                # 🧠 COMPONENT 4: PLANNER AI (COGNITIVE STRATEGY ROUTING Layer)
+                # =====================================================================
+                retrieval_blueprint = None
+                if lightweight_candidates and intent_strategy:
+                    print(f"📡 Executing Planner AI Strategy over {len(lightweight_candidates)} lightweight metadata profiles...")
                     try:
-                        gemini_api_key = os.getenv("GEMINI_API_KEY")
-                        
-                        if not gemini_api_key and resolved_key_record:
-                            from app.core.crypto import decrypt_api_key
-                            gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+                        retrieval_blueprint = execute_retrieval_planning_triage(
+                            user_prompt=prompt,
+                            intent_strategy=intent_strategy,
+                            lightweight_candidates=lightweight_candidates
+                        )
+                        rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_documents)
+                        rag_telemetry_node["blueprint_notes"] = retrieval_blueprint.planner_notes
+                    except Exception as planner_err:
+                        print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
 
-                        if not gemini_api_key:
-                            raise ValueError("GEMINI_API_KEY is completely missing on worker container environment")
-                            
+                # =====================================================================
+                # 🎯 COMPONENT 5: TARGETED VECTOR SEARCH ENGINE OPERATIONS ONLY
+                # =====================================================================
+                if retrieval_blueprint and retrieval_blueprint.selected_documents:
+                    target_doc_ids = [str(d.document_id) for d in retrieval_blueprint.selected_documents]
+                    
+                    # Merge original prompt instruction with planner vector search queries
+                    combined_search_queries = [prompt] + retrieval_blueprint.vector_search_terms
+                    
+                    # INITIALIZE OFFICIAL GEMINI CLIENT FOR PLAIN TEXT EMBEDDINGS
+                    gemini_api_key = os.getenv("GEMINI_API_KEY")
+                    if not gemini_api_key and resolved_key_record:
+                        from app.core.crypto import decrypt_api_key
+                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
+
+                    if gemini_api_key:
                         ai_client = genai.Client(api_key=gemini_api_key)
-                        
-                        # 🚀 OPTIMIZATION 1: RUN DYNAMIC LOCAL ONTOLOGY QUERY EXPANSION ("Feels Alive")
-                        enriched_prompt = dynamically_expand_query_intent_local(prompt)
-                        
-                        # 🚀 OPTIMIZATION 2: VECTOR EMBEDDING MEMORY CACHE BLOCK (Saves 300ms network runtime latency)
-                        embed_start_time = time.time()
-                        cache_hash_key = f"{current_workspace_id}_{hash(enriched_prompt)}"
-                        
-                        if cache_hash_key in GLOBAL_VECTOR_CACHE:
-                            query_vector = GLOBAL_VECTOR_CACHE[cache_hash_key]
-                        else:
-                            try:
-                                query_vector_resp = ai_client.models.embed_content(
-                                    model="gemini-embedding-2",
-                                    contents=enriched_prompt
-                                )
-                                query_vector = query_vector_resp.embeddings[0].values
-                            except Exception:
-                                try:
-                                    query_vector_resp = ai_client.models.embed_content(
-                                        model="text-embedding-004",
-                                        contents=enriched_prompt
-                                    )
-                                    query_vector = query_vector_resp.embeddings[0].values
-                                except Exception:
-                                    query_vector_resp = ai_client.models.embed_content(
-                                        model="text-embedding-005",
-                                        contents=enriched_prompt
-                                    )
-                                    query_vector = query_vector_resp.embeddings[0].values
-                            # Seed cache
-                            GLOBAL_VECTOR_CACHE[cache_hash_key] = query_vector
-                                
-                        rag_telemetry_node["query_embedding_time_ms"] = round((time.time() - embed_start_time) * 1000, 2)
-                        
-                        # Connect to Chroma DB Collection Space
                         chroma_client = get_chroma_client()
                         collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
                         
                         if collection:
-                            search_start_time = time.time()
-                            # Query 6 entries to provide window overhead buffer context for re-ranking steps
-                            agent_results = collection.query(
-                                query_embeddings=[query_vector],
-                                n_results=6,
-                                where={
-                                    "$and": [
-                                        {"workspace_id": current_workspace_id},
-                                        {"agent_id": str(agent_id_raw)}
-                                    ]
-                                }
-                            )
-                            rag_telemetry_node["vector_search_time_ms"] = round((time.time() - search_start_time) * 1000, 2)
+                            accumulated_chunks = []
+                            seen_chunk_ids = set()
                             
-                            docs_list = agent_results.get("documents", [[]])[0] if agent_results.get("documents") else []
-                            metas_list = agent_results.get("metadatas", [[]])[0] if agent_results.get("metadatas") else []
-                            dists_list = agent_results.get("distances", [[]])[0] if agent_results.get("distances") else []
-                            
-                            rag_telemetry_node["candidate_chunks_evaluated"] = len(docs_list)
-                            successful_hits_count = 0
+                            # Query inside selected targets using planner configuration instructions
+                            for query_term in combined_search_queries[:3]:
+                                try:
+                                    vector_resp = ai_client.models.embed_content(
+                                        model="gemini-embedding-2",
+                                        contents=query_term
+                                    )
+                                    term_vector = vector_resp.embeddings[0].values
+                                except Exception:
+                                    try:
+                                        vector_resp = ai_client.models.embed_content(
+                                            model="text-embedding-004",
+                                            contents=query_term
+                                        )
+                                        term_vector = vector_resp.embeddings[0].values
+                                    except Exception:
+                                        vector_resp = ai_client.models.embed_content(
+                                            model="text-embedding-005",
+                                            contents=query_term
+                                        )
+                                        term_vector = vector_resp.embeddings[0].values
 
-                            if not docs_list:
-                                search_start_time = time.time()
-                                workspace_results = collection.query(
-                                    query_embeddings=[query_vector],
-                                    n_results=6,
+                                search_results = collection.query(
+                                    query_embeddings=[term_vector],
+                                    # Request slightly more for reranking pool overhead buffers
+                                    n_results=min(retrieval_blueprint.max_chunks + 4, 12),
                                     where={
                                         "$and": [
                                             {"workspace_id": current_workspace_id},
-                                            {"agent_id": "None"}
+                                            {"document_id": {"$in": target_doc_ids}}
                                         ]
                                     }
                                 )
-                                rag_telemetry_node["vector_search_time_ms"] += round((time.time() - search_start_time) * 1000, 2)
-                                docs_list = workspace_results.get("documents", [[]])[0] if workspace_results.get("documents") else []
-                                metas_list = workspace_results.get("metadatas", [[]])[0] if workspace_results.get("metadatas") else []
-                                dists_list = workspace_results.get("distances", [[]])[0] if workspace_results.get("distances") else []
-                                rag_telemetry_node["candidate_chunks_evaluated"] += len(docs_list)
-
-                            # 🚀 OPTIMIZATION 3: NATIVE EXPONENTIAL TIME-DECAY RE-RANKING CORE
-                            scored_candidates_list = []
-                            for idx, encrypted_chunk in enumerate(docs_list):
-                                meta_data = metas_list[idx] if idx < len(metas_list) else {}
-                                raw_distance = dists_list[idx] if idx < len(dists_list) else 1.0
                                 
-                                # Convert similarity distance to cosine scale mapping metric safely
-                                base_similarity = max(0.0, (1.0 - float(raw_distance)))
-
-                                # Pull document creation dates from unencrypted metadata layers
-                                doc_date_raw = meta_data.get("last_updated", "2026-01-01")
-                                try:
-                                    chunk_timestamp = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
-                                    age_hours = (datetime.utcnow() - chunk_timestamp).total_seconds() / 3600.0
-                                except Exception:
-                                    age_hours = 0.0
+                                docs_list = search_results.get("documents", [[]])[0] if search_results.get("documents") else []
+                                metas_list = search_results.get("metadatas", [[]])[0] if search_results.get("metadatas") else []
+                                dists_list = search_results.get("distances", [[]])[0] if search_results.get("distances") else []
                                 
-                                # Apply the exponential decay formula to penalize old logs context files
-                                lambda_decay = 0.005
-                                freshness_multiplier = float(2.71828 ** (-lambda_decay * age_hours))
-                                final_time_adjusted_score = base_similarity * freshness_multiplier
-
-                                scored_candidates_list.append({
-                                    "chunk": encrypted_chunk,
-                                    "meta": meta_data,
-                                    "base_similarity": base_similarity,
-                                    "adjusted_score": final_time_adjusted_score
-                                })
-
-                            # Sort dataset by our time-decay calculations top-to-bottom descending
-                            scored_candidates_list.sort(key=lambda x: x["adjusted_score"], reverse=True)
-
-                            # 🚀 OPTIMIZATION 4: DYNAMIC TEXT BUDGET TRUNCATION GUARDRAILS (Cost Efficiency Matrix)
-                            accumulated_chars = 0
-                            strict_character_ceiling = 4000
-                            
-                            for item in scored_candidates_list:
-                                normalized_similarity = round(item["base_similarity"] * 100, 2)
-                                passes_cutoff = normalized_similarity >= (rag_telemetry_node["similarity_threshold_used"] * 100)
-                                
-                                if not passes_cutoff:
-                                    continue
-
-                                # Drop low-priority chunks if the text budget ceiling has been met
-                                if accumulated_chars >= strict_character_ceiling:
-                                    continue
+                                for idx, enc_chunk in enumerate(docs_list):
+                                    meta_data = metas_list[idx] if idx < len(metas_list) else {}
+                                    raw_dist = dists_list[idx] if idx < len(dists_list) else 1.0
+                                    chunk_uid = f"{meta_data.get('document_id')}_idx_{idx}"
                                     
-                                plain_chunk = decrypt_text_string(item["chunk"], uuid.UUID(current_workspace_id))
-                                if not plain_chunk:
-                                    continue
-                                    
-                                context_fragments.append(plain_chunk)
-                                accumulated_chars += len(plain_chunk)
-                                successful_hits_count += 1
-                                
-                                if item["meta"].get("source_file") and item["meta"]["source_file"] not in documents_influencing_list:
-                                    documents_influencing_list.append(str(item["meta"]["source_file"]))
+                                    if chunk_uid not in seen_chunk_ids:
+                                        seen_chunk_ids.add(chunk_uid)
+                                        base_sim = max(0.0, (1.0 - float(raw_dist)))
+                                        
+                                        # =====================================================================
+                                        # ⏱️ COMPONENT 6: FRESHNESS EXPONENTIAL DECAY RERANKING LOOP
+                                        # =====================================================================
+                                        doc_date_raw = meta_data.get("last_updated", "2026-01-01")
+                                        try:
+                                            chunk_ts = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
+                                            age_hours = (datetime.utcnow() - chunk_ts).total_seconds() / 3600.0
+                                        except Exception:
+                                            age_hours = 0.0
+                                            
+                                        lambda_decay = 0.005
+                                        freshness_mult = float(2.71828 ** (-lambda_decay * age_hours))
+                                        final_score = base_sim * freshness_mult
+                                        
+                                        accumulated_chunks.append({
+                                            "enc_text": enc_chunk,
+                                            "filename": meta_data.get("source_file", "Unknown"),
+                                            "score": final_score
+                                        })
 
-                                rag_telemetry_node["documents"].append({
-                                    "chunk_rank": len(context_fragments),
-                                    "source_file": item["meta"].get("source_file", "Unknown Source Document"),
-                                    "page_number": item["meta"].get("page_number", 1),
-                                    "last_updated": item["meta"].get("last_updated", "2026-06-10"),
-                                    "uploaded_by_user": item["meta"].get("uploaded_by", "System Operator"),
-                                    "similarity_confidence_percentage": normalized_similarity,
-                                    "freshness_decay_adjusted_score": round(item["adjusted_score"], 4),
-                                    "context_contribution_indicator": True,
-                                    "content_snippet": plain_chunk[:250] + "..." if len(plain_chunk) > 250 else plain_chunk
-                                })
-
-                            rag_telemetry_node["chunks_returned_count"] = len(rag_telemetry_node["documents"])
+                            # Sort aggregate chunks based on decay rank criteria fields top down
+                            accumulated_chunks.sort(key=lambda x: x["score"], reverse=True)
                             
-                            if rag_telemetry_node["chunks_returned_count"] > 0:
-                                rag_telemetry_node["retrieval_similarity_hit_rate_percent"] = round(
-                                    (successful_hits_count / rag_telemetry_node["chunks_returned_count"]) * 100, 2
-                                )
+                            # Truncate text context footprint safely to match blueprint criteria caps
+                            for item in accumulated_chunks[:retrieval_blueprint.max_chunks]:
+                                plain_text = decrypt_text_string(item["enc_text"], uuid.UUID(current_workspace_id))
+                                if plain_text:
+                                    context_fragments.append(plain_text)
+                                    if item["filename"] not in documents_influencing_list:
+                                        documents_influencing_list.append(item["filename"])
 
-                    except Exception as chroma_err:
-                        print(f"⚠️ Vector search exception caught in worker: {str(chroma_err)}")
-                        rag_telemetry_node["error_log_report"] = str(chroma_err)
-
-                # Inject decoded context pieces natively into the prompt block
+                # Inject decoded evidence context pieces cleanly into the final prompt payload blocks
                 final_prompt_payload = prompt
                 if context_fragments:
                     combined_context = "\n\n".join(context_fragments)
                     final_prompt_payload = (
-                        f"CRITICAL CONTEXT DISCOVERED IN SECURITY CORE:\n"
+                        f"CRITICAL EVIDENCE REGISTER SELECTIONS:\n"
                         f"==================================================\n"
                         f"{combined_context}\n"
                         f"==================================================\n\n"
-                        f"USER INSTRUCTION TASK: {prompt}"
+                        f"USER QUESTION: {prompt}"
                     )
 
                 output, tier_status_msg = generate_llm_response(
