@@ -16,7 +16,8 @@ class RegistryFilterService:
     ) -> List[Dict[str, Any]]:
         """
         Registry Filter Service SQL Core Optimization
-        Filters documents down to a context-targeted candidate bucket (max 8).
+        Filters documents down to a targeted candidate bucket.
+        Uses soft match parameters to prevent string alignment starvation.
         """
         # Base Filter: Workspace isolation boundary, ready status, and excluding archived files
         query = db.query(UploadedDocument).filter(
@@ -33,14 +34,15 @@ class RegistryFilterService:
             ]
             query = query.filter(or_(*department_filters))
             
-        # Intent-Driven Multi-Attribute Pre-Filtering Modifications
-        if intent_time_scope and intent_time_scope.strip().lower() != "universal":
+        # Intent-Driven Soft Pre-Filtering Modifications
+        # Skips generic fallbacks like 'unspecified' or 'universal' to prevent empty row evaluations
+        if intent_time_scope and intent_time_scope.strip().lower() not in ["universal", "unspecified", "historical"]:
             query = query.filter(UploadedDocument.time_scope.ilike(f"%{intent_time_scope.strip()}%"))
             
-        if intent_document_type and intent_document_type.strip():
+        if intent_document_type and intent_document_type.strip() and intent_document_type.strip().lower() not in ["business performance", "general"]:
             query = query.filter(UploadedDocument.document_type.ilike(f"%{intent_document_type.strip()}%"))
             
-        if intent_document_role and intent_document_role.strip():
+        if intent_document_role and intent_document_role.strip() and intent_document_role.strip().lower() not in ["evidence", "supporting context"]:
             query = query.filter(UploadedDocument.document_role.ilike(f"%{intent_document_role.strip()}%"))
 
         # Four-Tier Progressive Ordering Matrix execution
