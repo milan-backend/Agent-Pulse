@@ -27,19 +27,25 @@ class DocumentLevelMetadataSchema(BaseModel):
 # 📊 PHASE B SCHEMA: CHUNK LEVEL KNOWLEDGE GRAPH PRIMITIVES
 # =====================================================================
 
-class TypedEntity(BaseModel):
-    name: str = Field(description="The canonical name of the core concept, metric, system, or organization, e.g., 'Revenue'")
-    entity_type: str = Field(description="The domain classification of this entity, e.g., 'Financial Metric', 'Software Component'")
-
-class KnowledgeTriplet(BaseModel):
-    source: str = Field(description="The originating subject entity name, e.g., 'Revenue'")
-    relation: str = Field(description="The explicit semantic link categorization verb. Prefer: ['causes', 'supports', 'depends_on', 'part_of', 'owned_by', 'measures', 'contains', 'supersedes']. Can use domain specific variations if necessary.")
-    target: str = Field(description="The recipient object entity name, e.g., 'Expenses'")
-    confidence: str = Field(description="Confidence indicator for this individual connection triplet. MUST choose strictly from: ['High', 'Medium', 'Low']")
-
 class ChunkLevelMetadataSchema(BaseModel):
-    entities: List[TypedEntity] = Field(description="Structured concepts, metrics, systems, or tools identified in this specific text chunk")
-    relationships: List[KnowledgeTriplet] = Field(description="Directional structural logic connections linking the extracted entities with individual confidence metrics")
+    entities: List[str] = Field(
+    description=(
+        "List of entities found in this chunk. "
+        "Format each entry exactly as "
+        "'Entity Name | Entity Type'. "
+        "Example: 'Revenue | Financial Metric'."
+    )
+)
+
+    relationships: List[str] = Field(
+    description=(
+        "List of semantic relationships found in this chunk. "
+        "Format each entry exactly as "
+        "'Source | Relation | Target | Confidence'. "
+        "Example: "
+        "'Revenue | supports | Profit | High'."
+    )
+)
     facts: List[str] = Field(description="Atomic, verifiable factual declarations or historical timeline shifts made in this chunk text")
     retrieval_keywords: List[str] = Field(description="Conceptual synonyms or search queries that bridge user natural language syntax to this specific text")
     questions_this_document_can_answer: List[str] = Field(description="List of explicit, practical operational questions an operator might ask that this specific text segment has the exact data to answer.")
