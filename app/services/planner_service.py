@@ -115,7 +115,7 @@ def execute_retrieval_planning_triage(
     print("============================================")
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.0-flash",  # 🎯 Standard SDK production model
         contents=prompt_payload,
         config={
             "system_instruction": system_instruction,
@@ -124,6 +124,7 @@ def execute_retrieval_planning_triage(
             "temperature": 0.0
         }
     )
+
     
     print("========== PLANNER RAW LLM RESPONSE ==========")
     print(response.text)
