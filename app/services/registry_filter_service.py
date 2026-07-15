@@ -17,8 +17,16 @@ class RegistryFilterService:
         """
         Registry Filter Service SQL Core Optimization
         Filters documents down to a targeted candidate bucket.
-        Uses soft match parameters to prevent string alignment starvation.
         """
+        # 🔍 DUMPING INCOMING VALUES FOR LIVE LOG DEBUGGING
+        print("==================================================")
+        print(f"DEBUG - current_workspace_id: {workspace_id}")
+        print(f"DEBUG - target_departments  : {target_departments}")
+        print(f"DEBUG - intent_time_scope   : {intent_time_scope}")
+        print(f"DEBUG - intent_document_type: {intent_document_type}")
+        print(f"DEBUG - intent_document_role: {intent_document_role}")
+        print("==================================================")
+
         # Base Filter: Workspace isolation boundary, ready status, and excluding archived files
         query = db.query(UploadedDocument).filter(
             UploadedDocument.workspace_id == uuid.UUID(workspace_id),
@@ -35,7 +43,6 @@ class RegistryFilterService:
             query = query.filter(or_(*department_filters))
             
         # Intent-Driven Soft Pre-Filtering Modifications
-        # Skips generic fallbacks like 'unspecified' or 'universal' to prevent empty row evaluations
         if intent_time_scope and intent_time_scope.strip().lower() not in ["universal", "unspecified", "historical"]:
             query = query.filter(UploadedDocument.time_scope.ilike(f"%{intent_time_scope.strip()}%"))
             
@@ -56,6 +63,10 @@ class RegistryFilterService:
             .limit(8)
             .all()
         )
+        
+        # 🔍 CHECKING RESULTS RECOVERED FROM DISK AFTER FILTERS
+        print(f"DEBUG - SQL ROWS RETURNED FROM DATABASE: {len(candidate_rows)}")
+        print("==================================================")
         
         # Serialize into clean dictionary nodes for the Planner AI
         lightweight_candidates = []
