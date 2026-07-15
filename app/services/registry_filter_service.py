@@ -16,9 +16,9 @@ class RegistryFilterService:
     ) -> List[Dict[str, Any]]:
         """
         Registry Filter Service SQL Core Optimization
-        Filters documents down to a targeted candidate bucket.
+        Filters documents down to a targeted candidate bucket using a reliable base query.
         """
-        # 🔍 DUMPING INCOMING VALUES FOR LIVE LOG DEBUGGING
+        # 🔍 LIVE LOG DEBUGGING
         print("==================================================")
         print(f"DEBUG - current_workspace_id: {workspace_id}")
         print(f"DEBUG - target_departments  : {target_departments}")
@@ -41,16 +41,6 @@ class RegistryFilterService:
                 for dept in target_departments
             ]
             query = query.filter(or_(*department_filters))
-            
-        # Intent-Driven Soft Pre-Filtering Modifications
-        if intent_time_scope and intent_time_scope.strip().lower() not in ["universal", "unspecified", "historical"]:
-            query = query.filter(UploadedDocument.time_scope.ilike(f"%{intent_time_scope.strip()}%"))
-            
-        if intent_document_type and intent_document_type.strip() and intent_document_type.strip().lower() not in ["business performance", "general"]:
-            query = query.filter(UploadedDocument.document_type.ilike(f"%{intent_document_type.strip()}%"))
-            
-        if intent_document_role and intent_document_role.strip() and intent_document_role.strip().lower() not in ["evidence", "supporting context"]:
-            query = query.filter(UploadedDocument.document_role.ilike(f"%{intent_document_role.strip()}%"))
 
         # Four-Tier Progressive Ordering Matrix execution
         candidate_rows = (
@@ -64,6 +54,16 @@ class RegistryFilterService:
             .all()
         )
         
+        # 🔍 Small Fix 2: Live asset breakdown telemetry logging loop
+        print("--- CANDIDATE ROW DETAILS ---")
+        for doc in candidate_rows:
+            print(
+                f"{doc.filename} | "
+                f"{doc.document_type} | "
+                f"{doc.document_role}"
+            )
+        print("-----------------------------")
+        
         # 🔍 CHECKING RESULTS RECOVERED FROM DISK AFTER FILTERS
         print(f"DEBUG - SQL ROWS RETURNED FROM DATABASE: {len(candidate_rows)}")
         print("==================================================")
@@ -72,7 +72,9 @@ class RegistryFilterService:
         lightweight_candidates = []
         for doc in candidate_rows:
             meta_blob = doc.knowledge_metadata or {}
-            extracted_keywords = meta_blob.get("global_retrieval_keywords", [])
+            
+            # 🎯 Small Fix 1: Fixed key string to map correctly to the data structure contract
+            extracted_keywords = meta_blob.get("retrieval_keywords", [])
             questions = meta_blob.get("questions_this_document_can_answer", [])
             
             lightweight_candidates.append({
