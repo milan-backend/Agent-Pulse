@@ -243,7 +243,7 @@ def process_document_embedding(document_id: str):
         metadatas = []
         
         current_timestamp_iso = datetime.utcnow().strftime("%Y-%m-%d")
-
+        
         # 5. Process each plain text chunk[cite: 5]
         for index, chunk_payload in enumerate(processed_chunks_pool):
             plain_text_content = chunk_payload["text"]

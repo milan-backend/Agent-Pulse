@@ -357,6 +357,12 @@ def process_step(self, step_id: str):
                             intent_strategy=intent_strategy,
                             lightweight_candidates=lightweight_candidates
                         )
+
+                        print("========== BLUEPRINT RECEIVED ==========") 
+                        print(retrieval_blueprint.model_dump())
+                        print("========================================")
+
+                        
                         rag_telemetry_node["planner_selected_count"] = len(retrieval_blueprint.selected_documents)
                         rag_telemetry_node["blueprint_notes"] = retrieval_blueprint.planner_notes
                     except Exception as planner_err:

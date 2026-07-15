@@ -124,6 +124,10 @@ def execute_retrieval_planning_triage(
 
     try:
         parsed_blueprint = RetrievalBlueprintSchema.model_validate_json(response.text)
+
+        print("========== PARSED BLUEPRINT ==========")
+        print(parsed_blueprint.model_dump())
+        print("======================================")
         
         # 🎯 FIX FOR PROBLEM 5: Grounded Search Terms Extraction Integration Fallback
         # If the LLM generates weak generic keywords but selected highly focused documents, 
