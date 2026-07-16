@@ -159,7 +159,7 @@ def run_phase_b_chunk_extraction(chunk_text: str, client: genai.Client) -> Chunk
     )
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.1-flash-lite",
         contents=f"Execute structural indexing and factual extraction across the following targeted text chunk:\n\n{chunk_text}",
         config={
             "system_instruction": system_instruction,
