@@ -50,7 +50,7 @@ class UploadedDocument(Base):
     # Temporal & Governance Primitives
     time_scope = Column(String(100), nullable=True, index=True)         # e.g., 'Q2 2026', 'Annual'
     document_status = Column(String(50), nullable=True, index=True)     # e.g., 'Approved', 'Draft'
-    version = Column(Integer, default=1, nullable=False)                # Incremental variation step tracking
+    version = Column(String(50), default="1.0.0", nullable=False)       # Incremental variation step tracking
     approved = Column(Boolean, default=False, index=True, nullable=False)# Strict authorization gateway check flag
     
     # 🚀 FUTURE-PROOFING: Tracking schema revisions for easy downstream re-indexing campaigns
