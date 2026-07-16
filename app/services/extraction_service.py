@@ -129,7 +129,7 @@ def run_phase_a_document_extraction(global_document_sample: str, client: genai.C
     )
     
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
+        model="gemini-3.1-flash-lite",
         contents=f"Analyze the following document context sample and extract global document metadata columns:\n\n{global_document_sample}",
         config={
             "system_instruction": system_instruction,
