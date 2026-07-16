@@ -153,3 +153,4 @@ migrate_registry.py
 check_registry_data.py
 question.py
 check_model.py
+check_processing_error.py

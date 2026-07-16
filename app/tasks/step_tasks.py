@@ -472,6 +472,57 @@ def process_step(self, step_id: str):
                                     context_fragments.append(plain_text)
                                     if item["filename"] not in documents_influencing_list:
                                         documents_influencing_list.append(item["filename"])
+                
+                # =====================================================================
+                # 🎯 TARGETED FIX: CHUNK SHIELD SHUTDOWN GUARDRAIL
+                # =====================================================================
+                # If the pipeline intended to search but recovered 0 valid grounded context pieces,
+                # exit immediately without consuming tokens or allowing LLM generation guessing!
+                if not context_fragments:
+                    early_clear_message = (
+                        "I couldn't find enough evidence in your uploaded knowledge."
+                    )
+                    
+                    # 📊 Compile clean telemetry node indicating exactly why it short-circuited
+                    llm_telemetry_node = {
+                        "event_name": "LLM Model Response Generation",
+                        "status": "SHORT_CIRCUIT_NO_EVIDENCE",
+                        "meta": {
+                            "model_utilized": active_model_target if active_model_target else "gemini-2.5-flash-lite",
+                            "prompt_tokens_consumed": 0,
+                            "completion_tokens_consumed": 0,
+                            "total_tokens_consumed": 0,
+                            "documents_influencing_final_answer": []
+                        }
+                    }
+                    
+                    result = {
+                        "success": True, 
+                        "result": early_clear_message,
+                        "tier_notification": tier_status_msg,
+                        "last_executed_step": "no_evidence_short_circuit",
+                        "query": prompt,
+                        "rag_telemetry": rag_telemetry_node,
+                        "llm_telemetry": llm_telemetry_node,
+                        "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
+                    }
+                    
+                    # Update standard step tracking variables
+                    step.completed_at = datetime.utcnow()
+                    start_anchor = step.started_at if step.started_at else datetime.utcnow()
+                    step.execution_time_ms = int((step.completed_at - start_anchor).total_seconds() * 1000)
+                    step.output_data = result
+                    step.status = "completed"
+                    
+                    db.commit()
+                    db.close()
+                    
+                    return {
+                        "status": "completed",
+                        "step_id": str(step.id),
+                        "output": result
+                    }
+                # =====================================================================                        
 
                 # Inject decoded evidence context pieces cleanly into the final prompt payload blocks
                 final_prompt_payload = prompt
