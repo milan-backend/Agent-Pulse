@@ -43,7 +43,7 @@ def get_chroma_client():
     )
 
 
-def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_size: int = 600, chunk_overlap: int = 120) -> list[dict]:
+def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_size: int = 250, chunk_overlap: int = 40) -> list[dict]:
     """Splits plain text strings extracted from a specific page partition into overlapping paragraph blocks."""
     if not text or not str(text).strip():
         return []

@@ -394,10 +394,16 @@ def process_step(self, step_id: str):
                         
                         if collection:
                             accumulated_chunks = []
-                            seen_chunk_ids = set()
+                            # 🎯 PROBLEM 3 FIX: Shift from superficial uid tracking to precise content hash deduplication
+                            import hashlib
+                            seen_chunk_hashes = set()
                             
+                            # 🎯 PROBLEM 4 & 5 FIX: Remove raw prompt from vector search. Slice planner search terms to a max of 5.
+                            raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
+                            combined_search_queries = raw_planner_terms[:5]
+
                             # Query inside selected targets using planner configuration instructions
-                            for query_term in combined_search_queries[:3]:
+                            for query_term in combined_search_queries:
                                 try:
                                     vector_resp = ai_client.models.embed_content(
                                         model="gemini-embedding-2",
@@ -418,9 +424,10 @@ def process_step(self, step_id: str):
                                         )
                                         term_vector = vector_resp.embeddings[0].values
 
+                                # Fetch slightly more candidates per query to allow strict similarity filtering
                                 search_results = collection.query(
                                     query_embeddings=[term_vector],
-                                    n_results=min(retrieval_blueprint.max_chunks + 4, 12),
+                                    n_results=10,
                                     where={
                                         "$and": [
                                             {"workspace_id": current_workspace_id},
@@ -436,40 +443,79 @@ def process_step(self, step_id: str):
                                 for idx, enc_chunk in enumerate(docs_list):
                                     meta_data = metas_list[idx] if idx < len(metas_list) else {}
                                     raw_dist = dists_list[idx] if idx < len(dists_list) else 1.0
-                                    chunk_uid = f"{meta_data.get('document_id')}_idx_{idx}"
                                     
-                                    if chunk_uid not in seen_chunk_ids:
-                                        seen_chunk_ids.add(chunk_uid)
-                                        base_sim = max(0.0, (1.0 - float(raw_dist)))
+                                    # 🎯 PROBLEM 3 FIX: Content-based MD5 fingerprinting removes duplicate strings across disparate search terms
+                                    chunk_hash = hashlib.md5(enc_chunk.encode('utf-8')).hexdigest()
+                                    if chunk_hash in seen_chunk_hashes:
+                                        continue
+                                    
+                                    base_sim = max(0.0, (1.0 - float(raw_dist)))
+                                    
+                                    # 🎯 PROBLEM 6 FIX: Enforce a strict similarity cutoff. Mismatches below 0.72 similarity are filtered out.
+                                    if base_sim < 0.72:
+                                        continue
                                         
-                                        # =====================================================================
-                                        # ⏱️ COMPONENT 6: FRESHNESS EXPONENTIAL DECAY RERANKING LOOP
-                                        # =====================================================================
-                                        doc_date_raw = meta_data.get("last_updated", "2026-01-01")
-                                        try:
-                                            chunk_ts = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
-                                            age_hours = (datetime.utcnow() - chunk_ts).total_seconds() / 3600.0
-                                        except Exception:
-                                            age_hours = 0.0
-                                            
-                                        lambda_decay = 0.005
-                                        freshness_mult = float(2.71828 ** (-lambda_decay * age_hours))
-                                        final_score = base_sim * freshness_mult
+                                    seen_chunk_hashes.add(chunk_hash)
+                                    
+                                    # ⏱️ FRESHNESS EXPONENTIAL DECAY MULTIPLIER
+                                    doc_date_raw = meta_data.get("last_updated", "2026-01-01")
+                                    try:
+                                        chunk_ts = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
+                                        age_hours = (datetime.utcnow() - chunk_ts).total_seconds() / 3600.0
+                                    except Exception:
+                                        age_hours = 0.0
                                         
-                                        accumulated_chunks.append({
-                                            "enc_text": enc_chunk,
-                                            "filename": meta_data.get("source_file", "Unknown"),
-                                            "score": final_score
-                                        })
+                                    lambda_decay = 0.005
+                                    freshness_mult = float(2.71828 ** (-lambda_decay * age_hours))
+                                    final_score = base_sim * freshness_mult
+                                    
+                                    # 🎯 PROBLEM 8 FIX: Fetch registry metadata weight context directly from DB to support true multi-attribute re-ranking
+                                    doc_id_str = meta_data.get("document_id")
+                                    doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id_str).first()
+                                    
+                                    authority_boost = float(doc_record.authority_score or 50) / 1000.0 if doc_record else 0.0
+                                    importance_boost = float(doc_record.importance_score or 50) / 1000.0 if doc_record else 0.0
+                                    
+                                    # Blend structural criteria metrics together for the ultimate compound sorting score
+                                    compound_rerank_score = final_score + authority_boost + importance_boost
+                                    
+                                    accumulated_chunks.append({
+                                        "enc_text": enc_chunk,
+                                        "filename": meta_data.get("source_file", "Unknown"),
+                                        "score": compound_rerank_score
+                                    })
 
-                            # Sort aggregate chunks based on decay rank criteria fields top down
+                            # 🎯 PROBLEM 8 FIX: Execute sorting using our comprehensive compound multi-attribute score
                             accumulated_chunks.sort(key=lambda x: x["score"], reverse=True)
                             
-                            # Truncate text context footprint safely to match blueprint criteria caps
-                            for item in accumulated_chunks[:retrieval_blueprint.max_chunks]:
+                            # 🎯 PROBLEM 1 & 11 FIX: Dynamic Max Chunks caps based on intent type
+                            intent_type_clean = intent_strategy.intent_type.lower() if intent_strategy else "general"
+                            if "summary" in intent_type_clean:
+                                max_allowed_chunks = 8
+                            elif "report" in intent_type_clean or "analysis" in intent_type_clean:
+                                max_allowed_chunks = 10
+                            elif "definition" in intent_type_clean or "simple" in intent_type_clean:
+                                max_allowed_chunks = 3
+                            else:
+                                max_allowed_chunks = 6 # Safe workhorse standard limit for standard Q&A
+                            
+                            # 🎯 PROBLEM 7 FIX: Implement a strict token budget tracker before compiling final LLM context payload
+                            current_token_count = 0
+                            MAX_CONTEXT_TOKENS = 3200
+                            
+                            for item in accumulated_chunks[:max_allowed_chunks]:
                                 plain_text = decrypt_text_string(item["enc_text"], uuid.UUID(current_workspace_id))
                                 if plain_text:
+                                    # Basic fast word-to-token approximation (1 word ≈ 1.3 tokens)
+                                    estimated_chunk_tokens = int(len(plain_text.split()) * 1.3)
+                                    
+                                    if current_token_count + estimated_chunk_tokens > MAX_CONTEXT_TOKENS:
+                                        print(f"🛑 Token budget reached ({current_token_count} tokens). Truncating further context injection.")
+                                        break
+                                        
+                                    current_token_count += estimated_chunk_tokens
                                     context_fragments.append(plain_text)
+                                    
                                     if item["filename"] not in documents_influencing_list:
                                         documents_influencing_list.append(item["filename"])
                 
