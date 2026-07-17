@@ -24,6 +24,8 @@ from app.services.user_api_key_service import UserAPIKeyService
 from app.services.intent_service import analyze_user_query_intent
 from app.services.registry_filter_service import RegistryFilterService
 from app.services.planner_service import execute_retrieval_planning_triage
+from app.services.retrieval_service import RetrievalService
+from app.services.context_optimizer import ContextOptimizer
 
 import re
 import nltk
@@ -372,203 +374,60 @@ def process_step(self, step_id: str):
                     except Exception as planner_err:
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
 
-                # =====================================================================
-                # 🎯 COMPONENT 5: TARGETED VECTOR SEARCH ENGINE OPERATIONS ONLY
+               # =====================================================================
+                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (FULL SCALE)
                 # =====================================================================
                 if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
+                    raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
+                    combined_search_queries = raw_planner_terms[:5]
+
+                    # 1. Initialize the data-gathering retrieval layer[cite: 4]
+                    retrieval_service = RetrievalService()
                     
-                    # Merge original prompt instruction with planner vector search queries
-                    combined_search_queries = [prompt] + retrieval_blueprint.vector_search_terms
+                    # Construct search filters mapping the planner constraints
+                    search_filters = {
+                        "workspace_id": current_workspace_id,
+                        "document_ids": target_doc_ids,
+                        "search_queries": combined_search_queries
+                    }
+
+                    print(f"📡 Invoking Hybrid Section Retrieval System for Document IDs: {target_doc_ids}")
                     
-                    # INITIALIZE OFFICIAL GEMINI CLIENT FOR PLAIN TEXT EMBEDDINGS
-                    gemini_api_key = os.getenv("GEMINI_API_KEY")
-                    if not gemini_api_key and resolved_key_record:
-                        from app.core.crypto import decrypt_api_key
-                        gemini_api_key = decrypt_api_key(resolved_key_record.encrypted_api_key)
-
-                    if gemini_api_key:
-                        ai_client = genai.Client(api_key=gemini_api_key)
-                        chroma_client = get_chroma_client()
-                        collection = chroma_client.get_collection(name="rag_enterprise_vectors_v1")
-                        
-                        if collection:
-                            accumulated_chunks = []
-                            # 🎯 PROBLEM 3 FIX: Shift from superficial uid tracking to precise content hash deduplication
-                            import hashlib
-                            seen_chunk_hashes = set()
-                            
-                            # 🎯 PROBLEM 4 & 5 FIX: Remove raw prompt from vector search. Slice planner search terms to a max of 5.
-                            raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
-                            combined_search_queries = raw_planner_terms[:5]
-
-                            # Query inside selected targets using planner configuration instructions
-                            for query_term in combined_search_queries:
-                                try:
-                                    vector_resp = ai_client.models.embed_content(
-                                        model="gemini-embedding-2",
-                                        contents=query_term
-                                    )
-                                    term_vector = vector_resp.embeddings[0].values
-                                except Exception:
-                                    try:
-                                        vector_resp = ai_client.models.embed_content(
-                                            model="text-embedding-004",
-                                            contents=query_term
-                                        )
-                                        term_vector = vector_resp.embeddings[0].values
-                                    except Exception:
-                                        vector_resp = ai_client.models.embed_content(
-                                            model="text-embedding-005",
-                                            contents=query_term
-                                        )
-                                        term_vector = vector_resp.embeddings[0].values
-
-                                # Fetch slightly more candidates per query to allow strict similarity filtering
-                                search_results = collection.query(
-                                    query_embeddings=[term_vector],
-                                    n_results=10,
-                                    where={
-                                        "$and": [
-                                            {"workspace_id": current_workspace_id},
-                                            {"document_id": {"$in": target_doc_ids}}
-                                        ]
-                                    }
-                                )
-                                
-                                docs_list = search_results.get("documents", [[]])[0] if search_results.get("documents") else []
-                                metas_list = search_results.get("metadatas", [[]])[0] if search_results.get("metadatas") else []
-                                dists_list = search_results.get("distances", [[]])[0] if search_results.get("distances") else []
-                                
-                                for idx, enc_chunk in enumerate(docs_list):
-                                    meta_data = metas_list[idx] if idx < len(metas_list) else {}
-                                    raw_dist = dists_list[idx] if idx < len(dists_list) else 1.0
-                                    
-                                    # 🎯 PROBLEM 3 FIX: Content-based MD5 fingerprinting removes duplicate strings across disparate search terms
-                                    chunk_hash = hashlib.md5(enc_chunk.encode('utf-8')).hexdigest()
-                                    if chunk_hash in seen_chunk_hashes:
-                                        continue
-                                    
-                                    base_sim = max(0.0, (1.0 - float(raw_dist)))
-                                    
-                                    # 🎯 PROBLEM 6 FIX: Enforce a strict similarity cutoff. Mismatches below 0.72 similarity are filtered out.
-                                    if base_sim < 0.72:
-                                        continue
-                                        
-                                    seen_chunk_hashes.add(chunk_hash)
-                                    
-                                    # ⏱️ FRESHNESS EXPONENTIAL DECAY MULTIPLIER
-                                    doc_date_raw = meta_data.get("last_updated", "2026-01-01")
-                                    try:
-                                        chunk_ts = datetime.strptime(doc_date_raw[:10], "%Y-%m-%d")
-                                        age_hours = (datetime.utcnow() - chunk_ts).total_seconds() / 3600.0
-                                    except Exception:
-                                        age_hours = 0.0
-                                        
-                                    lambda_decay = 0.005
-                                    freshness_mult = float(2.71828 ** (-lambda_decay * age_hours))
-                                    final_score = base_sim * freshness_mult
-                                    
-                                    # 🎯 PROBLEM 8 FIX: Fetch registry metadata weight context directly from DB to support true multi-attribute re-ranking
-                                    doc_id_str = meta_data.get("document_id")
-                                    doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id_str).first()
-                                    
-                                    authority_boost = float(doc_record.authority_score or 50) / 1000.0 if doc_record else 0.0
-                                    importance_boost = float(doc_record.importance_score or 50) / 1000.0 if doc_record else 0.0
-                                    
-                                    # Blend structural criteria metrics together for the ultimate compound sorting score
-                                    compound_rerank_score = final_score + authority_boost + importance_boost
-                                    
-                                    accumulated_chunks.append({
-                                        "enc_text": enc_chunk,
-                                        "filename": meta_data.get("source_file", "Unknown"),
-                                        "score": compound_rerank_score
-                                    })
-
-                            # 🎯 PROBLEM 8 FIX: Execute sorting using our comprehensive compound multi-attribute score
-                            accumulated_chunks.sort(key=lambda x: x["score"], reverse=True)
-                            
-                            # 🎯 PROBLEM 1 & 11 FIX: Dynamic Max Chunks caps based on intent type
-                            intent_type_clean = intent_strategy.intent_type.lower() if intent_strategy else "general"
-                            if "summary" in intent_type_clean:
-                                max_allowed_chunks = 8
-                            elif "report" in intent_type_clean or "analysis" in intent_type_clean:
-                                max_allowed_chunks = 10
-                            elif "definition" in intent_type_clean or "simple" in intent_type_clean:
-                                max_allowed_chunks = 3
-                            else:
-                                max_allowed_chunks = 6 # Safe workhorse standard limit for standard Q&A
-                            
-                            # 🎯 PROBLEM 7 FIX: Implement a strict token budget tracker before compiling final LLM context payload
-                            current_token_count = 0
-                            MAX_CONTEXT_TOKENS = 3200
-                            
-                            for item in accumulated_chunks[:max_allowed_chunks]:
-                                plain_text = decrypt_text_string(item["enc_text"], uuid.UUID(current_workspace_id))
-                                if plain_text:
-                                    # Basic fast word-to-token approximation (1 word ≈ 1.3 tokens)
-                                    estimated_chunk_tokens = int(len(plain_text.split()) * 1.3)
-                                    
-                                    if current_token_count + estimated_chunk_tokens > MAX_CONTEXT_TOKENS:
-                                        print(f"🛑 Token budget reached ({current_token_count} tokens). Truncating further context injection.")
-                                        break
-                                        
-                                    current_token_count += estimated_chunk_tokens
-                                    context_fragments.append(plain_text)
-                                    
-                                    if item["filename"] not in documents_influencing_list:
-                                        documents_influencing_list.append(item["filename"])
-                
-                # =====================================================================
-                # 🎯 TARGETED FIX: CHUNK SHIELD SHUTDOWN GUARDRAIL
-                # =====================================================================
-                # If the pipeline intended to search but recovered 0 valid grounded context pieces,
-                # exit immediately without consuming tokens or allowing LLM generation guessing!
-                if not context_fragments:
-                    early_clear_message = (
-                        "I couldn't find enough evidence in your uploaded knowledge."
+                    # 🚀 EXECUTES: Vector Sub-Queries -> Parent Section Reconstruction via SQL[cite: 4]
+                    reconstructed_sections = retrieval_service.execute_hybrid_retrieval(
+                        query_vector=[],  # Handled internally via embedding sub-queries
+                        workspace_id=uuid.UUID(current_workspace_id),
+                        filters=search_filters
                     )
+
+                    # 2. Initialize pure Context Optimizer to sculpt prompt text windows[cite: 3]
+                    intent_type_clean = intent_strategy.intent_type.lower() if intent_strategy else "general"
                     
-                    # 📊 Compile clean telemetry node indicating exactly why it short-circuited
-                    llm_telemetry_node = {
-                        "event_name": "LLM Model Response Generation",
-                        "status": "SHORT_CIRCUIT_NO_EVIDENCE",
-                        "meta": {
-                            "model_utilized": active_model_target if active_model_target else "gemini-2.5-flash-lite",
-                            "prompt_tokens_consumed": 0,
-                            "completion_tokens_consumed": 0,
-                            "total_tokens_consumed": 0,
-                            "documents_influencing_final_answer": []
-                        }
-                    }
+                    # Map dynamic token parameters based on intent triage conditions
+                    if "summary" in intent_type_clean or "report" in intent_type_clean:
+                        target_budget = 3200  # Expand token budget window for deep analysis[cite: 6]
+                    elif "definition" in intent_type_clean:
+                        target_budget = 1200  # Tighten budget window for quick responses
+                    else:
+                        target_budget = 2000  # Default standard budget[cite: 3, 6]
+
+                    optimizer = ContextOptimizer(token_budget=target_budget)
                     
-                    result = {
-                        "success": True, 
-                        "result": early_clear_message,
-                        "tier_notification": tier_status_msg,
-                        "last_executed_step": "no_evidence_short_circuit",
-                        "query": prompt,
-                        "rag_telemetry": rag_telemetry_node,
-                        "llm_telemetry": llm_telemetry_node,
-                        "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
-                    }
-                    
-                    # Update standard step tracking variables
-                    step.completed_at = datetime.utcnow()
-                    start_anchor = step.started_at if step.started_at else datetime.utcnow()
-                    step.execution_time_ms = int((step.completed_at - start_anchor).total_seconds() * 1000)
-                    step.output_data = result
-                    step.status = "completed"
-                    
-                    db.commit()
-                    db.close()
-                    
-                    return {
-                        "status": "completed",
-                        "step_id": str(step.id),
-                        "output": result
-                    }
-                # =====================================================================                        
+                    # 🚀 EXECUTES: Line Deduplication -> Boundary Overlap Removals -> Prompt Assembly[cite: 3]
+                    optimized_context_string = optimizer.optimize_context(reconstructed_sections)
+
+                    # 3. Populate RAG Telemetry and Grounding Chunks tracking state variables[cite: 6]
+                    if reconstructed_sections and optimized_context_string.strip():
+                        context_fragments.append(optimized_context_string)
+                        
+                        # Register which documents are providing context for audit logs[cite: 6]
+                        for sec in reconstructed_sections:
+                            doc_id_str = str(sec.get("document_id"))
+                            if doc_id_str not in documents_influencing_list:
+                                documents_influencing_list.append(doc_id_str)
+                                
+                        rag_telemetry_node["planner_selected_count"] = len(reconstructed_sections)
 
                 # Inject decoded evidence context pieces cleanly into the final prompt payload blocks
                 final_prompt_payload = prompt

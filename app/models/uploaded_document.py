@@ -3,7 +3,7 @@ from sqlalchemy import Column, String, Integer, LargeBinary, DateTime, ForeignKe
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from app.db.session import Base
-
+from sqlalchemy.orm import relationship
 class UploadedDocument(Base):
     __tablename__ = "uploaded_documents"
 
@@ -70,3 +70,10 @@ class UploadedDocument(Base):
     # ====================================================================
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    # ====================================================================
+    # 🔗 VIRTUAL RELATIONSHIPS (Does not modify SQL columns)
+    # ====================================================================
+    # Allows you to dynamically access child chunks in Python if needed
+    # Make sure to add: from sqlalchemy.orm import relationship (at top of file)
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
