@@ -375,10 +375,18 @@ def process_step(self, step_id: str):
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
 
                # =====================================================================
-                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (FIXED)
+                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (TOP 5 SAFETY)
                 # =====================================================================
                 if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
+                    
+                    # 🛡️ CAPPING OVER-ROUTING SAFETY VALVE (UPDATED TO TOP 5)
+                    # If the Planner returns a massive list of documents, we slice it to the 
+                    # top 5 most relevant files to preserve high-density context layout.
+                    if len(target_doc_ids) > 5:
+                        print(f"⚠️ Planner over-routing detected ({len(target_doc_ids)} docs). Applying safety filter to top 5 docs.")
+                        target_doc_ids = target_doc_ids[:5]
+                        
                     raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
                     combined_search_queries = raw_planner_terms[:5]
 
@@ -419,7 +427,7 @@ def process_step(self, step_id: str):
                     if reconstructed_sections and optimized_context_string.strip():
                         context_fragments.append(optimized_context_string)
                         
-                        # 🎯 FIX 2: Query PostgreSQL directly to resolve the actual human-readable filename string!
+                        # Query PostgreSQL directly to resolve the actual human-readable filename string
                         for sec in reconstructed_sections:
                             doc_id_str = str(sec.get("document_id"))
                             
