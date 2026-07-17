@@ -375,17 +375,16 @@ def process_step(self, step_id: str):
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
 
                # =====================================================================
-                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (FULL SCALE)
+                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (FIXED)
                 # =====================================================================
                 if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
                     raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
                     combined_search_queries = raw_planner_terms[:5]
 
-                    # 1. Initialize the data-gathering retrieval layer[cite: 4]
+                    # 1. Initialize the data-gathering retrieval layer
                     retrieval_service = RetrievalService()
                     
-                    # Construct search filters mapping the planner constraints
                     search_filters = {
                         "workspace_id": current_workspace_id,
                         "document_ids": target_doc_ids,
@@ -394,40 +393,98 @@ def process_step(self, step_id: str):
 
                     print(f"📡 Invoking Hybrid Section Retrieval System for Document IDs: {target_doc_ids}")
                     
-                    # 🚀 EXECUTES: Vector Sub-Queries -> Parent Section Reconstruction via SQL[cite: 4]
+                    # 🚀 EXECUTES: Vector Sub-Queries -> Parent Section Reconstruction via SQL
                     reconstructed_sections = retrieval_service.execute_hybrid_retrieval(
-                        query_vector=[],  # Handled internally via embedding sub-queries
+                        query_vector=[],  
                         workspace_id=uuid.UUID(current_workspace_id),
                         filters=search_filters
                     )
 
-                    # 2. Initialize pure Context Optimizer to sculpt prompt text windows[cite: 3]
+                    # 2. Initialize pure Context Optimizer to sculpt prompt text windows
                     intent_type_clean = intent_strategy.intent_type.lower() if intent_strategy else "general"
                     
-                    # Map dynamic token parameters based on intent triage conditions
                     if "summary" in intent_type_clean or "report" in intent_type_clean:
-                        target_budget = 3200  # Expand token budget window for deep analysis[cite: 6]
+                        target_budget = 3200  
                     elif "definition" in intent_type_clean:
-                        target_budget = 1200  # Tighten budget window for quick responses
+                        target_budget = 1200  
                     else:
-                        target_budget = 2000  # Default standard budget[cite: 3, 6]
+                        target_budget = 2000  
 
                     optimizer = ContextOptimizer(token_budget=target_budget)
                     
-                    # 🚀 EXECUTES: Line Deduplication -> Boundary Overlap Removals -> Prompt Assembly[cite: 3]
+                    # 🚀 EXECUTES: Line Deduplication -> Boundary Overlap Removals -> Prompt Assembly
                     optimized_context_string = optimizer.optimize_context(reconstructed_sections)
 
-                    # 3. Populate RAG Telemetry and Grounding Chunks tracking state variables[cite: 6]
+                    # 3. Populate RAG Telemetry and Grounding Chunks tracking state variables
                     if reconstructed_sections and optimized_context_string.strip():
                         context_fragments.append(optimized_context_string)
                         
-                        # Register which documents are providing context for audit logs[cite: 6]
+                        # 🎯 FIX 2: Query PostgreSQL directly to resolve the actual human-readable filename string!
                         for sec in reconstructed_sections:
                             doc_id_str = str(sec.get("document_id"))
-                            if doc_id_str not in documents_influencing_list:
-                                documents_influencing_list.append(doc_id_str)
+                            
+                            # Hit your PostgreSQL table to pull the document row context cleanly
+                            doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id_str).first()
+                            
+                            if doc_record and doc_record.filename:
+                                resolved_display_name = doc_record.filename
+                            else:
+                                resolved_display_name = "Unknown_Document.pdf"
+                                
+                            if resolved_display_name not in documents_influencing_list:
+                                documents_influencing_list.append(resolved_display_name)
                                 
                         rag_telemetry_node["planner_selected_count"] = len(reconstructed_sections)
+
+                # =====================================================================
+                # 🛡️ SYSTEM GUARDRAIL: ZERO EVIDENCE SHORT-CIRCUIT (FIX 1)
+                # =====================================================================
+                # If the retrieval services recovered 0 valid context pieces or an empty string,
+                # exit immediately without consuming tokens or letting the LLM guess!
+                if not context_fragments or not context_fragments[0].strip():
+                    strict_clear_message = "No evidence found in the knowledge documents."
+                    
+                    # Compile clean telemetry node indicating exactly why it short-circuited
+                    llm_telemetry_node = {
+                        "event_name": "LLM Model Response Generation",
+                        "status": "SHORT_CIRCUIT_NO_EVIDENCE",
+                        "meta": {
+                            "model_utilized": active_model_target if active_model_target else "gemini-2.5-flash-lite",
+                            "prompt_tokens_consumed": 0,
+                            "completion_tokens_consumed": 0,
+                            "total_tokens_consumed": 0,
+                            "documents_influencing_final_answer": []
+                        }
+                    }
+                    
+                    result = {
+                        "success": True, 
+                        "result": strict_clear_message,
+                        "tier_notification": tier_status_msg,
+                        "last_executed_step": "no_evidence_short_circuit",
+                        "query": prompt,
+                        "rag_telemetry": rag_telemetry_node,
+                        "llm_telemetry": llm_telemetry_node,
+                        "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
+                    }
+                    
+                    # Update standard step tracking metrics
+                    step.completed_at = datetime.utcnow()
+                    start_anchor = step.started_at if step.started_at else datetime.utcnow()
+                    step.execution_time_ms = int((step.completed_at - start_anchor).total_seconds() * 1000)
+                    step.output_data = result
+                    step.status = "completed"
+                    
+                    db.commit()
+                    db.close()
+                    
+                    print("🛡️ Guardrail triggered: Zero chunks recovered. Short-circuiting execution loop safely.")
+                    return {
+                        "status": "completed",
+                        "step_id": str(step.id),
+                        "output": result
+                    }
+                # =====================================================================
 
                 # Inject decoded evidence context pieces cleanly into the final prompt payload blocks
                 final_prompt_payload = prompt
