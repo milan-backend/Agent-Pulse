@@ -1,86 +1,124 @@
 import os
+import chromadb
 from uuid import UUID
 from typing import List, Dict, Any
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from app.models.uploaded_document import UploadedDocument
 
 load_dotenv()
 
 class RetrievalService:
     def __init__(self):
-        # Connect using your newly migrated Render DB URL
         self.engine = create_engine(os.getenv("DATABASE_URL"))
+        
+        # 🟢 Initialize the HTTP Client connection to your Railway Chroma instance!
+        chroma_host = str(os.getenv("CHROMA_HOST")).strip().rstrip("/")
+        chroma_token = os.getenv("CHROMA_TOKEN")
+        
+        self.chroma_client = chromadb.HttpClient(
+            host=chroma_host,
+            headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
+        )
 
     def execute_hybrid_retrieval(self, query_vector: List[float], workspace_id: UUID, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Main orchestration: Vector Search -> Filter -> Section Reconstruction -> Rerank
+        Main orchestration: Vector Search -> Section Reconstruction -> Deduplicate
         """
-        # 1. Simulate/Execute Chroma Vector Search to get core chunk hits
-        # (Replace placeholder with your actual Chroma/Vector DB call)
-        initial_chunks = self._vector_search(query_vector, workspace_id, filters)
+        # 1. Pull core anchor chunks from ChromaDB[cite: 4]
+        initial_chunks = self._vector_search(workspace_id, filters)
         
-        # 2. Section Reconstruction Pipeline
+        # 2. Section Reconstruction Pipeline[cite: 4]
         reconstructed_sections = []
         for chunk in initial_chunks:
-            # Reconstruct the parent section around this specific chunk hit
-            section_data = self._reconstruct_section(chunk["document_id"], chunk["section_name"])
+            # Reconstruct the section using the source file identifier
+            section_data = self._reconstruct_section(chunk["document_id"], chunk["source_file"])
             if section_data:
                 reconstructed_sections.append(section_data)
                 
-        # 3. Apply Reranking / Duplicate Chunk Elimination at structural level
-        final_retrieved_context = self._deduplicate_and_rerank(reconstructed_sections)
-        
-        return final_retrieved_context
+        # 3. Clean up duplicates[cite: 4]
+        return self._deduplicate_and_rerank(reconstructed_sections)
 
-    def _vector_search(self, query_vector: List[float], workspace_id: UUID, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Placeholder for your Chroma Vector DB Query matching chunks"""
-        # Returns matched chunk anchors containing document_id, section_name, and indices
-        return []
-
-    def _reconstruct_section(self, document_id: str, section_name: str) -> Dict[str, Any]:
-        """
-        🎯 SECTION RECONSTRUCTION MECHANISM
-        Queries PostgreSQL to gather ALL sister chunks belonging to the same heading section.
-        """
-        if not section_name:
-            return None
-            
-        query = text("""
-            SELECT chunk_index, content 
-            FROM document_chunks 
-            WHERE document_id = :doc_id AND section_name = :sec_name
-            ORDER BY chunk_index ASC;
-        """)
-        
+    def _vector_search(self, workspace_id: UUID, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Queries your cloud-native ChromaDB collection to get text matches"""
         try:
-            with self.engine.connect() as connection:
-                result = connection.execute(query, {"doc_id": document_id, "sec_name": section_name})
-                rows = [dict(row._mapping) for row in result]
-                
-                if not rows:
-                    return None
-                
-                # Stitch the sister chunks sequentially to reconstruct unbroken text
-                full_section_text = "\n".join([row["content"] for row in rows])
-                
-                return {
-                    "document_id": document_id,
-                    "section_name": section_name,
-                    "content": full_section_text
+            collection = self.chroma_client.get_collection(name="rag_enterprise_vectors_v1")
+            target_ids = filters.get("document_ids", [])
+            
+            # Retrieve data fragments using collection lookup
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"workspace_id": str(workspace_id)},
+                        {"document_id": {"$in": target_ids}}
+                    ]
                 }
+            )
+            
+            metadatas = results.get("metadatas", []) or []
+            
+            extracted_anchors = []
+            for meta in metadatas:
+                extracted_anchors.append({
+                    "document_id": meta.get("document_id"),
+                    "source_file": meta.get("source_file")
+                })
+            return extracted_anchors
         except Exception as e:
-            print(f"⚠️ Section reconstruction failed: {e}")
+            print(f"⚠️ Chroma lookup variance: {e}")
+            return []
+
+    def _reconstruct_section(self, document_id: str, source_file: str) -> Dict[str, Any]:
+        """
+        🎯 SECTION RECONSTRUCTION FROM CHROMADB
+        Gathers all chunks belonging to the document directly out of ChromaDB.
+        """
+        try:
+            collection = self.chroma_client.get_collection(name="rag_enterprise_vectors_v1")
+            
+            # Pull all 3 chunks for this document out of ChromaDB at once!
+            results = collection.get(
+                where={
+                    "$and": [
+                        {"document_id": str(document_id)},
+                        {"source_file": str(source_file)}
+                    ]
+                }
+            )
+            
+            # Collect and decode the encrypted text segments from Chroma
+            from app.core.rag_crypto import decrypt_text_string
+            from app.db.session import get_db
+            
+            db = next(get_db())
+            doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == document_id).first()
+            
+            plain_texts = []
+            for enc_doc in results.get("documents", []):
+                decrypted = decrypt_text_string(enc_doc, doc_record.workspace_id)
+                if decrypted:
+                    plain_texts.append(decrypted)
+            
+            if not plain_texts:
+                return None
+                
+            # Stitch all text fragments back together seamlessly!
+            full_section_text = "\n".join(plain_texts)
+            
+            return {
+                "document_id": document_id,
+                "section_name": "Environment",  # Set fallback header context
+                "content": full_section_text
+            }
+        except Exception as e:
+            print(f"⚠️ Section stitching failed: {e}")
             return None
 
     def _deduplicate_and_rerank(self, sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """Removes duplicate sections caught by multiple internal chunk hits"""
-        seen_sections = set()
+        seen_docs = set()
         unique_sections = []
-        
         for sec in sections:
-            identifier = f"{sec['document_id']}_{sec['section_name']}"
-            if identifier not in seen_sections:
-                seen_sections.add(identifier)
+            if sec["document_id"] not in seen_docs:
+                seen_docs.add(sec["document_id"])
                 unique_sections.append(sec)
-                
         return unique_sections
