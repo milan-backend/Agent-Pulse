@@ -434,19 +434,23 @@ def process_step(self, step_id: str):
                         context_fragments.append(optimized_context_string)
                         
                         # Query PostgreSQL directly to resolve the actual human-readable filename string
-                       # 🎯 SAFE POSTGRESQL FILENAME LOOKUP WITH AUTO-ROLLBACK
+                       # 🎯 SAFE POSTGRESQL FILENAME RESOLUTION WITH PROPER UUID CASTING
                         for sec in reconstructed_sections:
-                            doc_id_str = str(sec.get("document_id"))
+                            raw_doc_id = sec.get("document_id")
                             resolved_display_name = "Unknown_Document.pdf"
                             
-                            try:
-                                doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_id_str).first()
-                                if doc_record and doc_record.filename:
-                                    resolved_display_name = doc_record.filename
-                            except Exception as db_err:
-                                print(f"⚠️ Database connection reset during filename lookup. Healing session: {db_err}")
-                                db.rollback()  # 👈 Resets the session immediately so transaction stays valid!
-                                
+                            if raw_doc_id:
+                                try:
+                                    # Convert string/UUID to standard UUID before querying Postgres
+                                    doc_uuid = uuid.UUID(str(raw_doc_id)) if not isinstance(raw_doc_id, uuid.UUID) else raw_doc_id
+                                    doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == doc_uuid).first()
+                                    
+                                    if doc_record and doc_record.filename:
+                                        resolved_display_name = doc_record.filename
+                                except Exception as db_err:
+                                    print(f"⚠️ Filename resolution skipped: {db_err}")
+                                    db.rollback()
+
                             if resolved_display_name not in documents_influencing_list:
                                 documents_influencing_list.append(resolved_display_name)
                                 
