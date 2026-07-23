@@ -104,6 +104,11 @@ def get_chroma_client():
 @shared_task(bind=True, max_retries=5)
 def process_step(self, step_id: str):
     db = SessionLocal()
+    try:
+        db.rollback()
+    except Exception:
+        pass
+    
     step = None
 
     try:
