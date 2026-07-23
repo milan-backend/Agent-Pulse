@@ -34,4 +34,5 @@ razorpay
 
 nltk
 
-pytesseract pdf2image
+pytesseract
+pdf2image
