@@ -12,8 +12,6 @@ from app.db.session import get_db
 from app.models.uploaded_document import UploadedDocument
 from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
-import pytesseract 
-from pdf2image import convert_from_bytes
 
 # 🟢 IMPORT THE INTEL LAYER EXTRACTION PIPELINES
 from app.services.extraction_service import (
@@ -96,41 +94,17 @@ def process_document_embedding(document_id: str):
         
         # 3. Extract text content string[cite: 5]
         processed_chunks_pool = []
-
-        # 🟢 1. Handle Plain Text Files First
+        
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
             processed_chunks_pool.extend(
                 chunk_text_by_page(text=extracted_text, page_num=1, source_filename=doc.filename)
             )
-        
         elif doc.mime_type == "application/pdf":
             pdf_stream = io.BytesIO(raw_file_bytes)
             reader = PdfReader(pdf_stream)
-            
             for page_index, page in enumerate(reader.pages):
-                # 1. Try standard digital text extraction first
                 text_content = page.extract_text()
-                
-                # 2. 🎯 OCR FALLBACK: If pypdf returns empty text (scanned PDF), trigger OCR!
-                if not text_content or not text_content.strip():
-                    try:
-                        import pytesseract
-                        from pdf2image import convert_from_bytes
-                        
-                        # Render the specific PDF page to an image in memory
-                        images = convert_from_bytes(
-                            raw_file_bytes, 
-                            first_page=page_index + 1, 
-                            last_page=page_index + 1
-                        )
-                        if images:
-                            text_content = pytesseract.image_to_string(images[0])
-                            print(f"👁️ OCR Fallback triggered for '{doc.filename}' (Page {page_index + 1}): Extracted {len(text_content)} chars.")
-                    except Exception as ocr_err:
-                        print(f"⚠️ OCR Fallback skipped on page {page_index + 1}: {str(ocr_err)}")
-
-                # 3. Append extracted text chunks if valid
                 if text_content and text_content.strip():
                     processed_chunks_pool.extend(
                         chunk_text_by_page(text=text_content, page_num=page_index + 1, source_filename=doc.filename)

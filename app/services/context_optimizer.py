@@ -7,30 +7,25 @@ class ContextOptimizer:
 
     def optimize_context(self, retrieved_sections: List[Dict[str, Any]]) -> str:
         """
-        Orchestrates: Deduplication -> Overlap Removal -> Section Budget Fitting
+        Orchestrates: Deduplication -> Overlap Removal -> Context Ordering -> Budget Truncation
         """
-        max_chars = self.token_budget * 4
-        current_chars = 0
-        cleaned_sections = []
-
+        cleaned_contents = []
+        
         for section in retrieved_sections:
-            content = section.get("content", "")
+            content = section["content"]
             
             # 1. Clean overlapping boundaries and duplicate structural text blocks
             content = self._remove_overlap_and_boilerplate(content)
             
-            section_formatted = f"### Section: {section.get('section_name', 'General')}\n{content}"
-            section_len = len(section_formatted)
-
-            # 2. Section-level budget safety check (don't chop sections mid-sentence)
-            if current_chars + section_len <= max_chars:
-                cleaned_sections.append(section_formatted)
-                current_chars += section_len
-            else:
-                print(f"🗜️ ContextOptimizer: Safe budget reached ({current_chars} chars). Skipping further overflow sections.")
-                break
-
-        return "\n\n".join(cleaned_sections)
+            cleaned_contents.append(f"### Section: {section['section_name']}\n{content}")
+            
+        # 2. Assemble Context with Priority Ordering
+        raw_assembled_context = "\n\n".join(cleaned_contents)
+        
+        # 3. Enforce Token Budget via strict Character/Token Constraint Scaling
+        final_prompt_context = self._enforce_budget(raw_assembled_context)
+        
+        return final_prompt_context
 
     def _remove_overlap_and_boilerplate(self, text: str) -> str:
         """Strips out accidental line repetitions caused by smart chunk sliders"""
@@ -48,3 +43,14 @@ class ContextOptimizer:
                 unique_lines.append(line)
                 
         return "\n".join(unique_lines)
+
+    def _enforce_budget(self, full_text: str) -> str:
+        """Ensures the text context doesn't spill over your ~2000 token budget baseline"""
+        # Approximating 1 token = 4 characters as a protective runtime fallback rule
+        max_chars = self.token_budget * 4
+        
+        if len(full_text) <= max_chars:
+            return full_text
+            
+        print(f"🗜️ ContextOptimizer: Budget exceeded. Truncating context to safe token window.")
+        return full_text[:max_chars] + "\n\n[Context truncated due to system token budget configuration...]"
