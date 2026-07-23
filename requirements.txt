@@ -33,3 +33,5 @@ python-multipart
 razorpay
 
 nltk
+
+pytesseract pdf2image
