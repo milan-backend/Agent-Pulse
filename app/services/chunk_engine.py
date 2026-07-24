@@ -6,16 +6,12 @@ class ChunkEngine:
     def __init__(self, plan: KnowledgeIngestionPlan):
         """
         The Chunk Engine reads the validated KnowledgeIngestionPlan.
-        It DOES NOT analyze the document—it strictly executes the plan.
         """
-        self.strategy = plan.chunking.strategy
-        self.chunk_size = plan.chunking.chunk_size
-        self.overlap = plan.chunking.overlap
+        self.strategy = plan.chunk_strategy
+        self.chunk_size = plan.chunk_size
+        self.overlap = plan.overlap
 
     def execute_chunking(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        """
-        Executes the chunking strategy based on the KnowledgeIngestionPlan recommendation.
-        """
         if not text or not text.strip():
             return []
 
@@ -26,11 +22,9 @@ class ChunkEngine:
         elif self.strategy == "Page Based":
             return self._chunk_by_sliding_window(text, source_filename)
         else:
-            # Default fallback for 'Paragraph Based', 'Section Based', and 'Semantic'
             return self._chunk_by_sliding_window(text, source_filename)
 
     def _chunk_by_sliding_window(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        """Standard sliding word window using chunk_size and overlap."""
         words = text.split()
         chunks = []
         stride = self.chunk_size - self.overlap
@@ -48,8 +42,6 @@ class ChunkEngine:
         return chunks
 
     def _chunk_by_headings(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        """Splits document using heading regex boundaries."""
-        # Detect markdown headings (# Heading) or capitalized section titles
         sections = re.split(r'\n(?=#+\s|\n[A-Z0-9\s]{4,}:?\n)', text)
         chunks = []
 
@@ -58,7 +50,6 @@ class ChunkEngine:
             if not section_str:
                 continue
 
-            # If a heading section is too long, sub-chunk it using sliding window
             words = section_str.split()
             if len(words) > self.chunk_size:
                 sub_chunks = self._chunk_by_sliding_window(section_str, source_filename)
@@ -72,7 +63,6 @@ class ChunkEngine:
         return chunks
 
     def _chunk_by_qa(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        """Splits document by Q&A blocks (e.g., Q:, Question:, FAQ:)."""
         qa_blocks = re.split(r'\n(?=(?:Q|Question|FAQ)\s*[:\-\?])', text, flags=re.IGNORECASE)
         chunks = []
 

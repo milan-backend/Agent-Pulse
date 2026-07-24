@@ -121,19 +121,32 @@ def process_document_embedding(document_id: str):
             print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunking.strategy} | Size: {validated_plan.chunking.chunk_size}")
 
             # Save plan metadata directly to PostgreSQL
-            doc.document_type = validated_plan.document_profile.document_type
-            doc.document_purpose = validated_plan.document_profile.document_purpose
-            doc.planner_summary = validated_plan.document_profile.summary
+            doc.document_type = validated_plan.document_type
+            doc.document_purpose = validated_plan.document_purpose
+            doc.planner_summary = validated_plan.summary
             doc.knowledge_schema_version = 2
             doc.approved = True
 
             doc.knowledge_metadata = {
-                "document_profile": validated_plan.document_profile.model_dump(),
+                "document_profile": {
+                    "document_type": validated_plan.document_type,
+                    "structure": validated_plan.structure,
+                    "document_purpose": validated_plan.document_purpose,
+                    "summary": validated_plan.summary
+                },
                 "dynamic_metadata": [m.model_dump() for m in validated_plan.metadata],
                 "relationships": [r.model_dump() for r in validated_plan.relationships],
-                "chunking_plan": validated_plan.chunking.model_dump(),
+                "chunking_plan": {
+                    "strategy": validated_plan.chunk_strategy,
+                    "chunk_size": validated_plan.chunk_size,
+                    "overlap": validated_plan.overlap,
+                    "reasoning": validated_plan.chunk_reasoning
+                },
                 "questions_this_document_can_answer": validated_plan.questions_this_document_can_answer,
-                "confidence": validated_plan.confidence.model_dump()
+                "confidence": {
+                    "metadata_confidence": validated_plan.metadata_confidence,
+                    "chunk_strategy_confidence": validated_plan.chunk_strategy_confidence
+                }
             }
             db.commit()
 
