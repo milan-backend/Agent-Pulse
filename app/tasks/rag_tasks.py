@@ -120,6 +120,38 @@ def process_document_embedding(document_id: str):
             validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
             print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunking.strategy} | Size: {validated_plan.chunking.chunk_size}")
 
+            # Parse 'Key: Value' strings into dict objects safely
+            parsed_metadata = []
+            for item in validated_plan.metadata:
+                if ":" in item:
+                    k, v = item.split(":", 1)
+                    parsed_metadata.append({"key": k.strip(), "value": v.strip()})
+                else:
+                    parsed_metadata.append({"key": "Metadata", "value": item.strip()})
+
+            # Parse 'Source | Relation | Target | Strength' strings into dict objects safely
+            parsed_relationships = []
+            for item in validated_plan.relationships:
+                parts = [p.strip() for p in item.split("|")]
+                if len(parts) >= 4:
+                    try:
+                        strength_val = float(parts[3])
+                    except ValueError:
+                        strength_val = 0.8
+                    parsed_relationships.append({
+                        "source": parts[0],
+                        "relation": parts[1],
+                        "target": parts[2],
+                        "strength": strength_val
+                    })
+                elif len(parts) == 3:
+                    parsed_relationships.append({
+                        "source": parts[0],
+                        "relation": parts[1],
+                        "target": parts[2],
+                        "strength": 0.8
+                    })
+
             # Save plan metadata directly to PostgreSQL
             doc.document_type = validated_plan.document_type
             doc.document_purpose = validated_plan.document_purpose
@@ -134,8 +166,8 @@ def process_document_embedding(document_id: str):
                     "document_purpose": validated_plan.document_purpose,
                     "summary": validated_plan.summary
                 },
-                "dynamic_metadata": [m.model_dump() for m in validated_plan.metadata],
-                "relationships": [r.model_dump() for r in validated_plan.relationships],
+                "dynamic_metadata": parsed_metadata,
+                "relationships": parsed_relationships,
                 "chunking_plan": {
                     "strategy": validated_plan.chunk_strategy,
                     "chunk_size": validated_plan.chunk_size,
