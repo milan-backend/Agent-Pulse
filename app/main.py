@@ -42,12 +42,17 @@ def root():
 
 frontend_url_env = os.getenv("FRONTEND_URL")
 
-if not frontend_url_env:
-    allowed_origins_list = []
+# 🟢 Add default local development origins so testing never triggers CORS errors
+allowed_origins_list = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://localhost:3000"
+]
 
-else:
-    allowed_origins_list = [url.strip() for url in frontend_url_env.split(",")]
-
+if frontend_url_env:
+    # Append any extra production URLs provided in your environment variables
+    env_urls = [url.strip() for url in frontend_url_env.split(",") if url.strip()]
+    allowed_origins_list.extend(env_urls)
 
 app.add_middleware(
     CORSMiddleware,
