@@ -106,7 +106,7 @@ def process_document_embedding(document_id: str):
             except Exception as e:
                 print(f"⚠️ pypdf extraction warning: {e}")
 
-            # Attempt 2: Fallback to layout mode or pdfplumber if pypdf returns empty for browser-printed layouts
+            # Attempt 2: Fallback to layout-aware extraction mode
             if not extracted_text.strip():
                 print("🔄 Standard extraction yielded empty text. Trying layout-aware extraction mode...")
                 try:
@@ -116,26 +116,27 @@ def process_document_embedding(document_id: str):
                 except Exception as layout_err:
                     print(f"⚠️ Layout extraction warning: {layout_err}")
 
-            # Attempt 3: Ultimate fallback using pdfplumber if installed for complex tables/grids
+            # 🟢 Attempt 3: Active pdfplumber execution fallback for browser-printed / table-heavy PDFs
             if not extracted_text.strip():
+                print("🔄 Layout extraction yielded empty text. Executing pdfplumber table/grid parser...")
                 try:
                     import pdfplumber
                     pdf_stream.seek(0)
                     with pdfplumber.open(pdf_stream) as pdf:
                         plumber_text_parts = []
                         for page in pdf.pages:
+                            # Extract text maintaining layout boundaries and table cells
                             txt = page.extract_text(layout=True)
                             if txt:
                                 plumber_text_parts.append(txt)
                         extracted_text = " ".join(plumber_text_parts)
                 except ImportError:
-                    pass
+                    print("⚠️ pdfplumber package is not installed in the environment.")
                 except Exception as plumber_err:
                     print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
             
         if not extracted_text.strip():
             raise ValueError("Zero human-readable text contents could be extracted from this asset resource. The PDF may be a flat image scan requiring OCR.")
-
         # =====================================================================
         # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
         # =====================================================================
