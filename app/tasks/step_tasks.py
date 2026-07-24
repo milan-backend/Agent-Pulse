@@ -385,15 +385,24 @@ def process_step(self, step_id: str):
                 if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
                     
-                    # 🛡️ CAPPING OVER-ROUTING SAFETY VALVE (UPDATED TO TOP 5)
-                    # If the Planner returns a massive list of documents, we slice it to the 
-                    # top 5 most relevant files to preserve high-density context layout.
-                    if len(target_doc_ids) > 5:
-                        print(f"⚠️ Planner over-routing detected ({len(target_doc_ids)} docs). Applying safety filter to top 5 docs.")
-                        target_doc_ids = target_doc_ids[:5]
+                    # 🛡️ Limit candidate docs to top 3 for fast retrieval
+                    if len(target_doc_ids) > 3:
+                        target_doc_ids = target_doc_ids[:3]
                         
+                    # 🚀 CRITICAL LATENCY FIX: Limit search terms to TOP 2 queries max!
+                    # Running 9+ vector sub-queries creates 20+ HTTP loops, causing 30s delays.
                     raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
-                    combined_search_queries = raw_planner_terms[:5]
+                    
+                    # If prompt is short/shallow, use prompt directly + top 1 keyword term
+                    if intent_strategy and getattr(intent_strategy, "retrieval_depth", "").lower() == "shallow":
+                        combined_search_queries = [prompt] + raw_planner_terms[:1]
+                    else:
+                        combined_search_queries = raw_planner_terms[:2]
+
+                    # Deduplicate search terms cleanly
+                    combined_search_queries = list(dict.fromkeys(combined_search_queries))
+
+                    print(f"📡 Executing Fast Hybrid Retrieval using {len(combined_search_queries)} queries over docs: {target_doc_ids}")
 
                     # 1. Initialize the data-gathering retrieval layer
                     retrieval_service = RetrievalService()
