@@ -308,8 +308,11 @@ def process_step(self, step_id: str):
                         provider_type=requested_engine
                     )
 
-                    if resolved_key_record and resolved_key_record.model_name:
-                        active_model_target = str(resolved_key_record.model_name).strip()
+                    if resolved_key_record:
+                      # 🟢 Check DB column 'model_version' first, then property alias 'model_name'
+                       saved_model = getattr(resolved_key_record, "model_version", None) or getattr(resolved_key_record, "model_name", None)
+                       if saved_model and str(saved_model).strip():
+                          active_model_target = str(saved_model).strip()
 
                 if not active_model_target and agent_model and str(agent_model).strip():
                     active_model_target = str(agent_model).strip()
@@ -567,6 +570,11 @@ def process_step(self, step_id: str):
 
         except Exception as llm_error:
             error_message = str(llm_error)
+            
+            # 🟢 PRINT EXACT EXCEPTION TRACE DIRECTLY TO TERMINAL LOGS
+            print(f"❌ CRITICAL LLM GENERATION FAILURE: {error_message}")
+            import traceback
+            traceback.print_exc()
 
             if "429" in error_message:
                 retry_count = self.request.retries
@@ -590,17 +598,18 @@ def process_step(self, step_id: str):
                 }
 
             step.status = "failed"
-            step.error_message = f"LLM execution failed and retries exhausted: {error_message}"
+            step.error_message = f"LLM execution failed: {error_message}"
             step.output_data = {
                 "success": False,
-                "reason": "llm_failure"
+                "reason": "llm_failure",
+                "error": error_message
             }
             step.completed_at = datetime.utcnow()
             db.commit()
 
             return {
                 "status": "failed",
-                "message": "LLM execution failed"
+                "message": f"LLM execution failed: {error_message}"
             }
 
         db.refresh(agent)
