@@ -490,7 +490,6 @@ def process_step(self, step_id: str):
                         "telemetry_timeline": [rag_telemetry_node, llm_telemetry_node]
                     }
                     
-                    # Update standard step tracking metrics
                     step.completed_at = datetime.utcnow()
                     start_anchor = step.started_at if step.started_at else datetime.utcnow()
                     step.execution_time_ms = int((step.completed_at - start_anchor).total_seconds() * 1000)
@@ -498,7 +497,6 @@ def process_step(self, step_id: str):
                     step.status = "completed"
                     
                     db.commit()
-                    db.close()
                     
                     print("🛡️ Guardrail triggered: Zero chunks recovered. Short-circuiting execution loop safely.")
                     return {

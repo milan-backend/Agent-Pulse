@@ -3,6 +3,7 @@ import uuid
 import chromadb
 from typing import List, Dict, Any
 from dotenv import load_dotenv
+from google import genai
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -25,11 +26,39 @@ class RetrievalService:
             headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
         )
         
-        # 🟢 FIX 1: Fetch and cache collection ONCE on startup
+        # Cache collection ONCE
         self.collection = self.chroma_client.get_or_create_collection(
             name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
         )
+
+        # Initialize Gemini client for query embedding matching
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY is missing.")
+        self.ai_client = genai.Client(api_key=gemini_api_key)
+
+    def _get_query_embedding(self, text: str) -> List[float]:
+        """Generates matching 3072-dim query embedding via Gemini SDK."""
+        try:
+            res = self.ai_client.models.embed_content(
+                model="gemini-embedding-2",
+                contents=text
+            )
+            return res.embeddings[0].values
+        except Exception:
+            try:
+                res = self.ai_client.models.embed_content(
+                    model="text-embedding-004",
+                    contents=text
+                )
+                return res.embeddings[0].values
+            except Exception:
+                res = self.ai_client.models.embed_content(
+                    model="text-embedding-005",
+                    contents=text
+                )
+                return res.embeddings[0].values
 
     def execute_hybrid_retrieval(
         self, 
@@ -43,7 +72,6 @@ class RetrievalService:
         if not target_doc_ids:
             return []
 
-        # Ensure max 2 queries for ultra-fast execution
         queries_to_run = search_queries[:2] if search_queries else [""]
 
         # Build Chroma Where Clause
@@ -64,11 +92,15 @@ class RetrievalService:
         all_recovered_chunks = []
         seen_chunk_ids = set()
 
-        # 🟢 FIX 2: Fast Vector Search over cached collection
         for q_term in queries_to_run:
+            if not q_term or not q_term.strip():
+                continue
             try:
+                # 🟢 Embed with Gemini to ensure 3072 dimensions match Chroma index
+                q_emb = self._get_query_embedding(q_term)
+
                 results = self.collection.query(
-                    query_texts=[q_term] if q_term else None,
+                    query_embeddings=[q_emb],
                     n_results=5,
                     where=where_filter
                 )
@@ -80,7 +112,6 @@ class RetrievalService:
                             encrypted_doc = results["documents"][0][idx] if results.get("documents") else ""
                             meta = results["metadatas"][0][idx] if results.get("metadatas") else {}
 
-                            # Decrypt vector text payload safely
                             decrypted_text = decrypt_text_string(
                                 ciphertext_b64=encrypted_doc,
                                 workspace_id=workspace_id
@@ -99,13 +130,11 @@ class RetrievalService:
         if not all_recovered_chunks:
             return []
 
-        # 🟢 FIX 3: Batch SQL Query with a single safe DB connection
+        # Single batch SQL session
         db: Session = SessionLocal()
         reconstructed_sections = []
         try:
             unique_doc_ids = list(set([c["document_id"] for c in all_recovered_chunks if c.get("document_id")]))
-            
-            # 1 single SQL query for all documents!
             doc_records = db.query(UploadedDocument).filter(UploadedDocument.id.in_(unique_doc_ids)).all()
             doc_map = {str(d.id): d.filename for d in doc_records}
 
@@ -128,7 +157,7 @@ class RetrievalService:
                     "page_number": chunk["page_number"]
                 })
         finally:
-            db.close()  # 🟢 Always close session cleanly!
+            db.close()
 
         return self._deduplicate_and_rerank(reconstructed_sections)
 
