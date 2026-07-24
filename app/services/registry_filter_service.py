@@ -3,6 +3,7 @@ import re
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from app.models.uploaded_document import UploadedDocument
+from sqlalchemy import or_
 
 class RegistryFilterService:
     @staticmethod
@@ -28,11 +29,14 @@ class RegistryFilterService:
         print(f"DEBUG - expanded_keywords   : {expanded_search_keywords}")
         print("==================================================")
 
-        # Phase 1: Workspace Isolation, Ready status
+        # Phase 1: Workspace Isolation, Ready status (handling NULL document_status safely)
         query = db.query(UploadedDocument).filter(
             UploadedDocument.workspace_id == uuid.UUID(workspace_id),
             UploadedDocument.status == "ready",
-            UploadedDocument.document_status != "Archived"
+            or_(
+                UploadedDocument.document_status == None,
+                UploadedDocument.document_status != "Archived"
+            )
         )
         
         all_workspace_docs = query.all()
