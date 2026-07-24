@@ -12,12 +12,14 @@ class ContextOptimizer:
         cleaned_contents = []
         
         for section in retrieved_sections:
-            content = section["content"]
+            content = section.get("content", "")
             
             # 1. Clean overlapping boundaries and duplicate structural text blocks
             content = self._remove_overlap_and_boilerplate(content)
             
-            cleaned_contents.append(f"### Section: {section['section_name']}\n{content}")
+            # Safe section header fallback resolution
+            header_name = section.get("section_name") or section.get("filename") or "Document Section"
+            cleaned_contents.append(f"### Section: {header_name}\n{content}")
             
         # 2. Assemble Context with Priority Ordering
         raw_assembled_context = "\n\n".join(cleaned_contents)
@@ -35,7 +37,6 @@ class ContextOptimizer:
         
         for line in lines:
             stripped = line.strip()
-            # Drop pure duplicate paragraph blocks or redundant sliding overlaps
             if stripped and stripped not in seen_lines:
                 seen_lines.add(stripped)
                 unique_lines.append(line)
@@ -46,7 +47,6 @@ class ContextOptimizer:
 
     def _enforce_budget(self, full_text: str) -> str:
         """Ensures the text context doesn't spill over your ~2000 token budget baseline"""
-        # Approximating 1 token = 4 characters as a protective runtime fallback rule
         max_chars = self.token_budget * 4
         
         if len(full_text) <= max_chars:

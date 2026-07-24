@@ -26,20 +26,17 @@ class RetrievalService:
             headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
         )
         
-        # Cache collection ONCE
         self.collection = self.chroma_client.get_or_create_collection(
             name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
         )
 
-        # Initialize Gemini client for query embedding matching
         gemini_api_key = os.getenv("GEMINI_API_KEY")
         if not gemini_api_key:
             raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY is missing.")
         self.ai_client = genai.Client(api_key=gemini_api_key)
 
     def _get_query_embedding(self, text: str) -> List[float]:
-        """Generates matching 3072-dim query embedding via Gemini SDK."""
         try:
             res = self.ai_client.models.embed_content(
                 model="gemini-embedding-2",
@@ -74,7 +71,6 @@ class RetrievalService:
 
         queries_to_run = search_queries[:2] if search_queries else [""]
 
-        # Build Chroma Where Clause
         where_filter = (
             {
                 "$and": [
@@ -96,7 +92,6 @@ class RetrievalService:
             if not q_term or not q_term.strip():
                 continue
             try:
-                # Embed query with Gemini
                 q_emb = self._get_query_embedding(q_term)
 
                 results = self.collection.query(
@@ -112,7 +107,6 @@ class RetrievalService:
                             encrypted_doc = results["documents"][0][idx] if results.get("documents") else ""
                             meta = results["metadatas"][0][idx] if results.get("metadatas") else {}
 
-                            # 🟢 Positional arguments fix for decrypt_text_string
                             decrypted_text = decrypt_text_string(
                                 encrypted_doc,
                                 workspace_id
@@ -131,7 +125,6 @@ class RetrievalService:
         if not all_recovered_chunks:
             return []
 
-        # Single batch SQL session
         db: Session = SessionLocal()
         reconstructed_sections = []
         try:
@@ -145,15 +138,18 @@ class RetrievalService:
                 reconstructed_sections.append({
                     "document_id": d_id,
                     "filename": filename,
+                    "section_name": filename,  # 🟢 Essential: Guarantees ContextOptimizer won't throw KeyError
                     "content": chunk["text"],
                     "page_number": chunk["page_number"]
                 })
         except Exception as sql_err:
             print(f"⚠️ Section stitching batch SQL warning: {sql_err}")
             for chunk in all_recovered_chunks:
+                filename = chunk["source_file"]
                 reconstructed_sections.append({
                     "document_id": chunk["document_id"],
-                    "filename": chunk["source_file"],
+                    "filename": filename,
+                    "section_name": filename,  # 🟢 Essential fallback mapping
                     "content": chunk["text"],
                     "page_number": chunk["page_number"]
                 })

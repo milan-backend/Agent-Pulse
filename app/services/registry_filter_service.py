@@ -2,8 +2,8 @@ import uuid
 import re
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from app.models.uploaded_document import UploadedDocument
 from sqlalchemy import or_
+from app.models.uploaded_document import UploadedDocument
 
 class RegistryFilterService:
     @staticmethod
@@ -29,7 +29,7 @@ class RegistryFilterService:
         print(f"DEBUG - expanded_keywords   : {expanded_search_keywords}")
         print("==================================================")
 
-        # Phase 1: Workspace Isolation, Ready status (handling NULL document_status safely)
+        # Phase 1: Workspace Isolation, Ready status (handling NULL document_status safely via or_)
         query = db.query(UploadedDocument).filter(
             UploadedDocument.workspace_id == uuid.UUID(workspace_id),
             UploadedDocument.status == "ready",
@@ -57,7 +57,7 @@ class RegistryFilterService:
         for doc in all_workspace_docs:
             meta_blob = doc.knowledge_metadata or {}
             
-            # 🟢 FIX 1: Read keywords from dynamic_metadata JSON array as well
+            # Read keywords from dynamic_metadata JSON array as well
             raw_dynamic_meta = meta_blob.get("dynamic_metadata", [])
             retrieval_keywords = []
             
@@ -68,14 +68,11 @@ class RegistryFilterService:
                     elif isinstance(item, str):
                         retrieval_keywords.append(item)
             
-            # Fallback checks
             retrieval_keywords.extend(meta_blob.get("global_retrieval_keywords", []))
             
-            # 🟢 FIX 2: Safely read departments & topics from both root columns and JSON
             doc_departments = doc.departments if isinstance(doc.departments, list) and doc.departments else []
             doc_topics = doc.topics if isinstance(doc.topics, list) and doc.topics else []
             
-            # Also read from JSON profile if available
             doc_profile = meta_blob.get("document_profile", {})
             if doc_profile.get("document_type"):
                 doc_topics.append(doc_profile.get("document_type"))
@@ -95,7 +92,6 @@ class RegistryFilterService:
             clean_doc_type = (doc.document_type or "").lower()
             
             if clean_intent_doc_type and clean_doc_type:
-                # Direct string containment match
                 if clean_intent_doc_type in clean_doc_type or clean_doc_type in clean_intent_doc_type:
                     relevance_score += 25.0
                 else:
@@ -127,7 +123,6 @@ class RegistryFilterService:
             doc_importance = float(doc.importance_score or 50)
             authority_bonus = (doc_authority + doc_importance) / 10.0
             
-            # Freshness / Approval Bonus
             freshness_bonus = float(doc.freshness or 0.5) * 10.0
             approved_bonus = 5.0 if getattr(doc, "approved", False) else 0.0
 
@@ -143,17 +138,12 @@ class RegistryFilterService:
         # Phase 3: Sort by calculated score DESC, fallback to created_at DESC
         scored_candidates.sort(key=lambda x: (x["calculated_score"], x["created_at"]), reverse=True)
         
-        # 🟢 FIX 3: Guarantee top 3 most recently uploaded files are included in the pool!
         recent_docs = sorted(all_workspace_docs, key=lambda d: d.created_at, reverse=True)[:3]
-        recent_ids = set(str(d.id) for d in recent_docs)
-
         top_candidates = scored_candidates[:15]
         selected_ids = set(str(item["doc_obj"].id) for item in top_candidates)
 
-        # Append missing recent files if pushed out by older high-scoring test files
         for r_doc in recent_docs:
             if str(r_doc.id) not in selected_ids:
-                # Find its scored item
                 matched_item = next((item for item in scored_candidates if str(item["doc_obj"].id) == str(r_doc.id)), None)
                 if matched_item:
                     top_candidates.append(matched_item)
