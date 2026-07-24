@@ -1,171 +1,47 @@
 import os
 from google import genai
-from pydantic import BaseModel, Field
-from typing import List
 
-# =====================================================================
-# 📊 PHASE A SCHEMA: DOCUMENT LEVEL METADATA PRIMITIVES
-# =====================================================================
+# 🟢 SINGLE SOURCE OF TRUTH: Import Root Pydantic Schema for Ingestion Plan
+from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
 
-class DocumentLevelMetadataSchema(BaseModel):
-    document_type: str = Field(description="The functional catalog classification of the file. Prefer standard classifications like 'Board Meeting Minutes', 'HR Policy Manual', 'Technical Specification'. If none fit perfectly, return the closest matching organizational tag.")
-    document_role: str = Field(description="The strategic retrieval purpose. Prefer: 'Evidence', 'Decision Making', 'Compliance', 'Supporting Context'. If none fit, output a clean custom retrieval role identifier.")
-    time_scope: str = Field(description="The temporal framework bounds of the text, e.g., 'Q2 2026', 'Annual', 'Historical', 'Future Plan'")
-    document_status: str = Field(description="The operational status phase. Prefer: 'Draft', 'Approved', 'Archived', 'Superseded'. If alternative corporate state matches closer, utilize that description.")
-    document_purpose: str = Field(description="The explicit operational reason why this document was compiled, e.g., 'Quarterly Performance Tracking'")
-    planner_summary: str = Field(description="A dense, highly technical synthesis optimized strictly for an upstream AI Retrieval Planner, detailing what core data can be located here.")
-    departments: List[str] = Field(description="List of corporate organizational divisions that own or use this document, e.g., ['Finance', 'Executive']")
-    topics: List[str] = Field(description="Top 3-6 macro high-level categorical concepts present across the text payload")
-    
-    # 🎯 PROBLEM 1 FIX: Populating document-level operational questions
-    questions_this_document_can_answer: List[str] = Field(description="Generate 3–8 concrete business operational questions that could be answered directly from this entire document context window.")
-    
-    classification_confidence: str = Field(description="Confidence classification routing assessment score. MUST choose strictly from: ['High', 'Medium', 'Low']")
-
-
-# =====================================================================
-# 📊 PHASE B SCHEMA: CHUNK LEVEL KNOWLEDGE GRAPH PRIMITIVES
-# =====================================================================
-
-class ChunkLevelMetadataSchema(BaseModel):
-    entities: List[str] = Field(
-    description=(
-        "List of entities found in this chunk. "
-        "Format each entry exactly as "
-        "'Entity Name | Entity Type'. "
-        "Example: 'Revenue | Financial Metric'."
-    )
-)
-
-    relationships: List[str] = Field(
-    description=(
-        "List of semantic relationships found in this chunk. "
-        "Format each entry exactly as "
-        "'Source | Relation | Target | Confidence'. "
-        "Example: "
-        "'Revenue | supports | Profit | High'."
-    )
-)
-    facts: List[str] = Field(description="Atomic, verifiable factual declarations or historical timeline shifts made in this chunk text")
-    retrieval_keywords: List[str] = Field(description="Conceptual synonyms or search queries that bridge user natural language syntax to this specific text")
-    questions_this_document_can_answer: List[str] = Field(description="List of explicit, practical operational questions an operator might ask that this specific text segment has the exact data to answer.")
-    extraction_confidence: str = Field(description="Overall granular evaluation score for this chunk payload. MUST choose strictly from: ['High', 'Medium', 'Low']")
-
-
-# =====================================================================
-# 📐 SYSTEM AUTHORITY & COMPOUND IMPORTANCE SCORING LOGIC
-# =====================================================================
-
-def calculate_document_authority(doc_type: str) -> int:
-    """Calculates strict system authority weightings based on explicit system rules."""
-    dt = str(doc_type).lower().strip()
-    if "board meeting" in dt: return 100
-    if "policy" in dt or "handbook" in dt or "manual" in dt: return 95
-    if "financial" in dt or "audit" in dt: return 92
-    
-    # 🎯 PROBLEM 4 FIX: Expanding the mapping matrix to catch strategic corporate assets
-    # Elevates 'Executive Business Report', 'Sales Report', etc., so they don't default to 50
-    if "executive" in dt or "report" in dt or "sales" in dt or "strategy" in dt: return 90
-    
-    if "success" in dt or "support" in dt: return 88
-    if "notes" in dt or "memo" in dt: return 55
-    if "draft" in dt: return 35
-    return 50
-
-def calculate_compound_importance(meta_a: DocumentLevelMetadataSchema, answers_count: int, relationships_count: int) -> int:
-    """
-    Measures compound contextual weight by balancing strategic role, system authority rules,
-    relationship depth, and question coverage together. Prevents flat list glossaries from hijacking priority.
-    """
-    base_authority = calculate_document_authority(meta_a.document_type)
-    
-    role_weights = {
-        "decision making": 30,
-        "compliance": 25,
-        "evidence": 20,
-        "supporting context": 10
-    }
-    role_score = role_weights.get(str(meta_a.document_role).lower().strip(), 15)
-    
-    question_factor = min(answers_count * 5, 25)
-    relationship_factor = min(relationships_count * 3, 20)
-    
-    final_score = int((base_authority * 0.4) + role_score + question_factor + relationship_factor)
-    return max(10, min(100, final_score))
-
-
-# =====================================================================
-# 🚀 INITIALIZE SHARED CLIENT INTERFACE (REUSE FOR EFFICIENCY)
-# =====================================================================
 
 def get_intelligence_client() -> genai.Client:
-    """Fetches a configured client utilizing the isolated key environment channel."""
-    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY")
+    """Initializes and returns the official Google GenAI Client using system environment keys."""
+    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
-        raise ValueError("CRITICAL RUNTIME ERROR: INTELLIGENCE_LAYER_API_KEY environment variable is missing.")
+        raise ValueError("CRITICAL RUNTIME ERROR: Neither INTELLIGENCE_LAYER_API_KEY nor GEMINI_API_KEY environment variables are configured.")
     return genai.Client(api_key=gemini_key)
 
 
-# =====================================================================
-# 🚀 TWO-PHASE EXTRACTION RUNNERS
-# =====================================================================
-
-def run_phase_a_document_extraction(global_document_sample: str, client: genai.Client) -> DocumentLevelMetadataSchema:
+def run_phase_1_knowledge_extraction(global_text_sample: str, client: genai.Client) -> KnowledgeIngestionPlan:
     """
-    PHASE A: Extracts structural document-level attributes once using a global text context window sample.
-    Optimizes for structural catalog typing and system classification assignments.
+    Phase 1 Extraction AI: Analyzes document structure, discovers dynamic metadata,
+    extracts concept relationships with numeric strength scores (0.0 to 1.0), and 
+    recommends an optimal chunking strategy to produce the KnowledgeIngestionPlan.
     """
     system_instruction = (
-        "You are the Core Computational Cataloger for the AgentPulse Retrieval Layer.\n\n"
-        "🎯 OPERATIONAL OBJECTIVE:\n"
-        "Your generated output serves as a global structural record consumed by an upstream automated "
-        "AI Retrieval Planner to verify if this document fits macro intent parameters. Optimize for machine lookups.\n\n"
-        "⚠️ RULES & ALIGNMENT STRATEGIES:\n"
-        "- Classify the overall document properties from a macro perspective using the text sample.\n"
-        "- Generate 3-8 highly specific, clear, practical business questions that this entire document context sample contains the exact data to answer.\n"
-        "- Do NOT provide friendly summaries, text evaluations, or human narrative flows.\n"
-        "- If standard classification labels (for role, type, status) do not fit perfectly due to unique corporate formatting, "
-        "output the closest possible description instead."
+        "You are the Core Computational Extraction AI for the AgentPulse Ingestion Pipeline.\n\n"
+        "🎯 RESPONSIBILITY:\n"
+        "Analyze the provided document text sample to construct a complete KnowledgeIngestionPlan.\n"
+        "Do NOT chunk the document. Do NOT create vector embeddings. Focus strictly on understanding structure, "
+        "discovering dynamic key-value metadata, identifying concept relationships with strength scores (0.0 to 1.0), "
+        "and recommending an optimal chunking strategy.\n\n"
+        "⚠️ CONSTRAINTS & ALLOWED VALUES:\n"
+        "- Chunking strategy MUST be one of: ['Section Based', 'Heading Based', 'Paragraph Based', 'Question Answer', 'Page Based', 'Semantic']\n"
+        "- Recommended chunk_size MUST be between 500 and 1500.\n"
+        "- Recommended overlap MUST be between 50 and 300.\n"
+        "- Limit dynamic metadata key-value pairs to a maximum of 10 highly relevant items."
     )
-    
+
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=f"Analyze the following document context sample and extract global document metadata columns:\n\n{global_document_sample}",
+        model="gemini-2.5-flash",
+        contents=f"Analyze the following document context sample and build the KnowledgeIngestionPlan:\n\n{global_text_sample}",
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
-            "response_schema": DocumentLevelMetadataSchema,
+            "response_schema": KnowledgeIngestionPlan,
             "temperature": 0.1
         }
-    )
-    return DocumentLevelMetadataSchema.model_validate_json(response.text)
-
-
-def run_phase_b_chunk_extraction(chunk_text: str, client: genai.Client) -> ChunkLevelMetadataSchema:
-    """
-    PHASE B: Extracts granular knowledge components, retrieval keywords, and triplets for a single chunk.
-    Enforces strict grounding boundaries to protect the structural network from hallucinated inference.
-    """
-    system_instruction = (
-        "You are the Core Computational Graph Indexer for the AgentPulse Retrieval Layer.\n\n"
-        "🎯 OPERATIONAL OBJECTIVE:\n"
-        "Your output maps local data points inside text chunks to handle semantic bridges and precise factual lookups.\n\n"
-        "⚠️ GROUNDING RULES & CONSTRAINTS:\n"
-        "- Relationships and connections should ONLY link entities that are explicitly supported and stated within the chunk text.\n"
-        "- 🛑 DO NOT infer relationships or properties from general world knowledge or external context logic.\n"
-        "- Assume future users will input search queries using different wording than appears in the text. Extract retrieval "
-        "keywords and operational questions that bridge user language to the chunk's content.\n"
-        "- Select confidence values strictly from ['High', 'Medium', 'Low']."
     )
     
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=f"Execute structural indexing and factual extraction across the following targeted text chunk:\n\n{chunk_text}",
-        config={
-            "system_instruction": system_instruction,
-            "response_mime_type": "application/json",
-            "response_schema": ChunkLevelMetadataSchema,
-            "temperature": 0.1
-        }
-    )
-    return ChunkLevelMetadataSchema.model_validate_json(response.text)
+    return KnowledgeIngestionPlan.model_validate_json(response.text)

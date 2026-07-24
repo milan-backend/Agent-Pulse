@@ -13,14 +13,13 @@ from app.models.uploaded_document import UploadedDocument
 from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
-# 🟢 IMPORT THE INTEL LAYER EXTRACTION PIPELINES
+# 🟢 IMPORT NEW INGESTION PIPELINE COMPONENTS (Phase 1 & Phase 2)
 from app.services.extraction_service import (
     get_intelligence_client,
-    run_phase_a_document_extraction,
-    run_phase_b_chunk_extraction,
-    calculate_document_authority,
-    calculate_compound_importance
+    run_phase_1_knowledge_extraction
 )
+from app.services.plan_validator import validate_and_sanitize_ingestion_plan
+from app.services.chunk_engine import ChunkEngine
 
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
@@ -92,132 +91,66 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        # 3. Extract text content string[cite: 5]
-        processed_chunks_pool = []
-        
+        # 3. Extract Full Raw Text Content String
+        extracted_text = ""
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
-            processed_chunks_pool.extend(
-                chunk_text_by_page(text=extracted_text, page_num=1, source_filename=doc.filename)
-            )
         elif doc.mime_type == "application/pdf":
             pdf_stream = io.BytesIO(raw_file_bytes)
             reader = PdfReader(pdf_stream)
-            for page_index, page in enumerate(reader.pages):
-                text_content = page.extract_text()
-                if text_content and text_content.strip():
-                    processed_chunks_pool.extend(
-                        chunk_text_by_page(text=text_content, page_num=page_index + 1, source_filename=doc.filename)
-                    )
+            extracted_text = " ".join([page.extract_text() for page in reader.pages if page.extract_text()])
             
-        if not processed_chunks_pool:
+        if not extracted_text.strip():
             raise ValueError("Zero human-readable text contents could be extracted from this asset resource.")
 
         # =====================================================================
-        # 🎯 ADVANCED ARCHITECTURE UPGRADE: DUAL-PHASE EXTRACT & COMPILATION
+        # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
         # =====================================================================
         try:
-            print(f"🧠 Commencing Enterprise Knowledge Extraction Pipeline for Document ID: {doc.id}")
-            full_raw_text_recon = " ".join([c["text"] for c in processed_chunks_pool])
-            global_sample_window = full_raw_text_recon[:40000]
+            print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
+            global_sample_window = extracted_text[:40000]
             
             intelligence_client = get_intelligence_client()
             
-            # --- PHASE A: DOCUMENT LEVEL EXTRACTION (RUNS ONCE PER DOCUMENT) ---
-            print(f"📡 Executing Phase A Global Metadata Extraction for: {doc.filename}")
+            # --- STEP 1: EXTRACTION AI (Phase 1) ---
+            print(f"📡 Generating Knowledge Ingestion Plan for: {doc.filename}")
+            raw_ingestion_plan = run_phase_1_knowledge_extraction(global_sample_window, intelligence_client)
             
-            # 💡 Note: update run_phase_a_document_extraction prompt internally next to capture 
-            # 3-8 concrete business questions using our new high-recall examples array.
-            phase_a_meta = run_phase_a_document_extraction(global_sample_window, intelligence_client)
-            
-            # Save Phase A Primitives straight to first-class PostgreSQL columns[cite: 5]
-            doc.document_type = phase_a_meta.document_type
-            doc.document_role = phase_a_meta.document_role
-            doc.departments = phase_a_meta.departments
-            doc.topics = phase_a_meta.topics
-            doc.document_purpose = phase_a_meta.document_purpose
-            doc.planner_summary = phase_a_meta.planner_summary
-            doc.time_scope = phase_a_meta.time_scope
-            doc.document_status = phase_a_meta.document_status
-            doc.knowledge_schema_version = 1
-            doc.version = "1.0.0"
+            # --- STEP 2: VALIDATION LAYER ---
+            validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
+            print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunking.strategy} | Size: {validated_plan.chunking.chunk_size}")
+
+            # Save plan metadata directly to PostgreSQL
+            doc.document_type = validated_plan.document_profile.document_type
+            doc.document_purpose = validated_plan.document_profile.document_purpose
+            doc.planner_summary = validated_plan.document_profile.summary
+            doc.knowledge_schema_version = 2
             doc.approved = True
 
-            # Extract Document-Level questions from updated Phase A payload model tracking
-            # Dynamic fallback strategy handles structural model mapping smoothly
-            document_level_questions = getattr(phase_a_meta, "questions_this_document_can_answer", [])
-            if not document_level_questions:
-                # Emergency generation fallback if property names vary across internal libraries
-                document_level_questions = getattr(phase_a_meta, "questions", [])
+            doc.knowledge_metadata = {
+                "document_profile": validated_plan.document_profile.model_dump(),
+                "dynamic_metadata": [m.model_dump() for m in validated_plan.metadata],
+                "relationships": [r.model_dump() for r in validated_plan.relationships],
+                "chunking_plan": validated_plan.chunking.model_dump(),
+                "questions_this_document_can_answer": validated_plan.questions_this_document_can_answer,
+                "confidence": validated_plan.confidence.model_dump()
+            }
+            db.commit()
 
-            # --- PHASE B: CHUNK LEVEL GRAPH EXTRACTION & PYTHON AGGREGATION ---
-            print(f"🧬 Commencing Phase B Aggregation across {len(processed_chunks_pool)} localized segments...")
-            
-            aggregated_entities = []
-            aggregated_relationships = []
-            aggregated_facts = []
-            aggregated_keywords = []
-            
-            seen_entity_keys = set()
-            seen_relationship_keys = set()
-            
-            for chunk_data in processed_chunks_pool:
-                try:
-                    chunk_meta = run_phase_b_chunk_extraction(chunk_data["text"], intelligence_client)
-                    
-                    for entity in chunk_meta.entities:
-                        entity = str(entity).strip()
-
-                        if entity and entity not in seen_entity_keys:
-                           seen_entity_keys.add(entity)
-                           aggregated_entities.append(entity)
-                            
-                    for rel in chunk_meta.relationships:
-                        rel = str(rel).strip()
-
-                        if rel and rel not in seen_relationship_keys:
-                           seen_relationship_keys.add(rel)
-                           aggregated_relationships.append(rel)
-                            
-                    aggregated_facts.extend([f for f in chunk_meta.facts if f not in aggregated_facts])
-                    aggregated_keywords.extend([k for k in chunk_meta.retrieval_keywords if k not in aggregated_keywords])
-                    
-                except Exception as chunk_err:
-                    print(f"⚠️ Warning: Granular segment skipped due to extraction variance: {str(chunk_err)}")
-                    continue
-
-            # --- CALCULATE SYSTEM BALANCED PERFORMANCE WEIGHTS ---
-            base_authority = calculate_document_authority(phase_a_meta.document_type)
-            compound_importance = calculate_compound_importance(
-                meta_a=phase_a_meta,
-                answers_count=len(document_level_questions),
-                relationships_count=len(aggregated_relationships)
+            # --- STEP 3: CHUNK ENGINE (Phase 2) ---
+            print(f"🧬 Executing Chunk Engine for {doc.filename}...")
+            chunk_engine = ChunkEngine(plan=validated_plan)
+            processed_chunks_pool = chunk_engine.execute_chunking(
+                text=extracted_text, 
+                source_filename=doc.filename
             )
             
-            doc.authority_score = base_authority
-            doc.importance_score = compound_importance
-            
-            # --- PACK DEEP INTELLIGENCE POOL INTO COMPACT KNOWLEDGE_METADATA COLUMN ---
-            # 🎯 FIX COMPLETE: questions_this_document_can_answer is verified at structural root layer!
-            doc.knowledge_metadata = {
-                "entities": aggregated_entities,
-                "relationships": aggregated_relationships,
-                "facts": aggregated_facts,
-                "retrieval_keywords": aggregated_keywords,
-                "questions_this_document_can_answer": document_level_questions,
-                "metrics": [],
-                "confidence": {
-                    "classification_confidence": phase_a_meta.classification_confidence
-                }
-            }
-            
-            db.commit()
-            print(f"🟢 Knowledge Registry Pipeline Complete for '{doc.filename}'! Loaded {len(document_level_questions)} macro questions.")
-            
+            print(f"🟢 Chunk Engine finished. Created {len(processed_chunks_pool)} chunks.")
+
         except Exception as pipeline_err:
             db.rollback()
-            error_str = f"Dual-Phase Extraction Error: {str(pipeline_err)}"
-            print(f"❌ Critical architectural pipeline extraction rollback triggered: {error_str}")
+            error_str = f"Knowledge Ingestion Pipeline Error: {str(pipeline_err)}"
+            print(f"❌ Pipeline rollback triggered: {error_str}")
             raise ValueError(error_str)
         # =====================================================================
 
