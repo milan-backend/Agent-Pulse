@@ -35,4 +35,5 @@ razorpay
 nltk
 
 pdfplumber
+pytesseract
 pdf2image

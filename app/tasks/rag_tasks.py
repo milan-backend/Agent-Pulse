@@ -92,7 +92,7 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        # 3. Extract Full Raw Text Content String with Robust Fallbacks
+        # 3. Extract Full Raw Text Content String with Ultimate OCR Fallback
         extracted_text = ""
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
@@ -116,7 +116,7 @@ def process_document_embedding(document_id: str):
                 except Exception as layout_err:
                     print(f"⚠️ Layout extraction warning: {layout_err}")
 
-            # 🟢 Attempt 3: Active pdfplumber execution fallback for browser-printed / table-heavy PDFs
+            # Attempt 3: pdfplumber table/grid parser
             if not extracted_text.strip():
                 print("🔄 Layout extraction yielded empty text. Executing pdfplumber table/grid parser...")
                 try:
@@ -125,18 +125,34 @@ def process_document_embedding(document_id: str):
                     with pdfplumber.open(pdf_stream) as pdf:
                         plumber_text_parts = []
                         for page in pdf.pages:
-                            # Extract text maintaining layout boundaries and table cells
                             txt = page.extract_text(layout=True)
                             if txt:
                                 plumber_text_parts.append(txt)
                         extracted_text = " ".join(plumber_text_parts)
-                except ImportError:
-                    print("⚠️ pdfplumber package is not installed in the environment.")
                 except Exception as plumber_err:
                     print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
+
+            # 🟢 Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
+            if not extracted_text.strip():
+                print("🔄 Text layers missing. Initializing PyTesseract OCR optical engine...")
+                try:
+                    from pdf2image import convert_from_bytes
+                    import pytesseract
+
+                    images = convert_from_bytes(raw_file_bytes)
+                    ocr_text_parts = []
+                    for img in images:
+                        text_page = pytesseract.image_to_string(img)
+                        if text_page:
+                            ocr_text_parts.append(text_page)
+                    extracted_text = " ".join(ocr_text_parts)
+                    print(f"✨ OCR Success: Extracted {len(extracted_text)} characters via optical scanning.")
+                except Exception as ocr_err:
+                    print(f"❌ OCR fallback error: {ocr_err}")
             
         if not extracted_text.strip():
-            raise ValueError("Zero human-readable text contents could be extracted from this asset resource. The PDF may be a flat image scan requiring OCR.")
+            raise ValueError("Zero human-readable text contents could be extracted even after OCR processing.")
+        
         # =====================================================================
         # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
         # =====================================================================
