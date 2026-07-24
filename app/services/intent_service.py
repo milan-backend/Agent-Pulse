@@ -10,29 +10,39 @@ from typing import List
 class IntentAnalysisSchema(BaseModel):
     intent_type: str = Field(
         description="The strategy classification of what the user is trying to achieve. Prefer labels like "
-                    "'Business Health Assessment', 'Compliance Verification', 'Operational Audit', 'Direct Lookup'. "
-                    "If the query is specialized, output a dynamic, descriptive tag summarizing the core objective."
+                    "'Business Health Assessment', 'Compliance Verification', 'Operational Audit', 'Direct Lookup', 'Process Explanation'."
     )
     main_topic: str = Field(
-        description="The primary core subject, domain, or core asset identity the user is asking about, "
-                    "e.g., 'Business Performance', 'Leave Policy', 'Cloud Infrastructure'."
+        description="The primary core subject or domain, e.g., 'Attendance Policy', 'Leave Policy', 'Examination Rules'."
     )
+    
+    # 🎯 NEW DEPTH CONTROL FIELDS
+    retrieval_depth: str = Field(
+        description="Granularity/depth of information required. MUST be one of: ['Shallow', 'Medium', 'Deep']. "
+                    "'Shallow': Direct 1-fact lookup. 'Medium': Fact + immediately related context. 'Deep': Multi-step process, policy chain, or full workflow."
+    )
+    include_concept_chains: bool = Field(
+        description="Set to True if answering the question requires traversing relationship chains (e.g. Attendance -> Debarred -> Appeal)."
+    )
+    max_relationship_hops: int = Field(
+        description="The maximum number of relationship hops required (0 for direct lookup, 1 for immediate context, 2-3 for deep multi-step workflows)."
+    )
+    depth_reasoning: str = Field(
+        description="Brief justification for why this depth and hop count were chosen based on user intent complexity."
+    )
+
     target_role_preference: str = Field(
-        description="The strategic document tier most likely to hold the substance of this query role. Prefer standard roles: "
-                    "'Evidence', 'Decision Making', 'Compliance', 'Supporting Context'. "
-                    "If a custom role fits better, provide that value."
+        description="The strategic document tier most likely to hold the substance of this query role: "
+                    "'Evidence', 'Decision Making', 'Compliance', 'Supporting Context'."
     )
     implied_time_scope: str = Field(
-        description="The target chronological frame requested by the user, e.g., 'Q2 2026', 'Annual', 'Historical', 'Future Plan'. "
-                    "If the prompt does not target a specific date frame, return 'Unspecified'."
+        description="The target chronological frame, e.g., 'Q2 2026', 'Annual', 'Historical', 'Unspecified'."
     )
     target_departments: List[str] = Field(
-        description="List of organizational corporate divisions or areas most likely to hold this data scope, "
-                    "e.g., ['Finance'], ['HR'], ['Engineering']. Returns empty array if universal."
+        description="List of organizational corporate divisions, e.g., ['Finance'], ['HR'], ['Engineering']. Returns empty array if universal."
     )
     search_rationale: str = Field(
-        description="A brief explanation for the downstream Retrieval Planner explaining *why* this filtering strategy "
-                    "was selected and what specific objective the user is trying to accomplish."
+        description="Explanation for downstream Retrieval Planner on why this filtering and depth strategy was selected."
     )
 
 
@@ -42,35 +52,33 @@ class IntentAnalysisSchema(BaseModel):
 
 def analyze_user_query_intent(user_prompt: str) -> IntentAnalysisSchema:
     """
-    Component 4 Intent Understanding AI: Analyzes raw user strings and compiles a deep, 
-    structured, domain-agnostic lookup framework for the upstream Planner.
+    Component 4 Intent Understanding AI: Analyzes user queries and outputs a structured lookup blueprint
+    including relationship depth boundaries for downstream Planner AI.
     """
-    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY")
+    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
-        raise ValueError("CRITICAL RUNTIME BREAKDOWN: INTELLIGENCE_LAYER_API_KEY environment variable is missing.")
+        raise ValueError("CRITICAL RUNTIME BREAKDOWN: API key for Intent Intelligence is missing.")
         
     client = genai.Client(api_key=gemini_key)
     
     system_instruction = (
-        "You are the Core Strategic Intent Analyst for the AgentPulse Retrieval Layer.\n\n"
+        "You are the Core Strategic Intent & Retrieval Depth Analyst for AgentPulse.\n\n"
         "🎯 MISSION OBJECTIVE:\n"
-        "Your generated output will be consumed directly by an automated Retrieval Planner to determine the logical scope of "
-        "the retrieval. Your only goal is to dissect human phrasing and translate it into a clear target objective. Do NOT attempt "
-        "to expand keywords or guess related terms; the downstream knowledge graph handles conceptual connections.\n\n"
-        "⚠️ BEHAVIORAL CONSTRAINTS:\n"
-        "- Focus entirely on diagnosing WHAT the user is trying to achieve rather than trying to perform keyword generation.\n"
-        "- Do NOT limit yourself to a rigid set of labels. If a user query requires specialized routing (e.g., medical diagnostics, "
-        "software codebase debugging, architectural blueprints), output dynamic, descriptive categories for intent, roles, and departments."
+        "Dissect human user questions and determine BOTH search context targets AND retrieval depth requirements.\n\n"
+        "📊 DEPTH CONTROL RULES:\n"
+        "1. Shallow (Hops = 0, Concept Chains = False): For direct single-fact questions. (e.g., 'What is passing mark?')\n"
+        "2. Medium (Hops = 1, Concept Chains = True/False): For queries needing a fact + immediate cause/effect. (e.g., 'What happens if I miss an exam?')\n"
+        "3. Deep (Hops = 2-3, Concept Chains = True): For end-to-end workflows, multi-step procedures, or complex policies. (e.g., 'Explain the complete process if attendance falls below 75% till appeal.')\n"
     )
     
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=f"Analyze the following user question string and extract its target search intent schema:\n\n{user_prompt}",
+        model="gemini-2.5-flash-lite",
+        contents=f"Analyze the following user question and extract its intent and depth control schema:\n\n{user_prompt}",
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
             "response_schema": IntentAnalysisSchema,
-            "temperature": 0.0  # Absolute zero ensures deterministic query mapping structure
+            "temperature": 0.0
         }
     )
     
