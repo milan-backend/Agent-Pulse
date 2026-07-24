@@ -1,124 +1,143 @@
 import os
+import uuid
 import chromadb
-from uuid import UUID
 from typing import List, Dict, Any
-from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
+from sqlalchemy.orm import Session
+
+from app.db.session import SessionLocal
 from app.models.uploaded_document import UploadedDocument
+from app.core.rag_crypto import decrypt_text_string
 
 load_dotenv()
 
+
 class RetrievalService:
     def __init__(self):
-        self.engine = create_engine(os.getenv("DATABASE_URL"))
-        
-        # 🟢 Initialize the HTTP Client connection to your Railway Chroma instance!
         chroma_host = str(os.getenv("CHROMA_HOST")).strip().rstrip("/")
         chroma_token = os.getenv("CHROMA_TOKEN")
         
+        if not chroma_host:
+            raise ValueError("CRITICAL: CHROMA_HOST environment variable is missing.")
+
         self.chroma_client = chromadb.HttpClient(
             host=chroma_host,
             headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
         )
-
-    def execute_hybrid_retrieval(self, query_vector: List[float], workspace_id: UUID, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Main orchestration: Vector Search -> Section Reconstruction -> Deduplicate
-        """
-        # 1. Pull core anchor chunks from ChromaDB[cite: 4]
-        initial_chunks = self._vector_search(workspace_id, filters)
         
-        # 2. Section Reconstruction Pipeline[cite: 4]
-        reconstructed_sections = []
-        for chunk in initial_chunks:
-            # Reconstruct the section using the source file identifier
-            section_data = self._reconstruct_section(chunk["document_id"], chunk["source_file"])
-            if section_data:
-                reconstructed_sections.append(section_data)
-                
-        # 3. Clean up duplicates[cite: 4]
-        return self._deduplicate_and_rerank(reconstructed_sections)
+        # 🟢 FIX 1: Fetch and cache collection ONCE on startup
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="rag_enterprise_vectors_v1",
+            metadata={"hnsw:space": "cosine"}
+        )
 
-    def _vector_search(self, workspace_id: UUID, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Queries your cloud-native ChromaDB collection to get text matches"""
-        try:
-            collection = self.chroma_client.get_collection(name="rag_enterprise_vectors_v1")
-            target_ids = filters.get("document_ids", [])
-            
-            # Retrieve data fragments using collection lookup
-            results = collection.get(
-                where={
-                    "$and": [
-                        {"workspace_id": str(workspace_id)},
-                        {"document_id": {"$in": target_ids}}
-                    ]
-                }
-            )
-            
-            metadatas = results.get("metadatas", []) or []
-            
-            extracted_anchors = []
-            for meta in metadatas:
-                extracted_anchors.append({
-                    "document_id": meta.get("document_id"),
-                    "source_file": meta.get("source_file")
-                })
-            return extracted_anchors
-        except Exception as e:
-            print(f"⚠️ Chroma lookup variance: {e}")
+    def execute_hybrid_retrieval(
+        self, 
+        query_vector: List[float], 
+        workspace_id: uuid.UUID, 
+        filters: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        target_doc_ids = filters.get("document_ids", [])
+        search_queries = filters.get("search_queries", [])
+
+        if not target_doc_ids:
             return []
 
-    def _reconstruct_section(self, document_id: str, source_file: str) -> Dict[str, Any]:
-        """
-        🎯 SECTION RECONSTRUCTION FROM CHROMADB
-        Gathers all chunks belonging to the document directly out of ChromaDB.
-        """
-        try:
-            collection = self.chroma_client.get_collection(name="rag_enterprise_vectors_v1")
-            
-            # Pull all 3 chunks for this document out of ChromaDB at once!
-            results = collection.get(
-                where={
-                    "$and": [
-                        {"document_id": str(document_id)},
-                        {"source_file": str(source_file)}
-                    ]
-                }
-            )
-            
-            # Collect and decode the encrypted text segments from Chroma
-            from app.core.rag_crypto import decrypt_text_string
-            from app.db.session import get_db
-            
-            db = next(get_db())
-            doc_record = db.query(UploadedDocument).filter(UploadedDocument.id == document_id).first()
-            
-            plain_texts = []
-            for enc_doc in results.get("documents", []):
-                decrypted = decrypt_text_string(enc_doc, doc_record.workspace_id)
-                if decrypted:
-                    plain_texts.append(decrypted)
-            
-            if not plain_texts:
-                return None
-                
-            # Stitch all text fragments back together seamlessly!
-            full_section_text = "\n".join(plain_texts)
-            
-            return {
-                "document_id": document_id,
-                "section_name": "Environment",  # Set fallback header context
-                "content": full_section_text
+        # Ensure max 2 queries for ultra-fast execution
+        queries_to_run = search_queries[:2] if search_queries else [""]
+
+        # Build Chroma Where Clause
+        where_filter = (
+            {
+                "$and": [
+                    {"workspace_id": str(workspace_id)},
+                    {"document_id": {"$in": [str(d) for d in target_doc_ids]}}
+                ]
+            } if len(target_doc_ids) > 1 else {
+                "$and": [
+                    {"workspace_id": str(workspace_id)},
+                    {"document_id": str(target_doc_ids[0])}
+                ]
             }
-        except Exception as e:
-            print(f"⚠️ Section stitching failed: {e}")
-            return None
+        )
+
+        all_recovered_chunks = []
+        seen_chunk_ids = set()
+
+        # 🟢 FIX 2: Fast Vector Search over cached collection
+        for q_term in queries_to_run:
+            try:
+                results = self.collection.query(
+                    query_texts=[q_term] if q_term else None,
+                    n_results=5,
+                    where=where_filter
+                )
+
+                if results and results.get("ids") and results["ids"][0]:
+                    for idx, c_id in enumerate(results["ids"][0]):
+                        if c_id not in seen_chunk_ids:
+                            seen_chunk_ids.add(c_id)
+                            encrypted_doc = results["documents"][0][idx] if results.get("documents") else ""
+                            meta = results["metadatas"][0][idx] if results.get("metadatas") else {}
+
+                            # Decrypt vector text payload safely
+                            decrypted_text = decrypt_text_string(
+                                ciphertext_b64=encrypted_doc,
+                                workspace_id=workspace_id
+                            )
+
+                            all_recovered_chunks.append({
+                                "chunk_id": c_id,
+                                "document_id": meta.get("document_id"),
+                                "text": decrypted_text,
+                                "source_file": meta.get("source_file", "Unknown"),
+                                "page_number": meta.get("page_number", 1)
+                            })
+            except Exception as e:
+                print(f"⚠️ Fast vector query error: {e}")
+
+        if not all_recovered_chunks:
+            return []
+
+        # 🟢 FIX 3: Batch SQL Query with a single safe DB connection
+        db: Session = SessionLocal()
+        reconstructed_sections = []
+        try:
+            unique_doc_ids = list(set([c["document_id"] for c in all_recovered_chunks if c.get("document_id")]))
+            
+            # 1 single SQL query for all documents!
+            doc_records = db.query(UploadedDocument).filter(UploadedDocument.id.in_(unique_doc_ids)).all()
+            doc_map = {str(d.id): d.filename for d in doc_records}
+
+            for chunk in all_recovered_chunks:
+                d_id = chunk["document_id"]
+                filename = doc_map.get(str(d_id), chunk["source_file"])
+                reconstructed_sections.append({
+                    "document_id": d_id,
+                    "filename": filename,
+                    "content": chunk["text"],
+                    "page_number": chunk["page_number"]
+                })
+        except Exception as sql_err:
+            print(f"⚠️ Section stitching batch SQL warning: {sql_err}")
+            for chunk in all_recovered_chunks:
+                reconstructed_sections.append({
+                    "document_id": chunk["document_id"],
+                    "filename": chunk["source_file"],
+                    "content": chunk["text"],
+                    "page_number": chunk["page_number"]
+                })
+        finally:
+            db.close()  # 🟢 Always close session cleanly!
+
+        return self._deduplicate_and_rerank(reconstructed_sections)
 
     def _deduplicate_and_rerank(self, sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        seen_docs = set()
+        seen_chunks = set()
         unique_sections = []
         for sec in sections:
-            if sec["document_id"] not in seen_docs:
-                seen_docs.add(sec["document_id"])
+            content_key = sec["content"].strip()
+            if content_key not in seen_chunks:
+                seen_chunks.add(content_key)
                 unique_sections.append(sec)
         return unique_sections
