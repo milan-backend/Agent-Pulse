@@ -96,7 +96,7 @@ class RetrievalService:
             if not q_term or not q_term.strip():
                 continue
             try:
-                # 🟢 Embed with Gemini to ensure 3072 dimensions match Chroma index
+                # Embed query with Gemini
                 q_emb = self._get_query_embedding(q_term)
 
                 results = self.collection.query(
@@ -112,9 +112,10 @@ class RetrievalService:
                             encrypted_doc = results["documents"][0][idx] if results.get("documents") else ""
                             meta = results["metadatas"][0][idx] if results.get("metadatas") else {}
 
+                            # 🟢 Positional arguments fix for decrypt_text_string
                             decrypted_text = decrypt_text_string(
-                                ciphertext_b64=encrypted_doc,
-                                workspace_id=workspace_id
+                                encrypted_doc,
+                                workspace_id
                             )
 
                             all_recovered_chunks.append({
