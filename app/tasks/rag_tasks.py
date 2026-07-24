@@ -20,6 +20,7 @@ from app.services.extraction_service import (
 )
 from app.services.plan_validator import validate_and_sanitize_ingestion_plan
 from app.services.chunk_engine import ChunkEngine
+import pdfplumber
 
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
@@ -91,17 +92,49 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        # 3. Extract Full Raw Text Content String
+        # 3. Extract Full Raw Text Content String with Robust Fallbacks
         extracted_text = ""
         if doc.mime_type == "text/plain":
             extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
         elif doc.mime_type == "application/pdf":
             pdf_stream = io.BytesIO(raw_file_bytes)
-            reader = PdfReader(pdf_stream)
-            extracted_text = " ".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            
+            # Attempt 1: Standard pypdf extraction
+            try:
+                reader = PdfReader(pdf_stream)
+                extracted_text = " ".join([page.extract_text() for page in reader.pages if page and page.extract_text()])
+            except Exception as e:
+                print(f"⚠️ pypdf extraction warning: {e}")
+
+            # Attempt 2: Fallback to layout mode or pdfplumber if pypdf returns empty for browser-printed layouts
+            if not extracted_text.strip():
+                print("🔄 Standard extraction yielded empty text. Trying layout-aware extraction mode...")
+                try:
+                    pdf_stream.seek(0)
+                    reader = PdfReader(pdf_stream)
+                    extracted_text = " ".join([page.extract_text(extraction_mode="layout") for page in reader.pages if page])
+                except Exception as layout_err:
+                    print(f"⚠️ Layout extraction warning: {layout_err}")
+
+            # Attempt 3: Ultimate fallback using pdfplumber if installed for complex tables/grids
+            if not extracted_text.strip():
+                try:
+                    import pdfplumber
+                    pdf_stream.seek(0)
+                    with pdfplumber.open(pdf_stream) as pdf:
+                        plumber_text_parts = []
+                        for page in pdf.pages:
+                            txt = page.extract_text(layout=True)
+                            if txt:
+                                plumber_text_parts.append(txt)
+                        extracted_text = " ".join(plumber_text_parts)
+                except ImportError:
+                    pass
+                except Exception as plumber_err:
+                    print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
             
         if not extracted_text.strip():
-            raise ValueError("Zero human-readable text contents could be extracted from this asset resource.")
+            raise ValueError("Zero human-readable text contents could be extracted from this asset resource. The PDF may be a flat image scan requiring OCR.")
 
         # =====================================================================
         # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
