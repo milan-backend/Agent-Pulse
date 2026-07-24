@@ -1,7 +1,6 @@
 import uuid
 import re
 from typing import List, Dict, Any, Optional
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from app.models.uploaded_document import UploadedDocument
 
@@ -18,10 +17,8 @@ class RegistryFilterService:
         expanded_search_keywords: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Registry Filter Service - Advanced Scoring & Ranking Engine (Relevance-First)
-        Evolves the registry from static database filtering to a semantic ranking system.
+        Registry Filter Service - Advanced Scoring & Ranking Engine (Relevance & Recency Balanced)
         """
-        # 🔍 LIVE LOG DEBUGGING
         print("==================================================")
         print(f"DEBUG - current_workspace_id: {workspace_id}")
         print(f"DEBUG - target_departments  : {target_departments}")
@@ -31,7 +28,7 @@ class RegistryFilterService:
         print(f"DEBUG - expanded_keywords   : {expanded_search_keywords}")
         print("==================================================")
 
-        # Phase 1: Workspace Isolation, Ready status, and excluding Archived
+        # Phase 1: Workspace Isolation, Ready status
         query = db.query(UploadedDocument).filter(
             UploadedDocument.workspace_id == uuid.UUID(workspace_id),
             UploadedDocument.status == "ready",
@@ -40,7 +37,7 @@ class RegistryFilterService:
         
         all_workspace_docs = query.all()
         
-        # 🎯 IMPROVEMENT 2: Tokenize and combine raw prompt AND expanded keywords
+        # Tokenize user prompt and expanded search keywords
         search_tokens = set()
         if user_prompt:
             search_tokens.update(re.findall(r'\b\w{3,}\b', user_prompt.lower()))
@@ -55,10 +52,30 @@ class RegistryFilterService:
         # Phase 2: Compute Multi-Attribute Relevance Score
         for doc in all_workspace_docs:
             meta_blob = doc.knowledge_metadata or {}
-            retrieval_keywords = meta_blob.get("retrieval_keywords", [])
-            doc_topics = doc.topics if isinstance(doc.topics, list) else []
-            doc_departments = doc.departments if isinstance(doc.departments, list) else []
             
+            # 🟢 FIX 1: Read keywords from dynamic_metadata JSON array as well
+            raw_dynamic_meta = meta_blob.get("dynamic_metadata", [])
+            retrieval_keywords = []
+            
+            if isinstance(raw_dynamic_meta, list):
+                for item in raw_dynamic_meta:
+                    if isinstance(item, dict):
+                        retrieval_keywords.append(str(item.get("value", "")))
+                    elif isinstance(item, str):
+                        retrieval_keywords.append(item)
+            
+            # Fallback checks
+            retrieval_keywords.extend(meta_blob.get("global_retrieval_keywords", []))
+            
+            # 🟢 FIX 2: Safely read departments & topics from both root columns and JSON
+            doc_departments = doc.departments if isinstance(doc.departments, list) and doc.departments else []
+            doc_topics = doc.topics if isinstance(doc.topics, list) and doc.topics else []
+            
+            # Also read from JSON profile if available
+            doc_profile = meta_blob.get("document_profile", {})
+            if doc_profile.get("document_type"):
+                doc_topics.append(doc_profile.get("document_type"))
+
             relevance_score = 0.0
             
             # 1. Soft Department Match (+20)
@@ -69,74 +86,74 @@ class RegistryFilterService:
                 if matched_depts:
                     relevance_score += 20.0
                     
-            # 2. 🎯 IMPROVEMENT 3: Tokenized Topic Overlap Match (+20 max)
-            if intent_document_type and doc_topics:
-                # Tokenize the intent document type/topic target
-                intent_topic_tokens = set(re.findall(r'\b\w{3,}\b', intent_document_type.lower()))
-                # Tokenize all document topics stored in the registry
-                doc_topic_tokens = set()
-                for topic in doc_topics:
-                    doc_topic_tokens.update(re.findall(r'\b\w{3,}\b', str(topic).lower()))
-                
-                matched_topics = intent_topic_tokens.intersection(doc_topic_tokens)
-                if matched_topics:
-                    # Provide +5 per token match up to +20 points
-                    relevance_score += min(len(matched_topics) * 5.0, 20.0)
-                    
+            # 2. Tokenized Topic / Document Type Overlap Match (+25 max)
+            clean_intent_doc_type = (intent_document_type or "").lower()
+            clean_doc_type = (doc.document_type or "").lower()
+            
+            if clean_intent_doc_type and clean_doc_type:
+                # Direct string containment match
+                if clean_intent_doc_type in clean_doc_type or clean_doc_type in clean_intent_doc_type:
+                    relevance_score += 25.0
+                else:
+                    intent_tokens = set(re.findall(r'\b\w{3,}\b', clean_intent_doc_type))
+                    doc_type_tokens = set(re.findall(r'\b\w{3,}\b', clean_doc_type))
+                    if intent_tokens.intersection(doc_type_tokens):
+                        relevance_score += 15.0
+
             # 3. Soft Role Match (+15)
             if intent_document_role and doc.document_role:
                 if str(doc.document_role).lower().strip() == intent_document_role.lower().strip():
                     relevance_score += 15.0
-                    
-            # 4. Soft Time Match (+15)
-            if intent_time_scope and doc.time_scope:
-                clean_time = intent_time_scope.lower().strip()
-                clean_doc_time = str(doc.time_scope).lower().strip()
-                if clean_time in clean_doc_time or clean_doc_time in clean_time:
-                    if clean_time not in ["universal", "unspecified", "historical"]:
-                        relevance_score += 15.0
                         
-            # 5. 🎯 IMPROVEMENT 2: Soft Retrieval Keyword Overlap (+6 per match, max 30)
-            # Evaluated against both prompt AND expanded strategic concepts
+            # 4. Keyword Overlap (+6 per match, max 30)
             if search_tokens and retrieval_keywords:
-                keyword_intersection = search_tokens.intersection(
-                    set(str(k).lower().strip() for k in retrieval_keywords)
-                )
+                clean_keywords = set(str(k).lower().strip() for k in retrieval_keywords if k)
+                keyword_intersection = search_tokens.intersection(clean_keywords)
                 relevance_score += min(len(keyword_intersection) * 6.0, 30.0)
                 
-            # 6. Planner Summary Similarity Boost (+3 per token match, max 15)
+            # 5. Planner Summary Similarity Boost (+3 per token match, max 20)
             if search_tokens and doc.planner_summary:
                 summary_tokens = set(re.findall(r'\b\w{3,}\b', str(doc.planner_summary).lower()))
                 summary_intersection = search_tokens.intersection(summary_tokens)
                 if summary_intersection:
-                    relevance_score += min(len(summary_intersection) * 3.0, 15.0)
+                    relevance_score += min(len(summary_intersection) * 3.0, 20.0)
 
-            # 7. 🎯 IMPROVEMENT 1: Authority & Importance scaled down to a non-dominating bonus
-            # Combines authority (max 100) and importance (max 100) into a max +20 points bonus
+            # 6. Authority & Importance Bonus
             doc_authority = float(doc.authority_score or 50)
             doc_importance = float(doc.importance_score or 50)
             authority_bonus = (doc_authority + doc_importance) / 10.0
             
-            # 8. Freshness Bonus (Scaled to max 10 points)
+            # Freshness / Approval Bonus
             freshness_bonus = float(doc.freshness or 0.5) * 10.0
-            
-            # Approved Document Baseline Boost (+5)
             approved_bonus = 5.0 if getattr(doc, "approved", False) else 0.0
 
-            # Combined total score
             final_calculated_score = relevance_score + authority_bonus + freshness_bonus + approved_bonus
 
             scored_candidates.append({
                 "doc_obj": doc,
                 "calculated_score": final_calculated_score,
-                "keywords": retrieval_keywords
+                "keywords": retrieval_keywords,
+                "created_at": doc.created_at
             })
             
-        # Phase 3: Sort by calculated score descending and select Top 15 Candidates
-        scored_candidates.sort(key=lambda x: x["calculated_score"], reverse=True)
-        top_candidates = scored_candidates[:15]
+        # Phase 3: Sort by calculated score DESC, fallback to created_at DESC
+        scored_candidates.sort(key=lambda x: (x["calculated_score"], x["created_at"]), reverse=True)
         
-        # 🔍 Debug telemetry loop showing ranking details
+        # 🟢 FIX 3: Guarantee top 3 most recently uploaded files are included in the pool!
+        recent_docs = sorted(all_workspace_docs, key=lambda d: d.created_at, reverse=True)[:3]
+        recent_ids = set(str(d.id) for d in recent_docs)
+
+        top_candidates = scored_candidates[:15]
+        selected_ids = set(str(item["doc_obj"].id) for item in top_candidates)
+
+        # Append missing recent files if pushed out by older high-scoring test files
+        for r_doc in recent_docs:
+            if str(r_doc.id) not in selected_ids:
+                # Find its scored item
+                matched_item = next((item for item in scored_candidates if str(item["doc_obj"].id) == str(r_doc.id)), None)
+                if matched_item:
+                    top_candidates.append(matched_item)
+
         print("--- SCORING-RANKED CANDIDATE ROW DETAILS ---")
         for item in top_candidates:
             d = item["doc_obj"]
@@ -151,7 +168,6 @@ class RegistryFilterService:
         print(f"DEBUG - SQL ROWS RETRIEVED: {len(all_workspace_docs)} | RANKED TOP CANDIDATES RETURNED: {len(top_candidates)}")
         print("==================================================")
         
-        # Serialize into clean dictionary nodes for the Planner AI
         lightweight_candidates = []
         for item in top_candidates:
             doc = item["doc_obj"]
