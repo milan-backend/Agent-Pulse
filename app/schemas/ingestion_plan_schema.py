@@ -9,12 +9,20 @@ class KnowledgeIngestionPlan(BaseModel):
     document_purpose: str = Field(description="Primary business or operational objective of the text")
     summary: str = Field(description="Dense structural overview for retrieval planning")
 
+    # Document Structure Flags (For Planner AI Triage)
+    has_tables: bool = Field(description="True if document contains structured tabular data or grids")
+    has_headings: bool = Field(description="True if document contains clear section headers or titles")
+    is_hierarchical: bool = Field(description="True if document has nested numbered sections (e.g., 1.1, 1.2.3)")
+    contains_policies: bool = Field(description="True if document contains explicit rules, compliance, or regulations")
+    contains_procedures: bool = Field(description="True if document contains step-by-step instructions or workflows")
+    contains_questions: bool = Field(description="True if document is formatted as Q&A, FAQ, or interview style")
+
     # Metadata & Relationships as Clean String Arrays
     metadata: List[str] = Field(
         description="Dynamic metadata items. Format each item strictly as 'Key: Value'. Example: 'Semester: 6'."
     )
     relationships: List[str] = Field(
-        description="Concept relationships. Format each item strictly as 'Source | Relation | Target | Strength'. Example: 'Compiler Design | taught_in | Semester 6 | 0.9'."
+        description="Concept relationships or workflow chains. Format each item strictly as 'Source | Relation/Chain | Target | Strength'. Example: 'Attendance -> Eligibility -> Examination | leads_to | Grade | 0.95'."
     )
 
     # Chunking Recommendation Attributes

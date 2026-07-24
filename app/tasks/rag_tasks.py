@@ -118,7 +118,6 @@ def process_document_embedding(document_id: str):
             
             # --- STEP 2: VALIDATION LAYER ---
             validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
-            print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunk_strategy} | Size: {validated_plan.chunk_size}")
 
             # Parse 'Key: Value' strings into dict objects safely
             parsed_metadata = []
@@ -129,7 +128,7 @@ def process_document_embedding(document_id: str):
                 else:
                     parsed_metadata.append({"key": "Metadata", "value": item.strip()})
 
-            # Parse 'Source | Relation | Target | Strength' strings into dict objects safely
+            # Parse Rich Relationship Chains into dict objects safely
             parsed_relationships = []
             for item in validated_plan.relationships:
                 parts = [p.strip() for p in item.split("|")]
@@ -137,20 +136,48 @@ def process_document_embedding(document_id: str):
                     try:
                         strength_val = float(parts[3])
                     except ValueError:
-                        strength_val = 0.8
+                        strength_val = 0.9
                     parsed_relationships.append({
-                        "source": parts[0],
+                        "chain": parts[0],
                         "relation": parts[1],
                         "target": parts[2],
                         "strength": strength_val
                     })
                 elif len(parts) == 3:
                     parsed_relationships.append({
-                        "source": parts[0],
+                        "chain": parts[0],
                         "relation": parts[1],
                         "target": parts[2],
-                        "strength": 0.8
+                        "strength": 0.9
                     })
+                else:
+                    parsed_relationships.append({"chain": item.strip(), "relation": "relates_to", "target": "Context", "strength": 0.85})
+
+            # --- 📊 RICH DIAGNOSTIC LOG (As requested) ---
+            meta_str = "\n".join([f"   ✓ {m['key']}: {m['value']}" for m in parsed_metadata[:5]]) or "   (None)"
+            rel_str = "\n".join([f"   ✓ {r['chain']}  -->  {r['target']}" for r in parsed_relationships[:5]]) or "   (None)"
+            
+            print(
+                f"\n=======================================================\n"
+                f"📋 KNOWLEDGE INGESTION PLAN DIAGNOSTICS: {doc.filename}\n"
+                f"=======================================================\n"
+                f"📌 Document Type: {validated_plan.document_type}\n"
+                f"💡 Purpose: {validated_plan.document_purpose}\n\n"
+                f"🏗️ Document Structure Traits:\n"
+                f"   - Has Tables: {validated_plan.has_tables}\n"
+                f"   - Has Headings: {validated_plan.has_headings}\n"
+                f"   - Hierarchical: {validated_plan.is_hierarchical}\n"
+                f"   - Contains Policies: {validated_plan.contains_policies}\n"
+                f"   - Contains Procedures: {validated_plan.contains_procedures}\n"
+                f"   - Contains Questions: {validated_plan.contains_questions}\n\n"
+                f"🏷️ Discovered Metadata:\n{meta_str}\n\n"
+                f"🔗 Discovered Concept Chains:\n{rel_str}\n\n"
+                f"⚙️ Recommended Chunk Strategy: {validated_plan.chunk_strategy}\n"
+                f"🎯 Strategy Reasoning: {validated_plan.chunk_reasoning}\n"
+                f"📐 Chunk Size: {validated_plan.chunk_size} | Overlap: {validated_plan.overlap}\n"
+                f"📊 Confidence: {int(validated_plan.chunk_strategy_confidence * 100)}%\n"
+                f"=======================================================\n"
+            )
 
             # Save plan metadata directly to PostgreSQL
             doc.document_type = validated_plan.document_type
@@ -165,6 +192,14 @@ def process_document_embedding(document_id: str):
                     "structure": validated_plan.structure,
                     "document_purpose": validated_plan.document_purpose,
                     "summary": validated_plan.summary
+                },
+                "document_structure": {
+                    "has_tables": validated_plan.has_tables,
+                    "has_headings": validated_plan.has_headings,
+                    "is_hierarchical": validated_plan.is_hierarchical,
+                    "contains_policies": validated_plan.contains_policies,
+                    "contains_procedures": validated_plan.contains_procedures,
+                    "contains_questions": validated_plan.contains_questions
                 },
                 "dynamic_metadata": parsed_metadata,
                 "relationships": parsed_relationships,
