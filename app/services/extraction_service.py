@@ -34,7 +34,7 @@ def run_phase_1_knowledge_extraction(global_text_sample: str, client: genai.Clie
     )
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=f"Analyze the following document context sample and build the KnowledgeIngestionPlan:\n\n{global_text_sample}",
         config={
             "system_instruction": system_instruction,
