@@ -118,7 +118,7 @@ def process_document_embedding(document_id: str):
             
             # --- STEP 2: VALIDATION LAYER ---
             validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
-            print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunking.strategy} | Size: {validated_plan.chunking.chunk_size}")
+            print(f"✅ Ingestion Plan Validated. Strategy: {validated_plan.chunk_strategy} | Size: {validated_plan.chunk_size}")
 
             # Parse 'Key: Value' strings into dict objects safely
             parsed_metadata = []
@@ -259,7 +259,8 @@ def process_document_embedding(document_id: str):
                 "agent_id": str(doc.agent_id) if doc.agent_id else "None",
                 "document_id": str(doc.id),
                 "source_file": str(chunk_payload["source_file"]),          
-                "page_number": int(chunk_payload["page_number"]),          
+                "page_number": int(chunk_payload.get("page_number", 1)),
+                "strategy_used": str(chunk_payload.get("strategy_used", "Standard")),         
                 "last_updated": current_timestamp_iso,                    
                 "uploaded_by": uploader_email                              
             })
