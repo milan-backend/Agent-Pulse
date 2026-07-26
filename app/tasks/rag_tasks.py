@@ -325,13 +325,13 @@ def process_document_embedding(document_id: str):
             except Exception:
                 try:
                     vector_response = ai_client.models.embed_content(
-                        model="text-embedding-004",
+                        model="text-embedding-001",
                         contents=plain_text_content
                     )
                     raw_vector_array = vector_response.embeddings[0].values
                 except Exception:
                     vector_response = ai_client.models.embed_content(
-                        model="text-embedding-005",
+                        model="text-embedding-004",
                         contents=plain_text_content
                     )
                     raw_vector_array = vector_response.embeddings[0].values
