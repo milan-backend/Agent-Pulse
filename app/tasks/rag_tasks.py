@@ -316,25 +316,16 @@ def process_document_embedding(document_id: str):
             chunk_id = f"{doc.id}_chunk_{index}"
             raw_vector_array = None
             
-            try:
-                vector_response = ai_client.models.embed_content(
-                    model="gemini-embedding-2",
-                    contents=plain_text_content
-                )
-                raw_vector_array = vector_response.embeddings[0].values
-            except Exception:
+            for model_name in ["text-embedding-004", "gemini-embedding-001"]:
                 try:
                     vector_response = ai_client.models.embed_content(
-                        model="text-embedding-001",
+                        model=model_name,
                         contents=plain_text_content
                     )
                     raw_vector_array = vector_response.embeddings[0].values
+                    break
                 except Exception:
-                    vector_response = ai_client.models.embed_content(
-                        model="text-embedding-004",
-                        contents=plain_text_content
-                    )
-                    raw_vector_array = vector_response.embeddings[0].values
+                    continue
 
             embeddings.append(raw_vector_array)
             masked_payload_string = encrypt_text_string(plain_text=plain_text_content, workspace_id=doc.workspace_id)
