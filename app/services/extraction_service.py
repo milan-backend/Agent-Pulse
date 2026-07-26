@@ -13,6 +13,25 @@ def get_intelligence_client() -> genai.Client:
     return genai.Client(api_key=gemini_key)
 
 
+def get_multi_zone_sample(full_text: str, max_chars: int = 40000) -> str:
+    """
+    Intelligently samples text across the entire document (Beginning, Middle, and End)
+    to prevent blind spots in massive files while staying within token limits.
+    """
+    if not full_text or len(full_text) <= max_chars:
+        return full_text
+        
+    third = max_chars // 3
+    length = len(full_text)
+    
+    start_snippet = full_text[:third]
+    mid_start = (length // 2) - (third // 2)
+    mid_snippet = full_text[mid_start:mid_start + third]
+    end_snippet = full_text[length - third:]
+    
+    return f"--- [DOCUMENT BEGINNING / TOC] ---\n{start_snippet}\n\n--- [DOCUMENT MIDDLE SECTION] ---\n{mid_snippet}\n\n--- [DOCUMENT ENDING / CONCLUSION] ---\n{end_snippet}"
+
+
 def run_phase_1_knowledge_extraction(global_text_sample: str, client: genai.Client) -> KnowledgeIngestionPlan:
     """
     Phase 1 Extraction AI: Analyzes document structure, discovers dynamic metadata,

@@ -158,7 +158,10 @@ def process_document_embedding(document_id: str):
         # =====================================================================
         try:
             print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
-            global_sample_window = extracted_text[:40000]
+            
+            # 🚀 Use multi-zone sampling to capture Beginning, Middle, and End of large PDFs
+            from app.services.extraction_service import get_multi_zone_sample
+            global_sample_window = get_multi_zone_sample(extracted_text, max_chars=40000)
             
             intelligence_client = get_intelligence_client()
             
@@ -350,17 +353,27 @@ def process_document_embedding(document_id: str):
                 "uploaded_by": uploader_email                              
             })
             
+        # 🚀 BATCHED INSERTION LOOP TO PREVENT DATABASE & VECTOR MEMORY OVERLOAD
+        BATCH_SIZE = 50
         if ids:
-            collection.add(
-                ids=ids,
-                embeddings=embeddings,
-                documents=documents,
-                metadatas=metadatas
-            )
+            for i in range(0, len(ids), BATCH_SIZE):
+                batch_ids = ids[i:i + BATCH_SIZE]
+                batch_embeddings = embeddings[i:i + BATCH_SIZE]
+                batch_documents = documents[i:i + BATCH_SIZE]
+                batch_metadatas = metadatas[i:i + BATCH_SIZE]
+                
+                collection.add(
+                    ids=batch_ids,
+                    embeddings=batch_embeddings,
+                    documents=batch_documents,
+                    metadatas=batch_metadatas
+                )
+                # Incremental commit to keep connection sessions healthy and light
+                db.commit()
             
         doc.status = "ready"
         db.commit()
-        print(f"🚀 Success: Cloud server ingestion complete for '{doc.filename}'. Loaded {len(ids)} chunks.")
+        print(f"🚀 Success: Cloud server batched ingestion complete for '{doc.filename}'. Loaded {len(ids)} chunks safely.")
         return True
         
     except Exception as error:
