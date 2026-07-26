@@ -159,3 +159,4 @@ seed_new_plans.py
 check_plans.py
 migrate_version.py
 check_docs.py
+force_cleanup.py

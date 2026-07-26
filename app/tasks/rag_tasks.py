@@ -322,10 +322,20 @@ def process_document_embedding(document_id: str):
                         model=model_name,
                         contents=plain_text_content
                     )
-                    raw_vector_array = vector_response.embeddings[0].values
-                    break
+                    candidate = vector_response.embeddings[0].values
+                    # Validate vector is a proper list/array and contains no NaN values
+                    import math
+                    if candidate and isinstance(candidate, (list, tuple)) and len(candidate) > 0:
+                        if not any(math.isnan(x) for x in candidate if isinstance(x, (int, float))):
+                            raw_vector_array = candidate
+                            break
                 except Exception:
                     continue
+
+            # Skip chunk entirely if embedding generation failed or returned NaN
+            if not raw_vector_array:
+                print(f"⚠️ Warning: Skipping chunk {index} due to invalid or null embedding response.")
+                continue
 
             embeddings.append(raw_vector_array)
             masked_payload_string = encrypt_text_string(plain_text=plain_text_content, workspace_id=doc.workspace_id)
