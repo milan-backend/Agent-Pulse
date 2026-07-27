@@ -37,21 +37,25 @@ class RetrievalService:
         self.ai_client = genai.Client(api_key=gemini_api_key)
 
     def _get_query_embedding(self, text: str) -> List[float]:
-        """Generates query embedding matching the vector database model standard."""
-        embedding_models = ["text-embedding-004", "gemini-embedding-001", "text-embedding-005"]
-        
-        for model_name in embedding_models:
+        try:
+            res = self.ai_client.models.embed_content(
+                model="gemini-embedding-2",
+                contents=text
+            )
+            return res.embeddings[0].values
+        except Exception:
             try:
                 res = self.ai_client.models.embed_content(
-                    model=model_name,
+                    model="text-embedding-004",
                     contents=text
                 )
-                if res and res.embeddings and res.embeddings[0].values:
-                    return res.embeddings[0].values
-            except Exception as e:
-                continue
-                
-        raise ValueError(f"CRITICAL: Failed to generate query embedding for text using models: {embedding_models}")
+                return res.embeddings[0].values
+            except Exception:
+                res = self.ai_client.models.embed_content(
+                    model="text-embedding-005",
+                    contents=text
+                )
+                return res.embeddings[0].values
 
     def execute_hybrid_retrieval(
         self, 
@@ -65,28 +69,21 @@ class RetrievalService:
         if not target_doc_ids:
             return []
 
-        # 🟢 Ensure all target IDs are strictly cleaned strings to prevent ChromaDB filter drops
-        clean_doc_ids = [str(d) for d in target_doc_ids if d]
-        if not clean_doc_ids:
-            return []
-
         queries_to_run = search_queries[:2] if search_queries else [""]
 
-        # 🟢 Robust where filter construction matching ChromaDB string metadata
-        if len(clean_doc_ids) == 1:
-            where_filter = {
+        where_filter = (
+            {
                 "$and": [
                     {"workspace_id": str(workspace_id)},
-                    {"document_id": clean_doc_ids[0]}
+                    {"document_id": {"$in": [str(d) for d in target_doc_ids]}}
                 ]
-            }
-        else:
-            where_filter = {
+            } if len(target_doc_ids) > 1 else {
                 "$and": [
                     {"workspace_id": str(workspace_id)},
-                    {"document_id": {"$in": clean_doc_ids}}
+                    {"document_id": str(target_doc_ids[0])}
                 ]
             }
+        )
 
         all_recovered_chunks = []
         seen_chunk_ids = set()
