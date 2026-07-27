@@ -1,7 +1,8 @@
 import os
 from google import genai
 
-# 🟢 SINGLE SOURCE OF TRUTH: Import Root Pydantic Schema for Ingestion Plan
+# 🟢 1. Import your smart sampler module
+from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
 
 
@@ -13,31 +14,23 @@ def get_intelligence_client() -> genai.Client:
     return genai.Client(api_key=gemini_key)
 
 
-def get_multi_zone_sample(full_text: str, max_chars: int = 40000) -> str:
+def run_phase_1_knowledge_extraction(extracted_text: str, client: genai.Client) -> KnowledgeIngestionPlan:
     """
-    Intelligently samples text across the entire document (Beginning, Middle, and End)
-    to prevent blind spots in massive files while staying within token limits.
+    Phase 1 Extraction AI: Runs local deterministic page inspection, builds a smart 
+    token-budgeted sample window, and queries Gemini for the KnowledgeIngestionPlan.
     """
-    if not full_text or len(full_text) <= max_chars:
-        return full_text
-        
-    third = max_chars // 3
-    length = len(full_text)
-    
-    start_snippet = full_text[:third]
-    mid_start = (length // 2) - (third // 2)
-    mid_snippet = full_text[mid_start:mid_start + third]
-    end_snippet = full_text[length - third:]
-    
-    return f"--- [DOCUMENT BEGINNING / TOC] ---\n{start_snippet}\n\n--- [DOCUMENT MIDDLE SECTION] ---\n{mid_snippet}\n\n--- [DOCUMENT ENDING / CONCLUSION] ---\n{end_snippet}"
+    # 🟢 2. Split text into pages locally (zero LLM tokens)
+    pages_list = extracted_text.split("\f")
+    if len(pages_list) <= 1:
+        pages_list = [extracted_text[i:i+3000] for i in range(0, len(extracted_text), 3000)]
 
+    # 🟢 3. Run local code analysis on structural metrics
+    doc_stats = analyze_pdf_structure(pages_list)
+    print(f"📊 Deterministic PDF Inspector Stats: {doc_stats}")
 
-def run_phase_1_knowledge_extraction(global_text_sample: str, client: genai.Client) -> KnowledgeIngestionPlan:
-    """
-    Phase 1 Extraction AI: Analyzes document structure, discovers dynamic metadata,
-    extracts concept relationships with numeric strength scores (0.0 to 1.0), and 
-    recommends an optimal chunking strategy to produce the KnowledgeIngestionPlan.
-    """
+    # 🟢 4. Build smart sample under strict token budget
+    global_text_sample = select_intelligent_pages(pages_list, max_token_budget=8000)
+
     system_instruction = (
         "You are the Core Computational Extraction AI for the AgentPulse Ingestion Pipeline.\n\n"
         "🎯 RESPONSIBILITY:\n"

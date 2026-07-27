@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.uploaded_document import UploadedDocument
 from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
+from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 
 # 🟢 IMPORT NEW INGESTION PIPELINE COMPONENTS (Phase 1 & Phase 2)
 from app.services.extraction_service import (
@@ -153,21 +154,18 @@ def process_document_embedding(document_id: str):
         if not extracted_text.strip():
             raise ValueError("Zero human-readable text contents could be extracted even after OCR processing.")
         
-        # =====================================================================
+            
+         # =====================================================================
         # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
         # =====================================================================
         try:
             print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
             
-            # 🚀 Use multi-zone sampling to capture Beginning, Middle, and End of large PDFs
-            from app.services.extraction_service import get_multi_zone_sample
-            global_sample_window = get_multi_zone_sample(extracted_text, max_chars=40000)
-            
             intelligence_client = get_intelligence_client()
             
-            # --- STEP 1: EXTRACTION AI (Phase 1) ---
+            # --- STEP 1: EXTRACTION AI (Phase 1 - handles local inspection & smart sampling internally) ---
             print(f"📡 Generating Knowledge Ingestion Plan for: {doc.filename}")
-            raw_ingestion_plan = run_phase_1_knowledge_extraction(global_sample_window, intelligence_client)
+            raw_ingestion_plan = run_phase_1_knowledge_extraction(extracted_text, intelligence_client)
             
             # --- STEP 2: VALIDATION LAYER ---
             validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
