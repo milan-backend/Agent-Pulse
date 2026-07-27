@@ -38,10 +38,13 @@ def run_phase_1_knowledge_extraction(extracted_text: str, client: genai.Client) 
         "Do NOT chunk the document. Do NOT create vector embeddings. Focus strictly on understanding structure, "
         "discovering dynamic key-value metadata, identifying concept relationships with strength scores (0.0 to 1.0), "
         "and recommending an optimal chunking strategy.\n\n"
+        "📌 CRITICAL REQUIREMENT FOR SUMMARY:\n"
+        "In the document summary and questions_this_document_can_answer list, explicitly mention key schemes, fellowships, "
+        "chapters, or specific financial programs present in the sample so the retrieval planner can easily match them.\n\n"
         "⚠️ CONSTRAINTS & ALLOWED VALUES:\n"
         "- Chunking strategy MUST be one of: ['Section Based', 'Heading Based', 'Paragraph Based', 'Question Answer', 'Page Based', 'Semantic']\n"
-        "- Recommended chunk_size MUST be between 500 and 1500.\n"
-        "- Recommended overlap MUST be between 50 and 300.\n"
+        "- Recommended chunk_size MUST be between 400 and 1000.\n"
+        "- Recommended overlap MUST be between 100 and 200.\n"
         "- Limit dynamic metadata key-value pairs to a maximum of 10 highly relevant items."
     )
 
