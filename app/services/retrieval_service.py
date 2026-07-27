@@ -65,21 +65,28 @@ class RetrievalService:
         if not target_doc_ids:
             return []
 
+        # 🟢 Ensure all target IDs are strictly cleaned strings to prevent ChromaDB filter drops
+        clean_doc_ids = [str(d) for d in target_doc_ids if d]
+        if not clean_doc_ids:
+            return []
+
         queries_to_run = search_queries[:2] if search_queries else [""]
 
-        where_filter = (
-            {
+        # 🟢 Robust where filter construction matching ChromaDB string metadata
+        if len(clean_doc_ids) == 1:
+            where_filter = {
                 "$and": [
                     {"workspace_id": str(workspace_id)},
-                    {"document_id": {"$in": [str(d) for d in target_doc_ids]}}
-                ]
-            } if len(target_doc_ids) > 1 else {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"document_id": str(target_doc_ids[0])}
+                    {"document_id": clean_doc_ids[0]}
                 ]
             }
-        )
+        else:
+            where_filter = {
+                "$and": [
+                    {"workspace_id": str(workspace_id)},
+                    {"document_id": {"$in": clean_doc_ids}}
+                ]
+            }
 
         all_recovered_chunks = []
         seen_chunk_ids = set()
