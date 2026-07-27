@@ -59,6 +59,19 @@ class ChunkEngine:
             if not sec_words:
                 continue
 
+            # If an individual section is larger than chunk_size, run a sliding window on it directly!
+            if len(sec_words) > self.chunk_size:
+                if current_chunk_words:
+                    chunks.append({
+                        "text": " ".join(current_chunk_words),
+                        "source_file": source_filename,
+                        "strategy_used": "Section Based"
+                    })
+                    current_chunk_words = []
+                sub_chunks = self._chunk_by_sliding_window(" ".join(sec_words), source_filename)
+                chunks.extend(sub_chunks)
+                continue
+
             if len(current_chunk_words) + len(sec_words) <= self.chunk_size:
                 current_chunk_words.extend(sec_words)
             else:
@@ -68,6 +81,7 @@ class ChunkEngine:
                         "source_file": source_filename,
                         "strategy_used": "Section Based"
                     })
+                # Keep an overlap buffer from the previous section if desired, or start fresh
                 current_chunk_words = sec_words
 
         if current_chunk_words:
