@@ -37,25 +37,21 @@ class RetrievalService:
         self.ai_client = genai.Client(api_key=gemini_api_key)
 
     def _get_query_embedding(self, text: str) -> List[float]:
-        try:
-            res = self.ai_client.models.embed_content(
-                model="gemini-embedding-2",
-                contents=text
-            )
-            return res.embeddings[0].values
-        except Exception:
+        """Generates query embedding matching the vector database model standard."""
+        embedding_models = ["text-embedding-004", "gemini-embedding-001", "text-embedding-005"]
+        
+        for model_name in embedding_models:
             try:
                 res = self.ai_client.models.embed_content(
-                    model="text-embedding-004",
+                    model=model_name,
                     contents=text
                 )
-                return res.embeddings[0].values
-            except Exception:
-                res = self.ai_client.models.embed_content(
-                    model="text-embedding-005",
-                    contents=text
-                )
-                return res.embeddings[0].values
+                if res and res.embeddings and res.embeddings[0].values:
+                    return res.embeddings[0].values
+            except Exception as e:
+                continue
+                
+        raise ValueError(f"CRITICAL: Failed to generate query embedding for text using models: {embedding_models}")
 
     def execute_hybrid_retrieval(
         self, 
