@@ -204,26 +204,37 @@ def process_document_embedding(document_id: str):
                 source_filename=source_filename
             )
             
-            # --- STEP 6: KNOWLEDGE ENRICHMENT AI (Gemini Call #2 - Component 6) ---
-            print(f"✨ Enriching {len(bounded_chunks_pool)} bounded chunks with semantic metadata...")
+            # --- STEP 6: KNOWLEDGE ENRICHMENT AI (Batched Execution) ---
+            print(f"✨ Enriching {len(bounded_chunks_pool)} bounded chunks in batches...")
             from app.services.extraction_service import ExtractionService
-            enrichment_service = ExtractionService()
+            import time
             
+            enrichment_service = ExtractionService()
             processed_chunks_pool = []
-            for chunk_data in bounded_chunks_pool:
-                enriched_chunk = enrichment_service.enrich_chunk(chunk_data)
-                # Map back to the keys expected by the vector embedding loop below
-                processed_chunks_pool.append({
-                    "text": f"Topic: {enriched_chunk.get('topic')} > Subtopic: {enriched_chunk.get('subtopic')}\nSummary: {enriched_chunk.get('enrichment', {}).get('summary', '')}\nContent: {enriched_chunk.get('chunk_text')}",
-                    "source_file": enriched_chunk.get('source_file'),
-                    "page_number": enriched_chunk.get('page_start', 1),
-                    "strategy_used": enriched_chunk.get('strategy_used'),
-                    "navigation_node": enriched_chunk.get('navigation_node'),
-                    "topic": enriched_chunk.get('topic'),
-                    "subtopic": enriched_chunk.get('subtopic')
-                })
+            
+            # Define batch size (e.g., 5 chunks per Gemini API request)
+            BATCH_SIZE = 5
+            for i in range(0, len(bounded_chunks_pool), BATCH_SIZE):
+                batch_slice = bounded_chunks_pool[i:i + BATCH_SIZE]
+                
+                # Call batch enrichment
+                enriched_batch = enrichment_service.enrich_chunks_batch(batch_slice)
+                
+                for enriched_chunk in enriched_batch:
+                    processed_chunks_pool.append({
+                        "text": f"Topic: {enriched_chunk.get('topic')} > Subtopic: {enriched_chunk.get('subtopic')}\nSummary: {enriched_chunk.get('enrichment', {}).get('summary', '')}\nContent: {enriched_chunk.get('chunk_text')}",
+                        "source_file": enriched_chunk.get('source_file'),
+                        "page_number": enriched_chunk.get('page_start', 1),
+                        "strategy_used": enriched_chunk.get('strategy_used'),
+                        "navigation_node": enriched_chunk.get('navigation_node'),
+                        "topic": enriched_chunk.get('topic'),
+                        "subtopic": enriched_chunk.get('subtopic')
+                    })
+                
+                # Brief polite pause between batches to prevent 503 Overload/Rate Limits
+                time.sleep(0.5)
 
-            print(f"🟢 V2 Pipeline complete. Generated {len(processed_chunks_pool)} enriched bounded chunks.")
+            print(f"🟢 V2 Pipeline complete. Generated {len(processed_chunks_pool)} enriched bounded chunks safely.")
 
         except Exception as pipeline_err:
             db.rollback()
