@@ -1,4 +1,5 @@
 import os
+import json
 from google import genai
 from typing import Dict, Any
 
@@ -20,13 +21,12 @@ class NavigationAI:
         system_instruction = (
             "You are the Core Navigation Architect for AgentPulse V2.\n"
             "Your ONLY responsibility is to analyze the provided Document DNA and output a clean, "
-            "hierarchical navigation map consisting of major nodes, titles, exact page ranges, and subtopics.\n"
-            "Do NOT create chunks, extract entities, or summarize content. Build the structural roadmap only."
+            "hierarchical navigation map consisting of major nodes, titles, exact page ranges, and subtopics in valid JSON format.\n"
+            "Ensure the JSON structure contains a 'navigation' array where each object has 'node_id', 'title' (or 'topic'), 'pages' (or 'page_range'), and 'subtopics'."
         )
 
         prompt = f"Construct the hierarchical Navigation Map for this document DNA:\n\n{document_dna}"
 
-        # Using standard lightweight Gemini model for fast structured generation
         response = self.client.models.generate_content(
             model="gemini-2.5-flash-lite",
             contents=prompt,
@@ -37,7 +37,11 @@ class NavigationAI:
             }
         )
 
-        import json
+        # 🟢 DEBUG PRINT: Log raw response from Gemini to check what structure it built
+        print(f"========== NAVIGATION AI RAW RESPONSE ==========")
+        print(response.text)
+        print("==================================================")
+
         try:
             return json.loads(response.text)
         except Exception as e:
