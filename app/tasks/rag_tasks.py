@@ -15,11 +15,7 @@ from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 
 # 🟢 IMPORT NEW INGESTION PIPELINE COMPONENTS (Phase 1 & Phase 2)
-from app.services.extraction_service import (
-    get_intelligence_client,
-    run_phase_1_knowledge_extraction
-)
-from app.services.plan_validator import validate_and_sanitize_ingestion_plan
+from app.services.extraction_service import ExtractionService, get_intelligence_client
 from app.services.chunk_engine import ChunkEngine
 import pdfplumber
 
