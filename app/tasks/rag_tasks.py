@@ -160,11 +160,31 @@ def process_document_embedding(document_id: str):
             intelligence_client = get_intelligence_client()
             source_filename = doc.filename
 
-            # --- STEP 1: DOCUMENT ANALYZER (Pure Python - Component 1) ---
+            # --- STEP 1: DOCUMENT ANALYZER (Pure Python - Component 1) --
             print(f"📊 Analyzing document structure page-by-page for: {source_filename}")
             from app.services.document_analyzer import DocumentAnalyzer
             analyzer = DocumentAnalyzer()
             analyzed_pages = analyzer.analyze_document(extracted_text, source_filename)
+
+            # 🟢 BULLETPROOF RUNTIME PATCH: Guarantee required keys exist on every page dictionary
+            cleaned_analyzed_pages = []
+            for p_idx, page_obj in enumerate(analyzed_pages, 1):
+                if not isinstance(page_obj, dict):
+                    page_obj = {"page_number": p_idx, "raw_snippet": str(page_obj)}
+                
+                # Force-inject fallback keys so a KeyError is physically impossible
+                if "headings" not in page_obj or not page_obj["headings"]:
+                    page_obj["headings"] = [f"Section {p_idx}"]
+                if "numbering_schemes" not in page_obj:
+                    page_obj["numbering_schemes"] = page_obj.get("numberings", [])
+                if "page_number" not in page_obj:
+                    page_obj["page_number"] = page_obj.get("page", p_idx)
+                if "raw_snippet" not in page_obj:
+                    page_obj["raw_snippet"] = ""
+                    
+                cleaned_analyzed_pages.append(page_obj)
+            
+            analyzed_pages = cleaned_analyzed_pages
 
             # --- STEP 2: TOPIC BOUNDARY DETECTOR (Pure Python - Component 2) ---
             from app.services.boundary_detector import TopicBoundaryDetector
