@@ -28,9 +28,15 @@ class ChunkEngine:
 
         for node in navigation_nodes:
             node_id = node.get("node_id", "N_UNKNOWN")
-            topic_title = node.get("title", "General")
-            page_range = node.get("pages", [1, len(pages_list)])
+            
+            # 🟢 ROBUST FALLBACKS: Support both 'title'/'topic' and 'pages'/'page_range' keys from Gemini
+            topic_title = node.get("title") or node.get("topic") or "General"
+            page_range = node.get("pages") or node.get("page_range") or [1, len(pages_list)]
             subtopics = node.get("subtopics", [])
+
+            # Ensure page_range is formatted correctly as a list/tuple of two integers
+            if not isinstance(page_range, list) or len(page_range) < 2:
+                page_range = [1, len(pages_list)]
 
             # Slice text strictly within this navigation node's page range
             start_p = max(1, page_range[0]) - 1
