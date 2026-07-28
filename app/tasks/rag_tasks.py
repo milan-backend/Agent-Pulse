@@ -212,26 +212,26 @@ def process_document_embedding(document_id: str):
             enrichment_service = ExtractionService()
             processed_chunks_pool = []
             
-            # Define batch size (e.g., 5 chunks per Gemini API request)
             BATCH_SIZE = 5
             for i in range(0, len(bounded_chunks_pool), BATCH_SIZE):
                 batch_slice = bounded_chunks_pool[i:i + BATCH_SIZE]
-                
-                # Call batch enrichment
                 enriched_batch = enrichment_service.enrich_chunks_batch(batch_slice)
                 
                 for enriched_chunk in enriched_batch:
                     processed_chunks_pool.append({
-                        "text": f"Topic: {enriched_chunk.get('topic')} > Subtopic: {enriched_chunk.get('subtopic')}\nSummary: {enriched_chunk.get('enrichment', {}).get('summary', '')}\nContent: {enriched_chunk.get('chunk_text')}",
+                        # 🟢 PROBLEM 5 FIX: Document Embedding uses PURE ORIGINAL TEXT ONLY.
+                        # Summaries/Topics are decoupled into metadata below, NOT prepended to raw text.
+                        "text": enriched_chunk.get('chunk_text'),
                         "source_file": enriched_chunk.get('source_file'),
                         "page_number": enriched_chunk.get('page_start', 1),
+                        "page_end": enriched_chunk.get('page_end', 1),
                         "strategy_used": enriched_chunk.get('strategy_used'),
                         "navigation_node": enriched_chunk.get('navigation_node'),
                         "topic": enriched_chunk.get('topic'),
-                        "subtopic": enriched_chunk.get('subtopic')
+                        "subtopic": enriched_chunk.get('subtopic'),
+                        # 🟢 PROBLEM 6 FIX: Carry over full structured enrichment metadata for vector filters & retrieval search terms
+                        "enrichment": enriched_chunk.get('encryption', enriched_chunk.get('enrichment', {}))
                     })
-                
-                # Brief polite pause between batches to prevent 503 Overload/Rate Limits
                 time.sleep(0.5)
 
             print(f"🟢 V2 Pipeline complete. Generated {len(processed_chunks_pool)} enriched bounded chunks safely.")
@@ -305,9 +305,14 @@ def process_document_embedding(document_id: str):
                 "document_id": str(doc.id),
                 "source_file": str(chunk_payload["source_file"]),          
                 "page_number": int(chunk_payload.get("page_number", 1)),
-                "navigation_node": str(chunk_payload.get("navigation_node", "N_UNKNOWN")), # 🟢 Added for V2 Tree Routing
-                "topic": str(chunk_payload.get("topic", "General")),                     # 🟢 Added for V2 Tree Routing
-                "strategy_used": str(chunk_payload.get("strategy_used", "Standard")),         
+                "page_end": int(chunk_payload.get("page_end", 1)),
+                "navigation_node": str(chunk_payload.get("navigation_node", "N_UNKNOWN")),
+                "topic": str(chunk_payload.get("topic", "General")),
+                "subtopic": str(chunk_payload.get("subtopic", "General")),
+                # 🟢 Leverage Enrichment metadata fields during search evaluation
+                "search_terms": str(chunk_payload.get("enrichment", {}).get("search_terms", [])),
+                "question_patterns": str(chunk_payload.get("enrichment", {}).get("question_patterns", [])),
+                "strategy_used": str(chunk_payload.get("strategy_used", "Semantic")),         
                 "last_updated": current_timestamp_iso,                    
                 "uploaded_by": uploader_email                              
             })

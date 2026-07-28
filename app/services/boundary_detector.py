@@ -1,65 +1,68 @@
 from typing import List, Dict, Any
+import re
 
 class TopicBoundaryDetector:
     """
-    Component 2: Topic Boundary Detector (Pure Python / Deterministic)
-    Groups adjacent analyzed pages into candidate topic blocks using weighted signals.
+    Component 2: Robust Topic Boundary Detector
+    Computes a multi-signal continuity score across pages combining numbering,
+    heading similarity, paragraph flow, and keyword overlap.
     """
-    def __init__(self, heading_weight: float = 0.5, keyword_weight: float = 0.3, length_weight: float = 0.2):
-        self.heading_weight = heading_weight
-        self.keyword_weight = keyword_weight
-        self.length_weight = length_weight
-
     def detect_boundaries(self, analyzed_pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not analyzed_pages:
             return []
 
-        topics = []
-        current_topic_pages = [analyzed_pages[0]["page"]]
-        current_headings = set(analyzed_pages[0]["headings"])
-        current_keywords = set(analyzed_pages[0]["keywords"])
-        
-        topic_counter = 1
+        detected_topics = []
+        current_topic_pages = []
+        current_title = analyzed_pages[0].get("headings", ["Document Introduction"])[0]
+        current_numbering = analyzed_pages[0].get("numbering_schemes", [""])[0]
 
-        for i in range(1, len(analyzed_pages)):
-            prev_page = analyzed_pages[i - 1]
-            curr_page = analyzed_pages[i]
+        prev_page_words = set(analyzed_pages[0].get("raw_snippet", "").lower().split())
 
-            # Compute similarity signals
-            curr_headings = set(curr_page["headings"])
-            curr_keywords = set(curr_page["keywords"])
+        for page in analyzed_pages:
+            page_num = page["page_number"]
+            headings = page.get("headings", [])
+            numberings = page.get("numbering_schemes", [])
+            snippet = page.get("raw_snippet", "")
+            current_page_words = set(snippet.lower().split())
 
-            heading_overlap = len(current_headings.intersection(curr_headings)) / max(1, len(current_headings.union(curr_headings)))
-            keyword_overlap = len(current_keywords.intersection(curr_keywords)) / max(1, len(current_keywords.union(curr_keywords)))
+            # Compute multi-signal continuity metrics
+            has_explicit_heading = bool(headings)
+            numbering_changed = bool(numberings and numberings[0] != current_numbering)
             
-            # Weighted continuity score (0 to 1)
-            continuity_score = (self.heading_weight * heading_overlap) + (self.keyword_weight * keyword_overlap)
+            # Calculate Jaccard keyword overlap similarity with previous page
+            intersection = len(prev_page_words.intersection(current_page_words))
+            union = len(prev_page_words.union(current_page_words))
+            keyword_similarity = intersection / union if union > 0 else 0.0
 
-            # Threshold for splitting a topic (e.g., sharp shift in headings or low keyword overlap)
-            if continuity_score < 0.15 and curr_page["headings"]:
-                # Finalize current topic block
-                topics.append({
-                    "topic_id": f"T{topic_counter:03d}",
-                    "pages": [current_topic_pages[0], current_topic_pages[-1]],
-                    "headings": list(current_headings),
-                    "keywords": list(current_keywords)
+            # Continuity score (0.0 to 1.0 scale where lower means a topic break is likely)
+            continuity_score = 1.0
+            if has_explicit_heading:
+                continuity_score -= 0.4
+            if numbering_changed:
+                continuity_score -= 0.4
+            if keyword_similarity < 0.15:
+                continuity_score -= 0.3
+
+            # Threshold decision: if continuity drops below 0.5, establish a new topic boundary
+            if continuity_score < 0.5 and current_topic_pages:
+                detected_topics.append({
+                    "title": current_title,
+                    "section_number": current_numbering,
+                    "pages": [current_topic_pages[0], current_topic_pages[-1]]
                 })
-                topic_counter += 1
-                current_topic_pages = [curr_page["page"]]
-                current_headings = curr_headings
-                current_keywords = curr_keywords
-            else:
-                current_topic_pages.append(curr_page["page"])
-                current_headings.update(curr_headings)
-                current_keywords.update(curr_keywords)
+                current_topic_pages = []
+                current_title = headings[0] if headings else f"Section on Page {page_num}"
+                current_numbering = numberings[0] if numberings else ""
 
-        # Append remaining pages as the final topic block
+            current_topic_pages.append(page_num)
+            prev_page_words = current_page_words
+
+        # Flush final trailing topic block
         if current_topic_pages:
-            topics.append({
-                "topic_id": f"T{topic_counter:03d}",
-                "pages": [current_topic_pages[0], current_topic_pages[-1]],
-                "headings": list(current_headings),
-                "keywords": list(current_keywords)
+            detected_topics.append({
+                "title": current_title,
+                "section_number": current_numbering,
+                "pages": [current_topic_pages[0], current_topic_pages[-1]]
             })
 
-        return topics
+        return detected_topics

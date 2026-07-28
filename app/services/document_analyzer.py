@@ -3,63 +3,51 @@ from typing import List, Dict, Any
 
 class DocumentAnalyzer:
     """
-    Component 1: Document Analyzer (Pure Python / Deterministic)
-    Extracts structural signals, text blocks, and layout metadata page by page.
+    Component 1: Advanced Document Analyzer
+    Parses structural signals, numbering patterns, layout hierarchies, tables, and lists page-by-page.
     """
-    def __init__(self):
-        pass
-
-    def analyze_document(self, extracted_text: str, source_filename: str) -> List[Dict[str, Any]]:
-        if not extracted_text or not extracted_text.strip():
-            return []
-
-        # Split text into pages by form feed or fallback block segmentation
-        pages_list = extracted_text.split("\f")
-        if len(pages_list) <= 1:
-            pages_list = [extracted_text[i:i+3000] for i in range(0, len(extracted_text), 3000)]
+    def analyze_document(self, full_text: str, filename: str) -> List[Dict[str, Any]]:
+        pages = full_text.split("\f")
+        if len(pages) <= 1:
+            pages = [full_text[i:i+3000] for i in range(0, len(full_text), 3000)]
 
         analyzed_pages = []
+        for idx, page_content in enumerate(pages, 1):
+            lines = [line.strip() for line in page_content.split("\n") if line.strip()]
+            
+            headings = []
+            numbering_schemes = []
+            
+            # 🟢 Structural layout flags
+            has_table = bool(re.search(r'(\t|\s{4,}\|)', page_content)) or page_content.count('|') > 3
+            has_bullets = any(line.startswith(('-', '*', '•')) for line in lines)
+            has_numbered_lists = any(re.match(r'^(\d+[\.\)]|[a-zA-Z][\.\)])\s+', line) for line in lines)
 
-        for idx, page_content in enumerate(pages_list, start=1):
-            cleaned_text = page_content.strip()
-            if not cleaned_text:
-                continue
+            for line in lines:
+                if re.match(r'^(\d+(\.\d+)*)\s+[A-Z]', line) or re.match(r'^(CHAPTER|SECTION|PART)\s+\d+', line, re.IGNORECASE):
+                    headings.append(line)
+                    num_match = re.match(r'^(\d+(\.\d+)*)', line)
+                    if num_match:
+                        numbering_schemes.append(num_match.group(1))
+                elif len(line) < 80 and line.isupper() and len(line.split()) < 10:
+                    headings.append(line)
 
-            # Extract structural signals deterministically
-            headings = self._extract_headings(cleaned_text)
-            keywords = self._extract_keywords(cleaned_text)
-            has_table = bool(re.search(r'(\│|\│|\+|\-{3,}|\|)', cleaned_text))
-            has_bullets = bool(re.search(r'^(\*|\-|\d+\.)\s+', cleaned_text, re.MULTILINE))
-
-            page_metadata = {
-                "page": idx,
-                "text": cleaned_text,
-                "word_count": len(cleaned_text.split()),
+            first_para = lines[0] if lines else ""
+            last_para = lines[-1] if lines else ""
+            
+            analyzed_pages.append({
+                "page_number": idx,
+                "line_count": len(lines),
                 "headings": headings,
-                "keywords": keywords,
+                "numbering_schemes": numbering_schemes,
                 "layout": {
-                    "table": has_table,
-                    "bullets": has_bullets
+                    "has_table": has_table,
+                    "has_bullets": has_bullets,
+                    "has_numbered_lists": has_numbered_lists
                 },
-                "first_paragraph": cleaned_text.split('\n')[0] if '\n' in cleaned_text else cleaned_text[:100],
-                "last_paragraph": cleaned_text.split('\n')[-1] if '\n' in cleaned_text else cleaned_text[-100:]
-            }
-            analyzed_pages.append(page_metadata)
+                "first_paragraph": first_para,
+                "last_paragraph": last_para,
+                "raw_snippet": page_content[:500]
+            })
 
         return analyzed_pages
-
-    def _extract_headings(self, text: str) -> List[str]:
-        # Regex to detect line-based capitalized or numbered headings
-        heading_candidates = re.findall(r'^(?:[A-Z0-9\.\s]{4,}|[0-9]+\.[0-9]*\s+[A-Z].+)$', text, re.MULTILINE)
-        return [h.strip() for h in heading_candidates if len(h.strip()) > 3][:5]
-
-    def _extract_keywords(self, text: str) -> List[str]:
-        # Simple frequency-based keyword extraction avoiding stop words
-        stop_words = {"the", "and", "to", "of", "a", "in", "for", "is", "on", "that", "by", "this", "with", "i", "you", "it"}
-        words = re.findall(r'\b[a-zA-Z]{4,}\b', text.lower())
-        freq: Dict[str, int] = {}
-        for w in words:
-            if w not in stop_words:
-                freq[w] = freq.get(w, 0) + 1
-        sorted_keywords = sorted(freq.items(), key=lambda x: x[1], reverse=True)
-        return [kw[0] for kw in sorted_keywords[:8]]
