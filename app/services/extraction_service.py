@@ -1,62 +1,63 @@
 import os
 from google import genai
-
-# 🟢 1. Import your smart sampler module
-from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
-from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
-
+from typing import Dict, Any
 
 def get_intelligence_client() -> genai.Client:
-    """Initializes and returns the official Google GenAI Client using system environment keys."""
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
-        raise ValueError("CRITICAL RUNTIME ERROR: Neither INTELLIGENCE_LAYER_API_KEY nor GEMINI_API_KEY environment variables are configured.")
+        raise ValueError("CRITICAL RUNTIME ERROR: Missing Gemini API keys for Enrichment AI.")
     return genai.Client(api_key=gemini_key)
 
-
-def run_phase_1_knowledge_extraction(extracted_text: str, client: genai.Client) -> KnowledgeIngestionPlan:
+class KnowledgeEnrichmentService:
     """
-    Phase 1 Extraction AI: Runs local deterministic page inspection, builds a smart 
-    token-budgeted sample window, and queries Gemini for the KnowledgeIngestionPlan.
+    Component 6: Knowledge Enrichment AI (Gemini Call #2)
+    Receives pre-bounded navigation chunks and enriches them with metadata,
+    entities, search hints, and question patterns. Chunking is already finished.
     """
-    # 🟢 2. Split text into pages locally (zero LLM tokens)
-    pages_list = extracted_text.split("\f")
-    if len(pages_list) <= 1:
-        pages_list = [extracted_text[i:i+3000] for i in range(0, len(extracted_text), 3000)]
+    def __init__(self):
+        self.client = get_intelligence_client()
 
-    # 🟢 3. Run local code analysis on structural metrics
-    doc_stats = analyze_pdf_structure(pages_list)
-    print(f"📊 Deterministic PDF Inspector Stats: {doc_stats}")
+    def enrich_chunk(self, chunk_data: Dict[str, Any]) -> Dict[str, Any]:
+        system_instruction = (
+            "You are the Knowledge Enrichment AI for AgentPulse V2.\n"
+            "Chunking and structural boundary mapping are already completed.\n"
+            "Your ONLY responsibility is to analyze the provided chunk text along with its navigation context "
+            "(Topic and Subtopic) and output rich semantic metadata including a summary, entities, keywords, "
+            "question patterns, and search terms in clean JSON format."
+        )
 
-    # 🟢 4. Build smart sample under strict token budget
-    global_text_sample = select_intelligent_pages(pages_list, max_token_budget=8000)
+        prompt = (
+            f"Enrich the following bounded chunk:\n\n"
+            f"Topic: {chunk_data.get('topic')}\n"
+            f"Subtopic: {chunk_data.get('subtopic')}\n"
+            f"Chunk Text:\n{chunk_data.get('chunk_text')}"
+        )
 
-    system_instruction = (
-        "You are the Core Computational Extraction AI for the AgentPulse Ingestion Pipeline.\n\n"
-        "🎯 RESPONSIBILITY:\n"
-        "Analyze the provided document text sample to construct a complete KnowledgeIngestionPlan.\n"
-        "Do NOT chunk the document. Do NOT create vector embeddings. Focus strictly on understanding structure, "
-        "discovering dynamic key-value metadata, identifying concept relationships with strength scores (0.0 to 1.0), "
-        "and recommending an optimal chunking strategy.\n\n"
-        "📌 CRITICAL REQUIREMENT FOR SUMMARY:\n"
-        "In the document summary and questions_this_document_can_answer list, explicitly mention key schemes, fellowships, "
-        "chapters, or specific financial programs present in the sample so the retrieval planner can easily match them.\n\n"
-        "⚠️ CONSTRAINTS & ALLOWED VALUES:\n"
-        "- Chunking strategy MUST be one of: ['Section Based', 'Heading Based', 'Paragraph Based', 'Question Answer', 'Page Based', 'Semantic']\n"
-        "- Recommended chunk_size MUST be between 400 and 1000.\n"
-        "- Recommended overlap MUST be between 100 and 200.\n"
-        "- Limit dynamic metadata key-value pairs to a maximum of 10 highly relevant items."
-    )
+        response = self.client.models.generate_content(
+            model="gemini-2.5-flash-lite",
+            contents=prompt,
+            config={
+                "system_instruction": system_instruction,
+                "response_mime_type": "application/json",
+                "temperature": 0.1
+            }
+        )
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite",
-        contents=f"Analyze the following document context sample and build the KnowledgeIngestionPlan:\n\n{global_text_sample}",
-        config={
-            "system_instruction": system_instruction,
-            "response_mime_type": "application/json",
-            "response_schema": KnowledgeIngestionPlan,
-            "temperature": 0.1
+        import json
+        try:
+            enrichment_metadata = json.loads(response.text)
+        except Exception as e:
+            print(f"⚠️ Enrichment JSON parse warning: {e}")
+            enrichment_metadata = {
+                "summary": chunk_data.get('chunk_text')[:150],
+                "entities": [],
+                "keywords": [],
+                "question_patterns": [],
+                "search_terms": []
+            }
+
+        # Merge original chunk data with the new enrichment metadata
+        return {
+            **chunk_data,
+            "enrichment": enrichment_metadata
         }
-    )
-    
-    return KnowledgeIngestionPlan.model_validate_json(response.text)

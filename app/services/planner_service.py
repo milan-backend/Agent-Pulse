@@ -2,16 +2,19 @@ import os
 import json
 from google import genai
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from app.services.intent_service import IntentAnalysisSchema
 
 # =====================================================================
-# 📊 Pydantic Structural Blueprint For Routing Engine Output
+# Pydantic Structural Blueprint For Routing Engine Output
 # =====================================================================
 
 class RetrievalBlueprintSchema(BaseModel):
     selected_document_ids: List[str] = Field(
         description="UUIDs of the selected documents."
+    )
+    target_navigation_nodes: List[str] = Field(
+        description="Specific V2 navigation node IDs to restrict search scope to (e.g. ['N1', 'N2']). Leave empty if global search across selected docs is required."
     )
     selection_reasons: List[str] = Field(
         description="Reason corresponding to each selected document."
@@ -20,22 +23,22 @@ class RetrievalBlueprintSchema(BaseModel):
         description="Search phrases and concept keywords to query in ChromaDB."
     )
     
-    # 🎯 NEW DEPTH ROUTING BLUEPRINT FIELDS
+    # NEW DEPTH ROUTING BLUEPRINT FIELDS
     relationship_traversal_hops: int = Field(
         description="Number of concept chain relationship hops to retrieve (0 to 3)."
     )
     max_chunks: int = Field(
-        description="Calculated max chunk budget based on query depth (e.g. 3 for Shallow, 6 for Medium, 12 for Deep)."
+        description="Calculated max chunk budget based on query depth."
     )
     prefer_latest: bool = True
     prefer_approved: bool = True
     planner_notes: str = Field(
-        description="Summary of planning rationale including depth and relationship traversal constraints."
+        description="Summary of planning rationale including V2 navigation mapping and depth constraints."
     )
 
 
 # =====================================================================
-# 🧠 The Retrieval Planner AI Execution Service
+# The Retrieval Planner AI Execution Service
 # =====================================================================
 
 def execute_retrieval_planning_triage(
@@ -44,13 +47,13 @@ def execute_retrieval_planning_triage(
     lightweight_candidates: List[dict]
 ) -> RetrievalBlueprintSchema:
     """
-    Component 4: Planner AI (High-Recall Architecture Optimization)
-    Uses structured Intent Analysis (including Depth & Concept Chain constraints) alongside
-    lightweight candidate profiles to produce a depth-controlled Retrieval Blueprint.
+    Component Planner AI: Uses structured Intent Analysis alongside V2 document navigation maps
+    to produce a precision-constrained Retrieval Blueprint.
     """
     if not lightweight_candidates:
         return RetrievalBlueprintSchema(
             selected_document_ids=[],
+            target_navigation_nodes=[],
             selection_reasons=[],
             vector_search_terms=[],
             relationship_traversal_hops=0,
@@ -67,49 +70,40 @@ def execute_retrieval_planning_triage(
     formatted_candidates = []
     for doc in lightweight_candidates:
         meta_blob = doc.get("knowledge_metadata", {}) if isinstance(doc.get("knowledge_metadata"), dict) else {}
-        extracted_keywords = meta_blob.get("global_retrieval_keywords", doc.get("retrieval_keywords", []))
-        concept_chains = meta_blob.get("relationships", [])
+        navigation_map = meta_blob.get("navigation_map", {})
         
         formatted_candidates.append(
-            f"📄 [DOCUMENT ID: {doc['id']}]\n"
+            f"[DOCUMENT ID: {doc['id']}]\n"
             f" - Filename: {doc.get('filename', 'Unknown asset')}\n"
             f" - Type: {doc['document_type']} | Role: {doc['document_role']}\n"
-            f" - Structure Traits: {meta_blob.get('document_structure', {})}\n"
-            f" - Concept Chains Available: {concept_chains[:5]}\n"
+            f" - V2 Navigation Map / Topics: {navigation_map.get('navigation', [])}\n"
             f" - Planner Summary: {doc['planner_summary']}\n"
-            f" - Questions Answered: {doc.get('questions_this_document_can_answer', doc.get('questions', []))}\n"
             f"--------------------------------------------------"
         )
     candidates_context_block = "\n".join(formatted_candidates)
     
     system_instruction = (
-        "You are the Core Director of the AgentPulse Retrieval Planner AI Layer.\n\n"
-        "🎯 MISSION OBJECTIVE:\n"
-        "Construct a high-precision Retrieval Blueprint using Intent Analysis and candidate profiles.\n\n"
-        "📊 DEPTH & CHUNK BUDGET ALLOCATION:\n"
+        "You are the Core Director of the AgentPulse V2 Retrieval Planner AI Layer.\n\n"
+        "MISSION OBJECTIVE:\n"
+        "Construct a high-precision Retrieval Blueprint using Intent Analysis, target navigation topics, "
+        "and document navigation maps. Map queries directly to exact navigation nodes when available.\n\n"
+        "DEPTH & CHUNK BUDGET ALLOCATION:\n"
         "- If Intent Depth = 'Shallow': Limit relationship_traversal_hops = 0, max_chunks = 3 to 5.\n"
         "- If Intent Depth = 'Medium': Limit relationship_traversal_hops = 1, max_chunks = 6 to 8.\n"
-        "- If Intent Depth = 'Deep': Set relationship_traversal_hops = 2 or 3, max_chunks = 10 to 15.\n"
-        "- Traverse concept chains ONLY if intent_strategy.include_concept_chains is True."
+        "- If Intent Depth = 'Deep': Set relationship_traversal_hops = 2 or 3, max_chunks = 10 to 15."
     )
     
     prompt_payload = (
         f"USER QUESTION: \"{user_prompt}\"\n\n"
-        f"INTENT DIAGNOSTICS & DEPTH BOUNDARIES:\n"
-        f" - Intent Type: {intent_strategy.intent_type}\n"
-        f" - Main Topic: {intent_strategy.main_topic}\n"
+        f"INTENT DIAGNOSTICS & V2 TARGETS:\n"
+        f" - Target Topic: {intent_strategy.target_topic}\n"
+        f" - Target Subtopic: {intent_strategy.target_subtopic}\n"
         f" - Retrieval Depth Requested: {intent_strategy.retrieval_depth}\n"
-        f" - Include Concept Chains: {intent_strategy.include_concept_chains}\n"
-        f" - Recommended Max Hops: {intent_strategy.max_relationship_hops}\n"
         f" - Depth Rationale: {intent_strategy.depth_reasoning}\n"
         f"---------------------------------\n\n"
-        f"CANDIDATE DOCUMENTS:\n"
+        f"CANDIDATE DOCUMENTS & NAVIGATION MAPS:\n"
         f"{candidates_context_block}"
     )
-    
-    print("========== PLANNER PROMPT PAYLOAD ==========")
-    print(prompt_payload)
-    print("============================================")
 
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite",
@@ -124,28 +118,7 @@ def execute_retrieval_planning_triage(
 
     try:
         parsed_blueprint = RetrievalBlueprintSchema.model_validate_json(response.text)
-
-        # Enforce Grounded Search Terms Fallback
-        existing_terms = set(str(t).lower().strip() for t in parsed_blueprint.vector_search_terms)
-        enriched_terms = list(parsed_blueprint.vector_search_terms)
-        
-        for target_id in parsed_blueprint.selected_document_ids:
-            matched_cand = next((c for c in lightweight_candidates if str(c["id"]) == str(target_id)), None)
-            if matched_cand:
-                m_blob = matched_cand.get("knowledge_metadata", {}) if isinstance(matched_cand.get("knowledge_metadata"), dict) else {}
-                g_keywords = m_blob.get("global_retrieval_keywords", matched_cand.get("retrieval_keywords", []))
-                
-                count = 0
-                for kw in g_keywords:
-                    clean_kw = str(kw).lower().strip()
-                    if clean_kw not in existing_terms and count < 3:
-                        existing_terms.add(clean_kw)
-                        enriched_terms.append(kw)
-                        count += 1
-                        
-        parsed_blueprint.vector_search_terms = enriched_terms
         return parsed_blueprint
-
     except Exception as validation_err:
-        print(f"❌ Blueprint Schema Mismatch Fallback: {str(validation_err)}")
+        print(f"Blueprint Schema Mismatch Fallback: {str(validation_err)}")
         return RetrievalBlueprintSchema.model_validate_json(response.text)

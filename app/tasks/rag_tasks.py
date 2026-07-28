@@ -155,132 +155,83 @@ def process_document_embedding(document_id: str):
             raise ValueError("Zero human-readable text contents could be extracted even after OCR processing.")
         
             
-         # =====================================================================
-        # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
+        # =====================================================================
+        # 🎯 AGENTPULSE V2 HIERARCHICAL NAVIGATION INGESTION PIPELINE
         # =====================================================================
         try:
-            print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
+            print(f"🧠 Commencing V2 Knowledge Ingestion Pipeline for Document ID: {doc.id}")
             
             intelligence_client = get_intelligence_client()
-            
-            # --- STEP 1: EXTRACTION AI (Phase 1 - handles local inspection & smart sampling internally) ---
-            print(f"📡 Generating Knowledge Ingestion Plan for: {doc.filename}")
-            raw_ingestion_plan = run_phase_1_knowledge_extraction(extracted_text, intelligence_client)
-            
-            # --- STEP 2: VALIDATION LAYER ---
-            validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
+            source_filename = doc.filename
 
-            # Parse 'Key: Value' strings into dict objects safely
-            parsed_metadata = []
-            for item in validated_plan.metadata:
-                if ":" in item:
-                    k, v = item.split(":", 1)
-                    parsed_metadata.append({"key": k.strip(), "value": v.strip()})
-                else:
-                    parsed_metadata.append({"key": "Metadata", "value": item.strip()})
+            # --- STEP 1: DOCUMENT ANALYZER (Pure Python - Component 1) ---
+            print(f"📊 Analyzing document structure page-by-page for: {source_filename}")
+            from app.services.document_analyzer import DocumentAnalyzer
+            analyzer = DocumentAnalyzer()
+            analyzed_pages = analyzer.analyze_document(extracted_text, source_filename)
 
-            # Parse Rich Relationship Chains into dict objects safely
-            parsed_relationships = []
-            for item in validated_plan.relationships:
-                parts = [p.strip() for p in item.split("|")]
-                if len(parts) >= 4:
-                    try:
-                        strength_val = float(parts[3])
-                    except ValueError:
-                        strength_val = 0.9
-                    parsed_relationships.append({
-                        "chain": parts[0],
-                        "relation": parts[1],
-                        "target": parts[2],
-                        "strength": strength_val
-                    })
-                elif len(parts) == 3:
-                    parsed_relationships.append({
-                        "chain": parts[0],
-                        "relation": parts[1],
-                        "target": parts[2],
-                        "strength": 0.9
-                    })
-                else:
-                    parsed_relationships.append({"chain": item.strip(), "relation": "relates_to", "target": "Context", "strength": 0.85})
+            # --- STEP 2: TOPIC BOUNDARY DETECTOR (Pure Python - Component 2) ---
+            from app.services.boundary_detector import TopicBoundaryDetector
+            boundary_detector = TopicBoundaryDetector()
+            detected_topics = boundary_detector.detect_boundaries(analyzed_pages)
 
-            # --- 📊 RICH DIAGNOSTIC LOG (As requested) ---
-            meta_str = "\n".join([f"   ✓ {m['key']}: {m['value']}" for m in parsed_metadata[:5]]) or "   (None)"
-            rel_str = "\n".join([f"   ✓ {r['chain']}  -->  {r['target']}" for r in parsed_relationships[:5]]) or "   (None)"
-            
-            print(
-                f"\n=======================================================\n"
-                f"📋 KNOWLEDGE INGESTION PLAN DIAGNOSTICS: {doc.filename}\n"
-                f"=======================================================\n"
-                f"📌 Document Type: {validated_plan.document_type}\n"
-                f"💡 Purpose: {validated_plan.document_purpose}\n\n"
-                f"🏗️ Document Structure Traits:\n"
-                f"   - Has Tables: {validated_plan.has_tables}\n"
-                f"   - Has Headings: {validated_plan.has_headings}\n"
-                f"   - Hierarchical: {validated_plan.is_hierarchical}\n"
-                f"   - Contains Policies: {validated_plan.contains_policies}\n"
-                f"   - Contains Procedures: {validated_plan.contains_procedures}\n"
-                f"   - Contains Questions: {validated_plan.contains_questions}\n\n"
-                f"🏷️ Discovered Metadata:\n{meta_str}\n\n"
-                f"🔗 Discovered Concept Chains:\n{rel_str}\n\n"
-                f"⚙️ Recommended Chunk Strategy: {validated_plan.chunk_strategy}\n"
-                f"🎯 Strategy Reasoning: {validated_plan.chunk_reasoning}\n"
-                f"📐 Chunk Size: {validated_plan.chunk_size} | Overlap: {validated_plan.overlap}\n"
-                f"📊 Confidence: {int(validated_plan.chunk_strategy_confidence * 100)}%\n"
-                f"=======================================================\n"
-            )
+            # --- STEP 3: DOCUMENT DNA GENERATOR (Pure Python - Component 3) ---
+            from app.services.dna_generator import DocumentDNAGenerator
+            dna_generator = DocumentDNAGenerator()
+            document_dna = dna_generator.generate_dna(analyzed_pages, detected_topics, source_filename)
 
-            # Save plan metadata directly to PostgreSQL
-            doc.document_type = validated_plan.document_type
-            doc.document_purpose = validated_plan.document_purpose
-            doc.planner_summary = validated_plan.summary
+            # --- STEP 4: NAVIGATION AI (Gemini Call #1 - Component 4) ---
+            print(f"🧭 Building hierarchical Navigation Map for: {source_filename}")
+            from app.services.navigation_ai import NavigationAI
+            nav_ai = NavigationAI()
+            navigation_map = nav_ai.build_navigation_map(document_dna)
+
+            # Save the permanent Navigation Map to PostgreSQL metadata
+            doc.document_type = "Hierarchical Document"
+            doc.document_purpose = navigation_map.get("document_title", source_filename)
+            doc.planner_summary = f"Structured document containing {len(navigation_map.get('navigation', []))} navigation nodes."
             doc.knowledge_schema_version = 2
             doc.approved = True
 
             doc.knowledge_metadata = {
-                "document_profile": {
-                    "document_type": validated_plan.document_type,
-                    "structure": validated_plan.structure,
-                    "document_purpose": validated_plan.document_purpose,
-                    "summary": validated_plan.summary
-                },
-                "document_structure": {
-                    "has_tables": validated_plan.has_tables,
-                    "has_headings": validated_plan.has_headings,
-                    "is_hierarchical": validated_plan.is_hierarchical,
-                    "contains_policies": validated_plan.contains_policies,
-                    "contains_procedures": validated_plan.contains_procedures,
-                    "contains_questions": validated_plan.contains_questions
-                },
-                "dynamic_metadata": parsed_metadata,
-                "relationships": parsed_relationships,
-                "chunking_plan": {
-                    "strategy": validated_plan.chunk_strategy,
-                    "chunk_size": validated_plan.chunk_size,
-                    "overlap": validated_plan.overlap,
-                    "reasoning": validated_plan.chunk_reasoning
-                },
-                "questions_this_document_can_answer": validated_plan.questions_this_document_can_answer,
-                "confidence": {
-                    "metadata_confidence": validated_plan.metadata_confidence,
-                    "chunk_strategy_confidence": validated_plan.chunk_strategy_confidence
-                }
+                "navigation_map": navigation_map,
+                "strategy": "Hierarchical Navigation-Bounded RAG"
             }
             db.commit()
 
-            # --- STEP 3: CHUNK ENGINE (Phase 2) ---
-            print(f"🧬 Executing Chunk Engine for {doc.filename}...")
-            chunk_engine = ChunkEngine(plan=validated_plan)
-            processed_chunks_pool = chunk_engine.execute_chunking(
-                text=extracted_text, 
-                source_filename=doc.filename
+            # --- STEP 5: BOUNDED CHUNK ENGINE (Pure Python - Component 5) ---
+            print(f"🧬 Executing Bounded Chunk Engine within Navigation Nodes...")
+            from app.services.chunk_engine import ChunkEngine
+            chunk_engine = ChunkEngine(navigation_map=navigation_map)
+            bounded_chunks_pool = chunk_engine.execute_bounded_chunking(
+                full_document_text=extracted_text, 
+                source_filename=source_filename
             )
             
-            print(f"🟢 Chunk Engine finished. Created {len(processed_chunks_pool)} chunks.")
+            # --- STEP 6: KNOWLEDGE ENRICHMENT AI (Gemini Call #2 - Component 6) ---
+            print(f"✨ Enriching {len(bounded_chunks_pool)} bounded chunks with semantic metadata...")
+            from app.services.extraction_service import ExtractionService
+            enrichment_service = ExtractionService()
+            
+            processed_chunks_pool = []
+            for chunk_data in bounded_chunks_pool:
+                enriched_chunk = enrichment_service.enrich_chunk(chunk_data)
+                # Map back to the keys expected by the vector embedding loop below
+                processed_chunks_pool.append({
+                    "text": f"Topic: {enriched_chunk.get('topic')} > Subtopic: {enriched_chunk.get('subtopic')}\nSummary: {enriched_chunk.get('enrichment', {}).get('summary', '')}\nContent: {enriched_chunk.get('chunk_text')}",
+                    "source_file": enriched_chunk.get('source_file'),
+                    "page_number": enriched_chunk.get('page_start', 1),
+                    "strategy_used": enriched_chunk.get('strategy_used'),
+                    "navigation_node": enriched_chunk.get('navigation_node'),
+                    "topic": enriched_chunk.get('topic'),
+                    "subtopic": enriched_chunk.get('subtopic')
+                })
+
+            print(f"🟢 V2 Pipeline complete. Generated {len(processed_chunks_pool)} enriched bounded chunks.")
 
         except Exception as pipeline_err:
             db.rollback()
-            error_str = f"Knowledge Ingestion Pipeline Error: {str(pipeline_err)}"
+            error_str = f"AgentPulse V2 Pipeline Error: {str(pipeline_err)}"
             print(f"❌ Pipeline rollback triggered: {error_str}")
             raise ValueError(error_str)
         # =====================================================================
@@ -347,6 +298,8 @@ def process_document_embedding(document_id: str):
                 "document_id": str(doc.id),
                 "source_file": str(chunk_payload["source_file"]),          
                 "page_number": int(chunk_payload.get("page_number", 1)),
+                "navigation_node": str(chunk_payload.get("navigation_node", "N_UNKNOWN")), # 🟢 Added for V2 Tree Routing
+                "topic": str(chunk_payload.get("topic", "General")),                     # 🟢 Added for V2 Tree Routing
                 "strategy_used": str(chunk_payload.get("strategy_used", "Standard")),         
                 "last_updated": current_timestamp_iso,                    
                 "uploaded_by": uploader_email                              

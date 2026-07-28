@@ -383,7 +383,7 @@ def process_step(self, step_id: str):
                         print(f"⚠️ Non-fatal Planner AI strategy generation failed: {str(planner_err)}")
 
                # =====================================================================
-                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (TOP 5 SAFETY)
+                # 🎯 COMPONENT 5: TARGETED RETRIEVAL & CONTEXT OPTIMIZATION (V2 TREE AWARE)
                 # =====================================================================
                 if retrieval_blueprint and retrieval_blueprint.selected_document_ids:
                     target_doc_ids = [str(doc_id) for doc_id in retrieval_blueprint.selected_document_ids]
@@ -392,33 +392,29 @@ def process_step(self, step_id: str):
                     if len(target_doc_ids) > 3:
                         target_doc_ids = target_doc_ids[:3]
                         
-                    # 🚀 CRITICAL LATENCY FIX: Limit search terms to TOP 2 queries max!
-                    # Running 9+ vector sub-queries creates 20+ HTTP loops, causing 30s delays.
+                    # 🟢 Capture V2 Navigation Nodes chosen by Planner AI
+                    target_nav_nodes = getattr(retrieval_blueprint, "target_navigation_nodes", [])
+
                     raw_planner_terms = retrieval_blueprint.vector_search_terms if retrieval_blueprint else []
                     
-                    # If prompt is short/shallow, use prompt directly + top 1 keyword term
                     if intent_strategy and getattr(intent_strategy, "retrieval_depth", "").lower() == "shallow":
                         combined_search_queries = [prompt] + raw_planner_terms[:1]
                     else:
                         combined_search_queries = raw_planner_terms[:2]
 
-                    # Deduplicate search terms cleanly
                     combined_search_queries = list(dict.fromkeys(combined_search_queries))
 
-                    print(f"📡 Executing Fast Hybrid Retrieval using {len(combined_search_queries)} queries over docs: {target_doc_ids}")
+                    print(f"📡 Executing V2 Navigational Hybrid Retrieval over nodes: {target_nav_nodes} in docs: {target_doc_ids}")
 
-                    # 1. Initialize the data-gathering retrieval layer
                     retrieval_service = RetrievalService()
                     
                     search_filters = {
                         "workspace_id": current_workspace_id,
                         "document_ids": target_doc_ids,
+                        "target_navigation_nodes": target_nav_nodes, # 🟢 Passed directly to RetrievalService
                         "search_queries": combined_search_queries
                     }
 
-                    print(f"📡 Invoking Hybrid Section Retrieval System for Document IDs: {target_doc_ids}")
-                    
-                    # 🚀 EXECUTES: Vector Sub-Queries -> Parent Section Reconstruction via SQL
                     reconstructed_sections = retrieval_service.execute_hybrid_retrieval(
                         query_vector=[],  
                         workspace_id=uuid.UUID(current_workspace_id),

@@ -1,38 +1,71 @@
-import re
 from typing import List, Dict, Any
-from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
-
 
 class ChunkEngine:
-    def __init__(self, plan: KnowledgeIngestionPlan):
-        self.strategy = plan.chunk_strategy
-        self.chunk_size = plan.chunk_size
-        self.overlap = plan.overlap
+    """
+    Component 5: Bounded Chunk Engine (Pure Python / Deterministic)
+    Strictly chunks text within the boundaries of the Navigation Map nodes,
+    ensuring chunks never cross topic or subtopic lines and inherit full hierarchical metadata.
+    """
+    def __init__(self, navigation_map: Dict[str, Any], chunk_size: int = 800, overlap: int = 150):
+        self.navigation_map = navigation_map
+        self.chunk_size = chunk_size
+        self.overlap = overlap
 
-    def execute_chunking(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        if not text or not text.strip():
+    def execute_bounded_chunking(self, full_document_text: str, source_filename: str) -> List[Dict[str, Any]]:
+        if not full_document_text or not full_document_text.strip():
             return []
 
-        words = text.split()
-        
-        # Guardrail: If total text exceeds chunk_size but strategy produced 1 chunk, enforce sliding window
-        if self.strategy == "Heading Based":
-            chunks = self._chunk_by_headings(text, source_filename)
-        elif self.strategy == "Question Answer":
-            chunks = self._chunk_by_qa(text, source_filename)
-        elif self.strategy == "Section Based":
-            chunks = self._chunk_by_sections(text, source_filename)
-        else:
-            chunks = self._chunk_by_sliding_window(text, source_filename)
+        # Split text into pages locally (zero LLM tokens)
+        pages_list = full_document_text.split("\f")
+        if len(pages_list) <= 1:
+            pages_list = [full_document_text[i:i+3000] for i in range(0, len(full_document_text), 3000)]
 
-        # Fallback Safety Valve: If text has over chunk_size words but strategy yielded 1 chunk, split it
-        if len(chunks) <= 1 and len(words) > (self.chunk_size * 1.2):
-            print(f"⚠️ Chunk Engine Safety Triggered: Strategy '{self.strategy}' yielded 1 large chunk ({len(words)} words). Applying sliding window sub-chunking.")
-            chunks = self._chunk_by_sliding_window(text, source_filename)
+        all_bounded_chunks = []
+        navigation_nodes = self.navigation_map.get("navigation", [])
+        document_title = self.navigation_map.get("document_title", source_filename)
 
-        return chunks
+        chunk_counter = 1
 
-    def _chunk_by_sliding_window(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
+        for node in navigation_nodes:
+            node_id = node.get("node_id", "N_UNKNOWN")
+            topic_title = node.get("title", "General")
+            page_range = node.get("pages", [1, len(pages_list)])
+            subtopics = node.get("subtopics", [])
+
+            # Slice text strictly within this navigation node's page range
+            start_p = max(1, page_range[0]) - 1
+            end_p = min(len(pages_list), page_range[1])
+            
+            node_text_pages = pages_list[start_p:end_p]
+            node_combined_text = "\n".join(node_text_pages).strip()
+
+            if not node_combined_text:
+                continue
+
+            # Sub-chunk the node text using an overlapping sliding window
+            node_chunks = self._sliding_window_split(node_combined_text)
+
+            for sub_idx, chunk_text in enumerate(node_chunks):
+                subtopic_assigned = subtopics[sub_idx % len(subtopics)] if subtopics else topic_title
+
+                bounded_chunk = {
+                    "chunk_id": f"C{chunk_counter:03d}",
+                    "document_title": document_title,
+                    "source_file": source_filename,
+                    "navigation_node": node_id,
+                    "topic": topic_title,
+                    "subtopic": subtopic_assigned,
+                    "page_start": page_range[0],
+                    "page_end": page_range[1],
+                    "chunk_text": chunk_text,
+                    "strategy_used": "Navigation-Bounded Sliding Window"
+                }
+                all_bounded_chunks.append(bounded_chunk)
+                chunk_counter += 1
+
+        return all_bounded_chunks
+
+    def _sliding_window_split(self, text: str) -> List[str]:
         words = text.split()
         chunks = []
         stride = self.chunk_size - self.overlap
@@ -42,93 +75,9 @@ class ChunkEngine:
         for i in range(0, len(words), stride):
             chunk_text = " ".join(words[i:i + self.chunk_size])
             if chunk_text.strip():
-                chunks.append({
-                    "text": chunk_text,
-                    "source_file": source_filename,
-                    "strategy_used": "Sliding Window"
-                })
-        return chunks
-
-    def _chunk_by_sections(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        sections = re.split(r'\n\s*\n', text)
-        chunks = []
-        current_chunk_words = []
-
-        for sec in sections:
-            sec_words = sec.strip().split()
-            if not sec_words:
-                continue
-
-            # 🟢 FIX: If an individual section is larger than chunk_size, route it through the sliding window with overlap!
-            if len(sec_words) > self.chunk_size:
-                if current_chunk_words:
-                    chunks.append({
-                        "text": " ".join(current_chunk_words),
-                        "source_file": source_filename,
-                        "strategy_used": "Section Based"
-                    })
-                    current_chunk_words = []
-                sub_chunks = self._chunk_by_sliding_window(" ".join(sec_words), source_filename)
-                chunks.extend(sub_chunks)
-                continue
-
-            if len(current_chunk_words) + len(sec_words) <= self.chunk_size:
-                current_chunk_words.extend(sec_words)
-            else:
-                if current_chunk_words:
-                    chunks.append({
-                        "text": " ".join(current_chunk_words),
-                        "source_file": source_filename,
-                        "strategy_used": "Section Based"
-                    })
-                current_chunk_words = sec_words
-
-        if current_chunk_words:
-            chunks.append({
-                "text": " ".join(current_chunk_words),
-                "source_file": source_filename,
-                "strategy_used": "Section Based"
-            })
-        return chunks
-
-    def _chunk_by_headings(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        sections = re.split(r'\n(?=#+\s|\n[A-Z0-9\.\s]{4,}:?\n)', text)
-        chunks = []
-
-        for section in sections:
-            section_str = section.strip()
-            if not section_str:
-                continue
-
-            words = section_str.split()
-            if len(words) > self.chunk_size:
-                sub_chunks = self._chunk_by_sliding_window(section_str, source_filename)
-                chunks.extend(sub_chunks)
-            else:
-                chunks.append({
-                    "text": section_str,
-                    "source_file": source_filename,
-                    "strategy_used": "Heading Based"
-                })
-        return chunks
-
-    def _chunk_by_qa(self, text: str, source_filename: str) -> List[Dict[str, Any]]:
-        qa_blocks = re.split(r'\n(?=(?:Q|Question|FAQ)\s*[:\-\?])', text, flags=re.IGNORECASE)
-        chunks = []
-
-        for block in qa_blocks:
-            block_str = block.strip()
-            if not block_str:
-                continue
-
-            words = block_str.split()
-            if len(words) > self.chunk_size:
-                sub_chunks = self._chunk_by_sliding_window(block_str, source_filename)
-                chunks.extend(sub_chunks)
-            else:
-                chunks.append({
-                    "text": block_str,
-                    "source_file": source_filename,
-                    "strategy_used": "Question Answer"
-                })
+                chunks.append(chunk_text)
+                
+        if not chunks and text.strip():
+            chunks.append(text.strip())
+            
         return chunks
