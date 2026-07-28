@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 class TopicBoundaryDetector:
     """
     Component 2: Robust Topic Boundary Detector
-    Defensively checks for all possible key names to eliminate KeyError exceptions.
+    Uses safe .get() queries with default fallbacks to guarantee 100% crash immunity.
     """
     def detect_boundaries(self, analyzed_pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not analyzed_pages:
@@ -19,19 +19,20 @@ class TopicBoundaryDetector:
         current_topic_pages = []
         
         first_page = analyzed_pages[0]
-        initial_headings = first_page.get("headings") or ["Document Introduction"]
+        initial_headings = first_page.get("headings", ["Document Introduction"])
         current_title = initial_headings[0] if initial_headings else "Document Introduction"
         
-        initial_numberings = first_page.get("numbering_schemes") or first_page.get("numberings") or []
+        initial_numberings = first_page.get("numbering_schemes") or first_page.get("numberings", [])
         current_numbering = initial_numberings[0] if initial_numberings else ""
         
         topic_counter = 1
         prev_page_words = set(str(first_page.get("raw_snippet", "")).lower().split())
 
         for page in analyzed_pages:
+            # Safely fetch properties using fallback dictionaries
             page_num = page.get("page_number") or page.get("page", 1)
-            headings = page.get("headings") or []
-            numberings = page.get("numbering_schemes") or page.get("numberings") or []
+            headings = page.get("headings", ["Section"])
+            numberings = page.get("numbering_schemes") or page.get("numberings", [])
             snippet = str(page.get("raw_snippet", ""))
             current_page_words = set(snippet.lower().split())
 

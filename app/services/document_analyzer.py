@@ -4,8 +4,8 @@ from typing import List, Dict, Any
 class DocumentAnalyzer:
     """
     Component 1: Advanced Document Analyzer
-    Guarantees all structural keys ('headings', 'numberings', 'raw_snippet', etc.) 
-    are always present to prevent downstream key errors.
+    Guarantees structural keys ('headings', 'numbering_schemes', 'raw_snippet') 
+    are ALWAYS present as lists or strings, preventing any KeyError.
     """
     def analyze_document(self, full_text: str, filename: str) -> List[Dict[str, Any]]:
         pages = full_text.split("\f")
@@ -32,14 +32,15 @@ class DocumentAnalyzer:
                 elif len(line) < 80 and line.isupper() and len(line.split()) < 10:
                     headings.append(line)
 
-            first_para = lines[0] if lines else ""
-            last_para = lines[-1] if lines else ""
-            
+            # Ensure 'headings' is never completely empty so downstream consumers don't crash
+            if not headings:
+                headings = [f"Page {idx} Section"]
+
             analyzed_pages.append({
                 "page": idx,
                 "page_number": idx,
                 "line_count": len(lines),
-                "headings": headings if headings else [f"Page {idx} Content"], # Never empty to protect boundary detector
+                "headings": headings,
                 "numbering_schemes": numbering_schemes,
                 "numberings": numbering_schemes,
                 "layout": {
@@ -47,8 +48,8 @@ class DocumentAnalyzer:
                     "has_bullets": has_bullets,
                     "has_numbered_lists": has_numbered_lists
                 },
-                "first_paragraph": first_para,
-                "last_paragraph": last_para,
+                "first_paragraph": lines[0] if lines else "",
+                "last_paragraph": lines[-1] if lines else "",
                 "raw_snippet": page_content[:500] if page_content else ""
             })
 
