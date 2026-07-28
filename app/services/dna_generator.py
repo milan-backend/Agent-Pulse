@@ -15,19 +15,23 @@ class DocumentDNAGenerator:
         compressed_topics = []
 
         for topic in detected_topics:
-            start_p, end_p = topic["pages"]
+            page_range = topic.get("pages", [1, 1])
+            start_p, end_p = page_range[0], page_range[1]
             
             # Gather representative text snippets from the start and end of the topic range
             rep_snippets = []
             for page in analyzed_pages:
-                if start_p <= page["page"] <= end_p:
-                    rep_snippets.append(page["first_paragraph"])
+                p_num = page.get("page_number") or page.get("page", 1)
+                if start_p <= p_num <= end_p:
+                    rep_snippets.append(page.get("first_paragraph", ""))
 
             compressed_topic = {
-                "topic_id": topic["topic_id"],
-                "page_range": topic["pages"],
-                "headings": topic["headings"],
-                "keywords": topic["keywords"][:5],
+                "topic_id": topic.get("topic_id") or topic.get("id", "T001"),
+                "page_range": page_range,
+                # 🟢 Safely fallback to topic title or default list if 'headings' is missing
+                "headings": topic.get("headings", [topic.get("title", "General Section")]),
+                # 🟢 Safely fallback to empty list if 'keywords' is missing
+                "keywords": topic.get("keywords", [])[:5],
                 "representative_summary": " ".join(rep_snippets)[:400] + "..." if rep_snippets else ""
             }
             compressed_topics.append(compressed_topic)
