@@ -1,5 +1,4 @@
 from typing import List, Dict, Any
-import re
 
 class TopicBoundaryDetector:
     """
@@ -15,6 +14,7 @@ class TopicBoundaryDetector:
         current_topic_pages = []
         current_title = analyzed_pages[0].get("headings", ["Document Introduction"])[0]
         current_numbering = analyzed_pages[0].get("numbering_schemes", [""])[0]
+        topic_counter = 1
 
         prev_page_words = set(analyzed_pages[0].get("raw_snippet", "").lower().split())
 
@@ -45,11 +45,15 @@ class TopicBoundaryDetector:
 
             # Threshold decision: if continuity drops below 0.5, establish a new topic boundary
             if continuity_score < 0.5 and current_topic_pages:
+                t_id = f"T{topic_counter:03d}"
                 detected_topics.append({
+                    "topic_id": t_id,     # 🟢 Explicit primary key
+                    "id": t_id,           # 🟢 Fallback key alias
                     "title": current_title,
                     "section_number": current_numbering,
                     "pages": [current_topic_pages[0], current_topic_pages[-1]]
                 })
+                topic_counter += 1
                 current_topic_pages = []
                 current_title = headings[0] if headings else f"Section on Page {page_num}"
                 current_numbering = numberings[0] if numberings else ""
@@ -59,7 +63,10 @@ class TopicBoundaryDetector:
 
         # Flush final trailing topic block
         if current_topic_pages:
+            t_id = f"T{topic_counter:03d}"
             detected_topics.append({
+                "topic_id": t_id,
+                "id": t_id,
                 "title": current_title,
                 "section_number": current_numbering,
                 "pages": [current_topic_pages[0], current_topic_pages[-1]]
