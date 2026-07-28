@@ -36,6 +36,7 @@ class DocumentAnalyzer:
             last_para = lines[-1] if lines else ""
             
             analyzed_pages.append({
+                "page": idx,
                 "page_number": idx,
                 "line_count": len(lines),
                 "headings": headings,
