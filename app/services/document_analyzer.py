@@ -18,7 +18,6 @@ class DocumentAnalyzer:
             headings = []
             numbering_schemes = []
             
-            # 🟢 Structural layout flags
             has_table = bool(re.search(r'(\t|\s{4,}\|)', page_content)) or page_content.count('|') > 3
             has_bullets = any(line.startswith(('-', '*', '•')) for line in lines)
             has_numbered_lists = any(re.match(r'^(\d+[\.\)]|[a-zA-Z][\.\)])\s+', line) for line in lines)
@@ -41,6 +40,7 @@ class DocumentAnalyzer:
                 "line_count": len(lines),
                 "headings": headings,
                 "numbering_schemes": numbering_schemes,
+                "numberings": numbering_schemes,  # Fallback alias
                 "layout": {
                     "has_table": has_table,
                     "has_bullets": has_bullets,
