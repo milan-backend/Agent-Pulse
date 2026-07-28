@@ -299,23 +299,19 @@ def process_document_embedding(document_id: str):
             ids.append(chunk_id)
             documents.append(masked_payload_string) 
             
-            metadatas.append({
-                "workspace_id": str(doc.workspace_id),
-                "agent_id": str(doc.agent_id) if doc.agent_id else "None",
-                "document_id": str(doc.id),
-                "source_file": str(chunk_payload["source_file"]),          
-                "page_number": int(chunk_payload.get("page_number", 1)),
-                "page_end": int(chunk_payload.get("page_end", 1)),
-                "navigation_node": str(chunk_payload.get("navigation_node", "N_UNKNOWN")),
-                "topic": str(chunk_payload.get("topic", "General")),
-                "subtopic": str(chunk_payload.get("subtopic", "General")),
-                # 🟢 Leverage Enrichment metadata fields during search evaluation
-                "search_terms": str(chunk_payload.get("enrichment", {}).get("search_terms", [])),
-                "question_patterns": str(chunk_payload.get("enrichment", {}).get("question_patterns", [])),
-                "strategy_used": str(chunk_payload.get("strategy_used", "Semantic")),         
-                "last_updated": current_timestamp_iso,                    
-                "uploaded_by": uploader_email                              
-            })
+            for enriched_chunk in enriched_batch:
+                    processed_chunks_pool.append({
+                        "text": enriched_chunk.get('chunk_text'),
+                        "source_file": enriched_chunk.get('source_file'),
+                        "page_number": enriched_chunk.get('page_start', 1),
+                        "page_end": enriched_chunk.get('page_end', 1),
+                        "strategy_used": enriched_chunk.get('strategy_used'),
+                        "navigation_node": enriched_chunk.get('navigation_node'),
+                        "topic": enriched_chunk.get('topic'),
+                        "subtopic": enriched_chunk.get('subtopic'),
+                        # 🟢 Corrected key mapping
+                        "enrichment": enriched_chunk.get('enrichment', {})
+                    })
             
         # 🚀 BATCHED INSERTION LOOP TO PREVENT DATABASE & VECTOR MEMORY OVERLOAD
         BATCH_SIZE = 50

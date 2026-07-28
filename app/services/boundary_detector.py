@@ -3,31 +3,36 @@ from typing import List, Dict, Any
 class TopicBoundaryDetector:
     """
     Component 2: Robust Topic Boundary Detector
-    Computes a multi-signal continuity score across pages combining numbering,
-    heading similarity, paragraph flow, and keyword overlap.
+    Defensively checks for all possible key names to eliminate KeyError exceptions.
     """
     def detect_boundaries(self, analyzed_pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         if not analyzed_pages:
-            return []
+            return [{
+                "topic_id": "T001",
+                "id": "T001",
+                "title": "General Document",
+                "section_number": "",
+                "pages": [1, 1]
+            }]
 
         detected_topics = []
         current_topic_pages = []
         
         first_page = analyzed_pages[0]
-        initial_headings = first_page.get("headings", [])
+        initial_headings = first_page.get("headings") or ["Document Introduction"]
         current_title = initial_headings[0] if initial_headings else "Document Introduction"
         
-        initial_numberings = first_page.get("numbering_schemes") or first_page.get("numberings", [])
+        initial_numberings = first_page.get("numbering_schemes") or first_page.get("numberings") or []
         current_numbering = initial_numberings[0] if initial_numberings else ""
         
         topic_counter = 1
-        prev_page_words = set(first_page.get("raw_snippet", "").lower().split())
+        prev_page_words = set(str(first_page.get("raw_snippet", "")).lower().split())
 
         for page in analyzed_pages:
             page_num = page.get("page_number") or page.get("page", 1)
-            headings = page.get("headings", [])
-            numberings = page.get("numbering_schemes") or page.get("numberings", [])
-            snippet = page.get("raw_snippet", "")
+            headings = page.get("headings") or []
+            numberings = page.get("numbering_schemes") or page.get("numberings") or []
+            snippet = str(page.get("raw_snippet", ""))
             current_page_words = set(snippet.lower().split())
 
             has_explicit_heading = bool(headings)

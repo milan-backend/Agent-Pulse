@@ -4,7 +4,8 @@ from typing import List, Dict, Any
 class DocumentAnalyzer:
     """
     Component 1: Advanced Document Analyzer
-    Parses structural signals, numbering patterns, layout hierarchies, tables, and lists page-by-page.
+    Guarantees all structural keys ('headings', 'numberings', 'raw_snippet', etc.) 
+    are always present to prevent downstream key errors.
     """
     def analyze_document(self, full_text: str, filename: str) -> List[Dict[str, Any]]:
         pages = full_text.split("\f")
@@ -38,9 +39,9 @@ class DocumentAnalyzer:
                 "page": idx,
                 "page_number": idx,
                 "line_count": len(lines),
-                "headings": headings,
+                "headings": headings if headings else [f"Page {idx} Content"], # Never empty to protect boundary detector
                 "numbering_schemes": numbering_schemes,
-                "numberings": numbering_schemes,  # Fallback alias
+                "numberings": numbering_schemes,
                 "layout": {
                     "has_table": has_table,
                     "has_bullets": has_bullets,
@@ -48,7 +49,7 @@ class DocumentAnalyzer:
                 },
                 "first_paragraph": first_para,
                 "last_paragraph": last_para,
-                "raw_snippet": page_content[:500]
+                "raw_snippet": page_content[:500] if page_content else ""
             })
 
         return analyzed_pages
