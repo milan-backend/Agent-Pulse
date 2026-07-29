@@ -53,7 +53,7 @@ class ChunkIndex(Base):
         Integer,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    chunk_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

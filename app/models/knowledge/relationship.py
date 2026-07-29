@@ -63,7 +63,7 @@ class Relationship(Base):
         Float,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    relationship_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

@@ -51,7 +51,7 @@ class Embedding(Base):
         index=True,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    embedding_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

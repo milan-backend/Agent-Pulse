@@ -47,7 +47,7 @@ class SemanticMetadata(Base):
         default=list,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    semantic_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

@@ -66,7 +66,7 @@ class DocumentSignal(Base):
         String,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    signal_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

@@ -64,7 +64,7 @@ class Entity(Base):
         Integer,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    entity_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )

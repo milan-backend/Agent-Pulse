@@ -93,7 +93,7 @@ class DocumentProfile(Base):
         nullable=False,
     )
 
-    metadata: Mapped[dict] = mapped_column(
+    profile_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
         nullable=False,

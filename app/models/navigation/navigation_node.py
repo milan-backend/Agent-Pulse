@@ -63,7 +63,7 @@ class NavigationNode(Base):
         Integer,
     )
 
-    node_metadata: Mapped[dict] = mapped_column(
+    node_metadata: Mapped[dict] = mapped_column("metadata",
         JSONB,
         default=dict,
     )
