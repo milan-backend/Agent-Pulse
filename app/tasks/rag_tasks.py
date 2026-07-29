@@ -245,7 +245,7 @@ def process_document_embedding(document_id: str):
                 continue
 
             embeddings.append(raw_vector_array)
-            documents.append(chunk_record.encrypted_content) 
+            documents.append(plain_text_content)
             
             ids.append(chunk_id)
             metadatas.append({
