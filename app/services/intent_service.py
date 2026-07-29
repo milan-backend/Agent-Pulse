@@ -1,7 +1,8 @@
 import os
+import json
 from google import genai
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 # =====================================================================
 # Pydantic Structural Schema for Open-World Intent Intelligence
@@ -22,7 +23,7 @@ class IntentAnalysisSchema(BaseModel):
         description="The specific subtopic or section within the document being targeted."
     )
     
-    # NEW DEPTH CONTROL FIELDS
+    # DEPTH CONTROL FIELDS
     retrieval_depth: str = Field(
         description="Granularity/depth of information required. MUST be one of: ['Shallow', 'Medium', 'Deep']. "
                     "'Shallow': Direct 1-fact lookup. 'Medium': Fact + immediately related context. 'Deep': Multi-step process, policy chain, or full workflow."
@@ -58,7 +59,7 @@ class IntentAnalysisSchema(BaseModel):
 def analyze_user_query_intent(user_prompt: str) -> IntentAnalysisSchema:
     """
     Component Intent Understanding AI: Analyzes user queries and outputs a structured lookup blueprint
-    including V2 navigation topic targets and retrieval depth boundaries.
+    including V2 navigation topic targets and retrieval depth boundaries using Gemini models[cite: 5].
     """
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
@@ -78,7 +79,7 @@ def analyze_user_query_intent(user_prompt: str) -> IntentAnalysisSchema:
     )
     
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
+        model="gemini-2.5-flash-lite",
         contents=f"Analyze the following user question and extract its intent, V2 navigation targets, and depth control schema:\n\n{user_prompt}",
         config={
             "system_instruction": system_instruction,

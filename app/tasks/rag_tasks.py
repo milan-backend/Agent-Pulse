@@ -14,9 +14,10 @@ from app.models.user import User
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 
-# 🟢 IMPORT NEW INGESTION PIPELINE COMPONENTS (Phase 1 & Phase 2)
-from app.services.extraction_service import ExtractionService, get_intelligence_client
-from app.services.chunk_engine import ChunkEngine
+# 🟢 UPDATED NEW INGESTION PIPELINE COMPONENTS
+from app.services.navigation_service import NavigationService
+from app.services.chunk_engine import ChunkEngineService
+from app.services.extraction_service import ExtractionAI
 import pdfplumber
 
 # Initialize Celery app matching your system's setup instance configuration
@@ -64,7 +65,7 @@ def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_siz
 def process_document_embedding(document_id: str):
     """
     Celery Background Task Worker: Restructured to pull high-density operational 
-    questions at Document-Level (Phase A) for absolute retrieval planner matching.
+    questions at Document-Level for absolute retrieval planner matching.
     """
     db: Session = next(get_db())
     doc = None
@@ -129,7 +130,7 @@ def process_document_embedding(document_id: str):
                 except Exception as plumber_err:
                     print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
 
-            # 🟢 Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
+            # Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
             if not extracted_text.strip():
                 print("🔄 Text layers missing. Initializing PyTesseract OCR optical engine...")
                 try:
@@ -152,109 +153,32 @@ def process_document_embedding(document_id: str):
         
             
         # =====================================================================
-        # 🎯 AGENTPULSE V2 HIERARCHICAL NAVIGATION INGESTION PIPELINE
+        # 🎯 AGENTPULSE V2 NEW ARCHITECTURE PIPELINE INTEGRATION
         # =====================================================================
         try:
             print(f"🧠 Commencing V2 Knowledge Ingestion Pipeline for Document ID: {doc.id}")
             
-            intelligence_client = get_intelligence_client()
-            source_filename = doc.filename
+            # --- STEP 1: NAVIGATION SERVICE TREE BUILD ---
+            print(f"🧭 Building hierarchical navigation tree for: {doc.filename}")
+            nav_service = NavigationService(db, doc.id, doc.workspace_id)
+            node_count = nav_service.build_navigation_tree()
 
-            # --- STEP 1: DOCUMENT ANALYZER (Pure Python - Component 1) --
-            print(f"📊 Analyzing document structure page-by-page for: {source_filename}")
-            from app.services.document_analyzer import DocumentAnalyzer
-            analyzer = DocumentAnalyzer()
-            analyzed_pages = analyzer.analyze_document(extracted_text, source_filename)
+            # --- STEP 2: CHUNK ENGINE SERVICE ---
+            print(f"🧬 Executing Chunk Engine Service...")
+            chunk_engine = ChunkEngineService(db, doc.id, doc.workspace_id)
+            chunk_count = chunk_engine.process_document_chunks(extracted_text, page_number=1)
 
-            # 🟢 BULLETPROOF RUNTIME PATCH: Guarantee required keys exist on every page dictionary
-            cleaned_analyzed_pages = []
-            for p_idx, page_obj in enumerate(analyzed_pages, 1):
-                if not isinstance(page_obj, dict):
-                    page_obj = {"page_number": p_idx, "raw_snippet": str(page_obj)}
-                
-                # Force-inject fallback keys so a KeyError is physically impossible
-                if "headings" not in page_obj or not page_obj["headings"]:
-                    page_obj["headings"] = [f"Section {p_idx}"]
-                if "numbering_schemes" not in page_obj:
-                    page_obj["numbering_schemes"] = page_obj.get("numberings", [])
-                if "page_number" not in page_obj:
-                    page_obj["page_number"] = page_obj.get("page", p_idx)
-                if "raw_snippet" not in page_obj:
-                    page_obj["raw_snippet"] = ""
-                    
-                cleaned_analyzed_pages.append(page_obj)
-            
-            analyzed_pages = cleaned_analyzed_pages
+            # --- STEP 3: EXTRACTION AI KNOWLEDGE ENRICHMENT ---
+            print(f"✨ Executing ExtractionAI Knowledge Enrichment...")
+            extraction_ai = ExtractionAI(db, doc.id, doc.workspace_id)
+            extraction_ai.process_enrichment()
 
-            # --- STEP 2: TOPIC BOUNDARY DETECTOR (Pure Python - Component 2) ---
-            from app.services.boundary_detector import TopicBoundaryDetector
-            boundary_detector = TopicBoundaryDetector()
-            detected_topics = boundary_detector.detect_boundaries(analyzed_pages)
-
-            # --- STEP 3: DOCUMENT DNA GENERATOR (Pure Python - Component 3) ---
-            from app.services.dna_generator import DocumentDNAGenerator
-            dna_generator = DocumentDNAGenerator()
-            document_dna = dna_generator.generate_dna(analyzed_pages, detected_topics, source_filename)
-
-            # --- STEP 4: NAVIGATION AI (Gemini Call #1 - Component 4) ---
-            print(f"🧭 Building hierarchical Navigation Map for: {source_filename}")
-            from app.services.navigation_ai import NavigationAI
-            nav_ai = NavigationAI()
-            navigation_map = nav_ai.build_navigation_map(document_dna)
-
-            # Save the permanent Navigation Map to PostgreSQL metadata
-            doc.document_type = "Hierarchical Document"
-            doc.document_purpose = navigation_map.get("document_title", source_filename)
-            doc.planner_summary = f"Structured document containing {len(navigation_map.get('navigation', []))} navigation nodes."
+            doc.status = "ready"
             doc.knowledge_schema_version = 2
             doc.approved = True
-
-            doc.knowledge_metadata = {
-                "navigation_map": navigation_map,
-                "strategy": "Hierarchical Navigation-Bounded RAG"
-            }
             db.commit()
 
-            # --- STEP 5: BOUNDED CHUNK ENGINE (Pure Python - Component 5) ---
-            print(f"🧬 Executing Bounded Chunk Engine within Navigation Nodes...")
-            from app.services.chunk_engine import ChunkEngine
-            chunk_engine = ChunkEngine(navigation_map=navigation_map)
-            bounded_chunks_pool = chunk_engine.execute_bounded_chunking(
-                full_document_text=extracted_text, 
-                source_filename=source_filename
-            )
-            
-            # --- STEP 6: KNOWLEDGE ENRICHMENT AI (Batched Execution) ---
-            print(f"✨ Enriching {len(bounded_chunks_pool)} bounded chunks in batches...")
-            from app.services.extraction_service import ExtractionService
-            import time
-            
-            enrichment_service = ExtractionService()
-            processed_chunks_pool = []
-            
-            BATCH_SIZE = 5
-            for i in range(0, len(bounded_chunks_pool), BATCH_SIZE):
-                batch_slice = bounded_chunks_pool[i:i + BATCH_SIZE]
-                enriched_batch = enrichment_service.enrich_chunks_batch(batch_slice)
-                
-                for enriched_chunk in enriched_batch:
-                    processed_chunks_pool.append({
-                        # 🟢 PROBLEM 5 FIX: Document Embedding uses PURE ORIGINAL TEXT ONLY.
-                        # Summaries/Topics are decoupled into metadata below, NOT prepended to raw text.
-                        "text": enriched_chunk.get('chunk_text'),
-                        "source_file": enriched_chunk.get('source_file'),
-                        "page_number": enriched_chunk.get('page_start', 1),
-                        "page_end": enriched_chunk.get('page_end', 1),
-                        "strategy_used": enriched_chunk.get('strategy_used'),
-                        "navigation_node": enriched_chunk.get('navigation_node'),
-                        "topic": enriched_chunk.get('topic'),
-                        "subtopic": enriched_chunk.get('subtopic'),
-                        # 🟢 PROBLEM 6 FIX: Carry over full structured enrichment metadata for vector filters & retrieval search terms
-                        "enrichment": enriched_chunk.get('encryption', enriched_chunk.get('enrichment', {}))
-                    })
-                time.sleep(0.5)
-
-            print(f"🟢 V2 Pipeline complete. Generated {len(processed_chunks_pool)} enriched bounded chunks safely.")
+            print(f"🟢 V2 Pipeline complete. Created {node_count} navigation nodes and {chunk_count} secure chunks.")
 
         except Exception as pipeline_err:
             db.rollback()
@@ -283,13 +207,22 @@ def process_document_embedding(document_id: str):
         
         current_timestamp_iso = datetime.utcnow().strftime("%Y-%m-%d")
 
-        # 5. Process each plain text chunk[cite: 5]
-        for index, chunk_payload in enumerate(processed_chunks_pool):
-            plain_text_content = chunk_payload["text"]
+        # Fetch stored chunks from database to sync with ChromaDB
+        from app.models.chunks.chunk import Chunk
+        stored_chunks = db.query(Chunk).filter(Chunk.document_id == doc.id).all()
+
+        # 5. Process each stored chunk securely
+        for index, chunk_record in enumerate(stored_chunks):
+            raw_content = chunk_record.encrypted_content
+            if isinstance(raw_content, bytes):
+                plain_text_content = raw_content.decode("utf-8", errors="ignore")
+            else:
+                plain_text_content = str(raw_content)
+
             if not plain_text_content.strip():
                 continue
                 
-            chunk_id = f"{doc.id}_chunk_{index}"
+            chunk_id = str(chunk_record.id)
             raw_vector_array = None
             
             for model_name in ["text-embedding-004", "gemini-embedding-001"]:
@@ -299,7 +232,6 @@ def process_document_embedding(document_id: str):
                         contents=plain_text_content
                     )
                     candidate = vector_response.embeddings[0].values
-                    # Validate vector is a proper list/array and contains no NaN values
                     import math
                     if candidate and isinstance(candidate, (list, tuple)) and len(candidate) > 0:
                         if not any(math.isnan(x) for x in candidate if isinstance(x, (int, float))):
@@ -308,30 +240,20 @@ def process_document_embedding(document_id: str):
                 except Exception:
                     continue
 
-            # Skip chunk entirely if embedding generation failed or returned NaN
             if not raw_vector_array:
                 print(f"⚠️ Warning: Skipping chunk {index} due to invalid or null embedding response.")
                 continue
 
             embeddings.append(raw_vector_array)
-            masked_payload_string = encrypt_text_string(plain_text=plain_text_content, workspace_id=doc.workspace_id)
+            documents.append(chunk_record.encrypted_content) 
             
             ids.append(chunk_id)
-            documents.append(masked_payload_string) 
-            
-            for enriched_chunk in enriched_batch:
-                    processed_chunks_pool.append({
-                        "text": enriched_chunk.get('chunk_text'),
-                        "source_file": enriched_chunk.get('source_file'),
-                        "page_number": enriched_chunk.get('page_start', 1),
-                        "page_end": enriched_chunk.get('page_end', 1),
-                        "strategy_used": enriched_chunk.get('strategy_used'),
-                        "navigation_node": enriched_chunk.get('navigation_node'),
-                        "topic": enriched_chunk.get('topic'),
-                        "subtopic": enriched_chunk.get('subtopic'),
-                        # 🟢 Corrected key mapping
-                        "enrichment": enriched_chunk.get('enrichment', {})
-                    })
+            metadatas.append({
+                "document_id": str(doc.id),
+                "workspace_id": str(doc.workspace_id),
+                "source_file": doc.filename,
+                "page_number": 1
+            })
             
         # 🚀 BATCHED INSERTION LOOP TO PREVENT DATABASE & VECTOR MEMORY OVERLOAD
         BATCH_SIZE = 50

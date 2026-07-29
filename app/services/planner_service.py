@@ -3,6 +3,8 @@ import json
 from google import genai
 from pydantic import BaseModel, Field
 from typing import List, Optional
+
+# Import the schema from your actual intent service file
 from app.services.intent_service import IntentAnalysisSchema
 
 # =====================================================================
@@ -23,7 +25,7 @@ class RetrievalBlueprintSchema(BaseModel):
         description="Search phrases and concept keywords to query in ChromaDB."
     )
     
-    # NEW DEPTH ROUTING BLUEPRINT FIELDS
+    # DEPTH ROUTING BLUEPRINT FIELDS
     relationship_traversal_hops: int = Field(
         description="Number of concept chain relationship hops to retrieve (0 to 3)."
     )
@@ -48,7 +50,7 @@ def execute_retrieval_planning_triage(
 ) -> RetrievalBlueprintSchema:
     """
     Component Planner AI: Uses structured Intent Analysis alongside V2 document navigation maps
-    to produce a precision-constrained Retrieval Blueprint.
+    to produce a precision-constrained Retrieval Blueprint[cite: 8].
     """
     if not lightweight_candidates:
         return RetrievalBlueprintSchema(
@@ -61,7 +63,7 @@ def execute_retrieval_planning_triage(
             planner_notes="No candidate documents available."
         )
 
-    gemini_key = os.getenv("INTENT_API_KEY") or os.getenv("GEMINI_API_KEY")
+    gemini_key = os.getenv("INTENT_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("INTELLIGENCE_LAYER_API_KEY")
     if not gemini_key:
         raise ValueError("CRITICAL: API Key for Retrieval Planner is missing.")
         
@@ -106,7 +108,7 @@ def execute_retrieval_planning_triage(
     )
 
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
+        model="gemini-2.5-flash-lite",
         contents=prompt_payload,
         config={
             "system_instruction": system_instruction,
@@ -116,9 +118,4 @@ def execute_retrieval_planning_triage(
         }
     )
 
-    try:
-        parsed_blueprint = RetrievalBlueprintSchema.model_validate_json(response.text)
-        return parsed_blueprint
-    except Exception as validation_err:
-        print(f"Blueprint Schema Mismatch Fallback: {str(validation_err)}")
-        return RetrievalBlueprintSchema.model_validate_json(response.text)
+    return RetrievalBlueprintSchema.model_validate_json(response.text)

@@ -11,8 +11,8 @@ def get_intelligence_client() -> genai.Client:
 
 class NavigationAI:
     """
-    Component 4: Navigation AI (Gemini Call #1)
-    Takes the Document DNA and constructs the official hierarchical Navigation Map.
+    Component: Navigation AI 
+    Takes document data/DNA and constructs the official hierarchical Navigation Map using Gemini[cite: 4].
     """
     def __init__(self):
         self.client = get_intelligence_client()
@@ -21,7 +21,7 @@ class NavigationAI:
         system_instruction = (
             "You are the Core Navigation Architect for AgentPulse V2.\n"
             "Your ONLY responsibility is to analyze the provided Document DNA and output a clean, "
-            "hierarchical navigation map consisting of major nodes, titles, exact page ranges, and subtopics in valid JSON format.\n"
+            "hierarchical navigation map consisting of major nodes, titles, exact page ranges, and subtopics in valid JSON format[cite: 4].\n"
             "Ensure the JSON structure contains a 'navigation' array where each object has 'node_id', 'title' (or 'topic'), 'pages' (or 'page_range'), and 'subtopics'."
         )
 
@@ -36,11 +36,6 @@ class NavigationAI:
                 "temperature": 0.1
             }
         )
-
-        # 🟢 DEBUG PRINT: Log raw response from Gemini to check what structure it built
-        print(f"========== NAVIGATION AI RAW RESPONSE ==========")
-        print(response.text)
-        print("==================================================")
 
         try:
             return json.loads(response.text)

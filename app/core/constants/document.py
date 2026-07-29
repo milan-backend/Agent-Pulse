@@ -1,0 +1,9 @@
+MAX_DOCUMENT_SIZE_MB = 200
+
+MAX_DOCUMENT_PAGES = 5000
+
+SUPPORTED_DOCUMENT_TYPES = (
+    ".pdf",
+    ".docx",
+    ".pptx",
+)

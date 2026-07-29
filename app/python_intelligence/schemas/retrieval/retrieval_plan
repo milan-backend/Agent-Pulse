@@ -1,0 +1,20 @@
+from pydantic import Field
+
+from app.python_intelligence.schemas.shared.base import PIBaseSchema
+
+
+class RetrievalPlan(PIBaseSchema):
+
+    query: str
+
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
+
+    use_navigation: bool = True
+
+    use_semantic_search: bool = True
+
+    filters: dict = Field(default_factory=dict)
