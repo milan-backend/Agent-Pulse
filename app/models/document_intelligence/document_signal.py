@@ -30,6 +30,17 @@ class DocumentSignal(Base):
         default=uuid.uuid4,
     )
 
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        index=True,
+    )
+
+    document_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("uploaded_documents.id", ondelete="CASCADE"),
+    )
+
     processing_session_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey(

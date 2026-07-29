@@ -161,3 +161,4 @@ migrate_version.py
 check_docs.py
 force_cleanup.py
 document_insight.py
+add_tables.py
