@@ -168,14 +168,32 @@ def process_document_embedding(document_id: str):
             
             # 2. Extract Structure and Build DB Navigation Map
             struct_data = extract_document_structure(temp_pdf_path)
+            pymupdf_toc = struct_data.get("toc", [])
+            
+            # 🟢 NEW FIX: Prepare page text samples if the TOC is missing
+            page_text_samples = None
+            if not pymupdf_toc:
+                print("🔄 Preparing page text samples for Navigation AI fallback...")
+                page_text_samples = []
+                # Grab up to the first 30 pages so the AI can figure out the outline
+                sample_limit = min(30, doc_page_count)
+                for p in range(sample_limit):
+                    page_text = doc_obj.load_page(p).get_text("text")
+                    if page_text.strip():
+                        page_text_samples.append({
+                            "page_num": p + 1,
+                            "text_snippet": page_text[:800]  # First 800 chars is enough context
+                        })
+
+            # Now pass the page_text_samples variable into the function
             saved_sections = build_and_save_navigation_map(
                 db=db, 
                 document_id=doc.id, 
                 workspace_id=doc.workspace_id,
                 agent_id=doc.agent_id, 
-                pymupdf_toc=struct_data.get("toc", []),
+                pymupdf_toc=pymupdf_toc,
                 doc_page_count=doc_page_count, 
-                page_text_samples=None
+                page_text_samples=page_text_samples  # 🟢 Fixed: No longer hardcoded to None
             )
             
             # 3. Setup AI & Vector DB
