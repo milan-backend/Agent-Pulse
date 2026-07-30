@@ -1,3 +1,5 @@
+# app/services/chunk_engine.py
+
 import re
 from typing import List, Dict, Any
 from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
@@ -15,7 +17,7 @@ class ChunkEngine:
 
         words = text.split()
         
-        # Guardrail: If total text exceeds chunk_size but strategy produced 1 chunk, enforce sliding window
+        # Guardrail: Route based on AI-recommended strategy
         if self.strategy == "Heading Based":
             chunks = self._chunk_by_headings(text, source_filename)
         elif self.strategy == "Question Answer":
@@ -59,7 +61,6 @@ class ChunkEngine:
             if not sec_words:
                 continue
 
-            # 🟢 FIX: If an individual section is larger than chunk_size, route it through the sliding window with overlap!
             if len(sec_words) > self.chunk_size:
                 if current_chunk_words:
                     chunks.append({

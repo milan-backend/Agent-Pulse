@@ -1,47 +1,27 @@
 import os
 from google import genai
-
-# 🟢 1. Import your smart sampler module
-from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
 
-
 def get_intelligence_client() -> genai.Client:
-    """Initializes and returns the official Google GenAI Client using system environment keys."""
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
-        raise ValueError("CRITICAL RUNTIME ERROR: Neither INTELLIGENCE_LAYER_API_KEY nor GEMINI_API_KEY environment variables are configured.")
+        raise ValueError("CRITICAL RUNTIME ERROR: Neither INTELLIGENCE_LAYER_API_KEY nor GEMINI_API_KEY are configured.")
     return genai.Client(api_key=gemini_key)
 
-
-def run_phase_1_knowledge_extraction(extracted_text: str, client: genai.Client) -> KnowledgeIngestionPlan:
+def run_phase_1_knowledge_extraction(extraction_payload: dict, client: genai.Client) -> KnowledgeIngestionPlan:
     """
-    Phase 1 Extraction AI: Runs local deterministic page inspection, builds a smart 
-    token-budgeted sample window, and queries Gemini for the KnowledgeIngestionPlan.
+    Phase 1 Extraction AI: Receives clean Python-extracted summary snippets and 
+    generates the KnowledgeIngestionPlan (entities, metadata, and chunking strategy).
     """
-    # 🟢 2. Split text into pages locally (zero LLM tokens)
-    pages_list = extracted_text.split("\f")
-    if len(pages_list) <= 1:
-        pages_list = [extracted_text[i:i+3000] for i in range(0, len(extracted_text), 3000)]
-
-    # 🟢 3. Run local code analysis on structural metrics
-    doc_stats = analyze_pdf_structure(pages_list)
-    print(f"📊 Deterministic PDF Inspector Stats: {doc_stats}")
-
-    # 🟢 4. Build smart sample under strict token budget
-    global_text_sample = select_intelligent_pages(pages_list, max_token_budget=8000)
+    summary_text = extraction_payload.get("summary_text", "")
 
     system_instruction = (
         "You are the Core Computational Extraction AI for the AgentPulse Ingestion Pipeline.\n\n"
-        "🎯 RESPONSIBILITY:\n"
-        "Analyze the provided document text sample to construct a complete KnowledgeIngestionPlan.\n"
-        "Do NOT chunk the document. Do NOT create vector embeddings. Focus strictly on understanding structure, "
-        "discovering dynamic key-value metadata, identifying concept relationships with strength scores (0.0 to 1.0), "
-        "and recommending an optimal chunking strategy.\n\n"
-        "📌 CRITICAL REQUIREMENT FOR SUMMARY:\n"
-        "In the document summary and questions_this_document_can_answer list, explicitly mention key schemes, fellowships, "
-        "chapters, or specific financial programs present in the sample so the retrieval planner can easily match them.\n\n"
-        "⚠️ CONSTRAINTS & ALLOWED VALUES:\n"
+        "RESPONSIBILITY:\n"
+        "Analyze the provided Python-extracted document summary snippet to construct a complete KnowledgeIngestionPlan.\n"
+        "Focus strictly on understanding structure, discovering dynamic key-value metadata, identifying concept "
+        "relationships with strength scores (0.0 to 1.0), and recommending an optimal chunking strategy.\n\n"
+        "CONSTRAINTS & ALLOWED VALUES:\n"
         "- Chunking strategy MUST be one of: ['Section Based', 'Heading Based', 'Paragraph Based', 'Question Answer', 'Page Based', 'Semantic']\n"
         "- Recommended chunk_size MUST be between 400 and 1000.\n"
         "- Recommended overlap MUST be between 100 and 200.\n"
@@ -50,7 +30,7 @@ def run_phase_1_knowledge_extraction(extracted_text: str, client: genai.Client) 
 
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite",
-        contents=f"Analyze the following document context sample and build the KnowledgeIngestionPlan:\n\n{global_text_sample}",
+        contents=f"Analyze the following pre-parsed document context and build the KnowledgeIngestionPlan:\n\n{summary_text}",
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
