@@ -75,13 +75,16 @@ class ChromaVectorSyncService:
         return stored_chunk_ids
 
     def _generate_embedding(self, text: str) -> List[float]:
-        """Generates vector embedding for chunk text securely via Gemini client."""
-        try:
-            res = self.embedding_client.models.embed_content(
-                model="text-embedding-004",
-                contents=text
-            )
-            return res.embeddings[0].values
-        except Exception as e:
-            print(f"⚠️ Vector embedding generation failed: {e}")
-            return []
+        """Generates vector embedding for chunk text securely via Gemini client using text-embedding-005."""
+        for model_name in ["text-embedding-005", "embedding-001"]:
+            try:
+                res = self.embedding_client.models.embed_content(
+                    model=model_name,
+                    contents=text
+                )
+                if res and res.embeddings and res.embeddings[0].values:
+                    return res.embeddings[0].values
+            except Exception as e:
+                continue
+        print(f"⚠️ Vector embedding generation failed for text chunk.")
+        return []
