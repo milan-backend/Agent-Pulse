@@ -55,7 +55,7 @@ def run_section_knowledge_extraction(
     prompt = f"SECTION TITLE: {section_title}\n\nSECTION TEXT:\n{section_text[:4000]}"
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         contents=prompt,
         config={
             "system_instruction": system_instruction,

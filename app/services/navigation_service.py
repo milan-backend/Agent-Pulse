@@ -59,7 +59,7 @@ def run_navigation_ai(page_previews: List[Dict[str, Any]]) -> AINavigationMapSch
     prompt = "DOCUMENT PAGE PREVIEWS:\n\n" + "\n".join(context_lines)
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash", # Using stable flash model
+        model="gemini-2.5-flash-lite", # Using stable flash model
         contents=prompt,
         config={
             "system_instruction": system_instruction,
