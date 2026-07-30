@@ -37,3 +37,4 @@ nltk
 pdfplumber
 pytesseract
 pdf2image
+PyMuPDF

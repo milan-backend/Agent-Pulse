@@ -3,11 +3,10 @@ import uuid
 import chromadb
 from typing import List, Dict, Any
 from dotenv import load_dotenv
-from google import genai
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
-from app.models.uploaded_document import UploadedDocument
+from app.models.new_arch import DocumentChunk
 from app.core.rag_crypto import decrypt_text_string
 
 load_dotenv()
@@ -31,139 +30,93 @@ class RetrievalService:
             metadata={"hnsw:space": "cosine"}
         )
 
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY is missing.")
-        self.ai_client = genai.Client(api_key=gemini_api_key)
-
-    def _get_query_embedding(self, text: str) -> List[float]:
-        try:
-            res = self.ai_client.models.embed_content(
-                model="gemini-embedding-2",
-                contents=text
-            )
-            return res.embeddings[0].values
-        except Exception:
-            try:
-                res = self.ai_client.models.embed_content(
-                    model="text-embedding-004",
-                    contents=text
-                )
-                return res.embeddings[0].values
-            except Exception:
-                res = self.ai_client.models.embed_content(
-                    model="text-embedding-005",
-                    contents=text
-                )
-                return res.embeddings[0].values
-
-    def execute_hybrid_retrieval(
+    def execute_direct_id_retrieval(
         self, 
-        query_vector: List[float], 
-        workspace_id: uuid.UUID, 
-        filters: Dict[str, Any]
+        target_chroma_ids: List[str], 
+        workspace_id: uuid.UUID,
+        include_neighbor_chunks: bool = False
     ) -> List[Dict[str, Any]]:
-        target_doc_ids = filters.get("document_ids", [])
-        search_queries = filters.get("search_queries", [])
-
-        if not target_doc_ids:
+        """
+        Direct ID Retrieval Engine:
+        1. Fetches exact vectors from Chroma DB using chroma_vector_ids selected by Planner AI.
+        2. If include_neighbor_chunks is True, traverses prev_chunk_id / next_chunk_id in SQL 
+           to dynamically expand retrieval context without extra vector search cost.
+        """
+        if not target_chroma_ids:
             return []
 
-        queries_to_run = search_queries[:2] if search_queries else [""]
-
-        where_filter = (
-            {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"document_id": {"$in": [str(d) for d in target_doc_ids]}}
-                ]
-            } if len(target_doc_ids) > 1 else {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"document_id": str(target_doc_ids[0])}
-                ]
-            }
-        )
-
-        all_recovered_chunks = []
-        seen_chunk_ids = set()
-
-        for q_term in queries_to_run:
-            if not q_term or not q_term.strip():
-                continue
-            try:
-                q_emb = self._get_query_embedding(q_term)
-
-                results = self.collection.query(
-                    query_embeddings=[q_emb],
-                    n_results=5,
-                    where=where_filter
-                )
-
-                if results and results.get("ids") and results["ids"][0]:
-                    for idx, c_id in enumerate(results["ids"][0]):
-                        if c_id not in seen_chunk_ids:
-                            seen_chunk_ids.add(c_id)
-                            encrypted_doc = results["documents"][0][idx] if results.get("documents") else ""
-                            meta = results["metadatas"][0][idx] if results.get("metadatas") else {}
-
-                            decrypted_text = decrypt_text_string(
-                                encrypted_doc,
-                                workspace_id
-                            )
-
-                            all_recovered_chunks.append({
-                                "chunk_id": c_id,
-                                "document_id": meta.get("document_id"),
-                                "text": decrypted_text,
-                                "source_file": meta.get("source_file", "Unknown"),
-                                "page_number": meta.get("page_number", 1)
-                            })
-            except Exception as e:
-                print(f"⚠️ Fast vector query error: {e}")
-
-        if not all_recovered_chunks:
-            return []
-
-        db: Session = SessionLocal()
-        reconstructed_sections = []
+        # 1. Fetch exact documents from Chroma DB by vector IDs
         try:
-            unique_doc_ids = list(set([c["document_id"] for c in all_recovered_chunks if c.get("document_id")]))
-            doc_records = db.query(UploadedDocument).filter(UploadedDocument.id.in_(unique_doc_ids)).all()
-            doc_map = {str(d.id): d.filename for d in doc_records}
+            results = self.collection.get(
+                ids=target_chroma_ids,
+                where={"workspace_id": str(workspace_id)}
+            )
+        except Exception as e:
+            print(f"⚠️ Chroma Direct ID Fetch error: {e}")
+            return []
 
-            for chunk in all_recovered_chunks:
-                d_id = chunk["document_id"]
-                filename = doc_map.get(str(d_id), chunk["source_file"])
-                reconstructed_sections.append({
-                    "document_id": d_id,
-                    "filename": filename,
-                    "section_name": filename,  # 🟢 Essential: Guarantees ContextOptimizer won't throw KeyError
-                    "content": chunk["text"],
-                    "page_number": chunk["page_number"]
+        if not results or not results.get("ids"):
+            return []
+
+        retrieved_chunks = []
+        db: Session = SessionLocal()
+        
+        try:
+            for idx, chroma_id in enumerate(results["ids"]):
+                encrypted_doc = results["documents"][idx] if results.get("documents") else ""
+                meta = results["metadatas"][idx] if results.get("metadatas") else {}
+
+                decrypted_text = decrypt_text_string(encrypted_doc, workspace_id)
+
+                # Query SQL for chunk record & neighbor expansion
+                chunk_record = db.query(DocumentChunk).filter(
+                    DocumentChunk.chroma_vector_id == chroma_id,
+                    DocumentChunk.workspace_id == workspace_id
+                ).first()
+
+                retrieved_chunks.append({
+                    "chroma_id": chroma_id,
+                    "document_id": meta.get("document_id"),
+                    "section_id": meta.get("section_id"),
+                    "text": decrypted_text,
+                    "sequence_number": chunk_record.sequence_number if chunk_record else 1
                 })
-        except Exception as sql_err:
-            print(f"⚠️ Section stitching batch SQL warning: {sql_err}")
-            for chunk in all_recovered_chunks:
-                filename = chunk["source_file"]
-                reconstructed_sections.append({
-                    "document_id": chunk["document_id"],
-                    "filename": filename,
-                    "section_name": filename,  # 🟢 Essential fallback mapping
-                    "content": chunk["text"],
-                    "page_number": chunk["page_number"]
-                })
+
+                # 2. Dynamic Depth Expansion via Relational Linked List
+                if include_neighbor_chunks and chunk_record:
+                    neighbor_ids = []
+                    if chunk_record.prev_chunk_id:
+                        neighbor_ids.append(chunk_record.prev_chunk_id)
+                    if chunk_record.next_chunk_id:
+                        neighbor_ids.append(chunk_record.next_chunk_id)
+
+                    if neighbor_ids:
+                        neighbors = db.query(DocumentChunk).filter(DocumentChunk.id.in_(neighbor_ids)).all()
+                        neighbor_chroma_ids = [n.chroma_vector_id for n in neighbors if n.chroma_vector_id not in target_chroma_ids]
+                        
+                        if neighbor_chroma_ids:
+                            n_results = self.collection.get(ids=neighbor_chroma_ids)
+                            if n_results and n_results.get("ids"):
+                                for n_idx, n_chroma_id in enumerate(n_results["ids"]):
+                                    n_enc = n_results["documents"][n_idx]
+                                    n_dec = decrypt_text_string(n_enc, workspace_id)
+                                    retrieved_chunks.append({
+                                        "chroma_id": n_chroma_id,
+                                        "document_id": meta.get("document_id"),
+                                        "section_id": meta.get("section_id"),
+                                        "text": n_dec,
+                                        "sequence_number": 0  # Neighbor context tag
+                                    })
+
         finally:
             db.close()
 
-        return self._deduplicate_and_rerank(reconstructed_sections)
+        # Deduplicate retrieved chunks by content
+        seen = set()
+        unique_chunks = []
+        for c in retrieved_chunks:
+            if c["text"] not in seen:
+                seen.add(c["text"])
+                unique_chunks.append(c)
 
-    def _deduplicate_and_rerank(self, sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        seen_chunks = set()
-        unique_sections = []
-        for sec in sections:
-            content_key = sec["content"].strip()
-            if content_key not in seen_chunks:
-                seen_chunks.add(content_key)
-                unique_sections.append(sec)
-        return unique_sections
+        return unique_chunks

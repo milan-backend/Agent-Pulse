@@ -6,22 +6,21 @@ import chromadb
 from celery import Celery
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
-from google import genai  # 🎯 Official Google GenAI SDK interface
+from google import genai  
+import fitz  # PyMuPDF
+import pdfplumber
 
 from app.db.session import get_db
 from app.models.uploaded_document import UploadedDocument
 from app.models.user import User  
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
-from app.services.smart_sampler import analyze_pdf_structure, select_intelligent_pages
 
-# 🟢 IMPORT NEW INGESTION PIPELINE COMPONENTS (Phase 1 & Phase 2)
-from app.services.extraction_service import (
-    get_intelligence_client,
-    run_phase_1_knowledge_extraction
-)
-from app.services.plan_validator import validate_and_sanitize_ingestion_plan
+# 🟢 NEW ARCHITECTURE IMPORTS
+from app.services.pdf_parser import extract_document_structure
+from app.services.navigation_service import build_and_save_navigation_map
+from app.services.extraction_ai import run_section_knowledge_extraction
 from app.services.chunk_engine import ChunkEngine
-import pdfplumber
+from app.models.new_arch import DocumentChunk, ExtractedEntity
 
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
@@ -67,14 +66,14 @@ def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_siz
 @celery_app.task(name="app.tasks.rag_tasks.process_document_embedding")
 def process_document_embedding(document_id: str):
     """
-    Celery Background Task Worker: Restructured to pull high-density operational 
-    questions at Document-Level (Phase A) for absolute retrieval planner matching.
+    Celery Background Task Worker: Restructured for Hierarchical & Agentic RAG.
+    Creates navigation maps, extracts domain entities, and creates section-bound chunks.
     """
     db: Session = next(get_db())
     doc = None
     
     try:
-        # 1. Fetch the target file tracking record from PostgreSQL[cite: 5]
+        # 1. Fetch the target file tracking record from PostgreSQL
         doc = db.query(UploadedDocument).filter(UploadedDocument.id == document_id).first()
         if not doc:
             print(f"❌ Ingestion aborted: Document UUID '{document_id}' not found.")
@@ -86,7 +85,7 @@ def process_document_embedding(document_id: str):
             if user_row and user_row.email:
                 uploader_email = str(user_row.email).strip()
 
-        # 2. Decrypt the raw binary bytes payload pulled from PostgreSQL[cite: 5]
+        # 2. Decrypt the raw binary bytes payload pulled from PostgreSQL
         raw_file_bytes = decrypt_file_bytes(
             ciphertext=doc.encrypted_file_data,
             iv=doc.encryption_iv,
@@ -121,7 +120,6 @@ def process_document_embedding(document_id: str):
             if not extracted_text.strip():
                 print("🔄 Layout extraction yielded empty text. Executing pdfplumber table/grid parser...")
                 try:
-                    import pdfplumber
                     pdf_stream.seek(0)
                     with pdfplumber.open(pdf_stream) as pdf:
                         plumber_text_parts = []
@@ -133,7 +131,7 @@ def process_document_embedding(document_id: str):
                 except Exception as plumber_err:
                     print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
 
-            # 🟢 Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
+            # Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
             if not extracted_text.strip():
                 print("🔄 Text layers missing. Initializing PyTesseract OCR optical engine...")
                 try:
@@ -154,232 +152,143 @@ def process_document_embedding(document_id: str):
         if not extracted_text.strip():
             raise ValueError("Zero human-readable text contents could be extracted even after OCR processing.")
         
-            
-         # =====================================================================
-        # 🎯 NEW KNOWLEDGE INGESTION PIPELINE (PHASE 1 & PHASE 2)
+        # =====================================================================
+        # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE
         # =====================================================================
         try:
             print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
             
-            intelligence_client = get_intelligence_client()
+            # 1. Save temp file for PyMuPDF parser
+            temp_pdf_path = f"/tmp/{uuid.uuid4().hex}.pdf"
+            with open(temp_pdf_path, "wb") as f:
+                f.write(raw_file_bytes)
             
-            # --- STEP 1: EXTRACTION AI (Phase 1 - handles local inspection & smart sampling internally) ---
-            print(f"📡 Generating Knowledge Ingestion Plan for: {doc.filename}")
-            raw_ingestion_plan = run_phase_1_knowledge_extraction(extracted_text, intelligence_client)
+            doc_obj = fitz.open(temp_pdf_path)
+            doc_page_count = doc_obj.page_count
             
-            # --- STEP 2: VALIDATION LAYER ---
-            validated_plan = validate_and_sanitize_ingestion_plan(raw_ingestion_plan)
-
-            # Parse 'Key: Value' strings into dict objects safely
-            parsed_metadata = []
-            for item in validated_plan.metadata:
-                if ":" in item:
-                    k, v = item.split(":", 1)
-                    parsed_metadata.append({"key": k.strip(), "value": v.strip()})
-                else:
-                    parsed_metadata.append({"key": "Metadata", "value": item.strip()})
-
-            # Parse Rich Relationship Chains into dict objects safely
-            parsed_relationships = []
-            for item in validated_plan.relationships:
-                parts = [p.strip() for p in item.split("|")]
-                if len(parts) >= 4:
-                    try:
-                        strength_val = float(parts[3])
-                    except ValueError:
-                        strength_val = 0.9
-                    parsed_relationships.append({
-                        "chain": parts[0],
-                        "relation": parts[1],
-                        "target": parts[2],
-                        "strength": strength_val
-                    })
-                elif len(parts) == 3:
-                    parsed_relationships.append({
-                        "chain": parts[0],
-                        "relation": parts[1],
-                        "target": parts[2],
-                        "strength": 0.9
-                    })
-                else:
-                    parsed_relationships.append({"chain": item.strip(), "relation": "relates_to", "target": "Context", "strength": 0.85})
-
-            # --- 📊 RICH DIAGNOSTIC LOG (As requested) ---
-            meta_str = "\n".join([f"   ✓ {m['key']}: {m['value']}" for m in parsed_metadata[:5]]) or "   (None)"
-            rel_str = "\n".join([f"   ✓ {r['chain']}  -->  {r['target']}" for r in parsed_relationships[:5]]) or "   (None)"
-            
-            print(
-                f"\n=======================================================\n"
-                f"📋 KNOWLEDGE INGESTION PLAN DIAGNOSTICS: {doc.filename}\n"
-                f"=======================================================\n"
-                f"📌 Document Type: {validated_plan.document_type}\n"
-                f"💡 Purpose: {validated_plan.document_purpose}\n\n"
-                f"🏗️ Document Structure Traits:\n"
-                f"   - Has Tables: {validated_plan.has_tables}\n"
-                f"   - Has Headings: {validated_plan.has_headings}\n"
-                f"   - Hierarchical: {validated_plan.is_hierarchical}\n"
-                f"   - Contains Policies: {validated_plan.contains_policies}\n"
-                f"   - Contains Procedures: {validated_plan.contains_procedures}\n"
-                f"   - Contains Questions: {validated_plan.contains_questions}\n\n"
-                f"🏷️ Discovered Metadata:\n{meta_str}\n\n"
-                f"🔗 Discovered Concept Chains:\n{rel_str}\n\n"
-                f"⚙️ Recommended Chunk Strategy: {validated_plan.chunk_strategy}\n"
-                f"🎯 Strategy Reasoning: {validated_plan.chunk_reasoning}\n"
-                f"📐 Chunk Size: {validated_plan.chunk_size} | Overlap: {validated_plan.overlap}\n"
-                f"📊 Confidence: {int(validated_plan.chunk_strategy_confidence * 100)}%\n"
-                f"=======================================================\n"
-            )
-
-            # Save plan metadata directly to PostgreSQL
-            doc.document_type = validated_plan.document_type
-            doc.document_purpose = validated_plan.document_purpose
-            doc.planner_summary = validated_plan.summary
-            doc.knowledge_schema_version = 2
-            doc.approved = True
-
-            doc.knowledge_metadata = {
-                "document_profile": {
-                    "document_type": validated_plan.document_type,
-                    "structure": validated_plan.structure,
-                    "document_purpose": validated_plan.document_purpose,
-                    "summary": validated_plan.summary
-                },
-                "document_structure": {
-                    "has_tables": validated_plan.has_tables,
-                    "has_headings": validated_plan.has_headings,
-                    "is_hierarchical": validated_plan.is_hierarchical,
-                    "contains_policies": validated_plan.contains_policies,
-                    "contains_procedures": validated_plan.contains_procedures,
-                    "contains_questions": validated_plan.contains_questions
-                },
-                "dynamic_metadata": parsed_metadata,
-                "relationships": parsed_relationships,
-                "chunking_plan": {
-                    "strategy": validated_plan.chunk_strategy,
-                    "chunk_size": validated_plan.chunk_size,
-                    "overlap": validated_plan.overlap,
-                    "reasoning": validated_plan.chunk_reasoning
-                },
-                "questions_this_document_can_answer": validated_plan.questions_this_document_can_answer,
-                "confidence": {
-                    "metadata_confidence": validated_plan.metadata_confidence,
-                    "chunk_strategy_confidence": validated_plan.chunk_strategy_confidence
-                }
-            }
-            db.commit()
-
-            # --- STEP 3: CHUNK ENGINE (Phase 2) ---
-            print(f"🧬 Executing Chunk Engine for {doc.filename}...")
-            chunk_engine = ChunkEngine(plan=validated_plan)
-            processed_chunks_pool = chunk_engine.execute_chunking(
-                text=extracted_text, 
-                source_filename=doc.filename
+            # 2. Extract Structure and Build DB Navigation Map
+            struct_data = extract_document_structure(temp_pdf_path)
+            saved_sections = build_and_save_navigation_map(
+                db=db, 
+                document_id=doc.id, 
+                workspace_id=doc.workspace_id,
+                agent_id=doc.agent_id, 
+                pymupdf_toc=struct_data.get("toc", []),
+                doc_page_count=doc_page_count, 
+                page_text_samples=None
             )
             
-            print(f"🟢 Chunk Engine finished. Created {len(processed_chunks_pool)} chunks.")
-
-        except Exception as pipeline_err:
-            db.rollback()
-            error_str = f"Knowledge Ingestion Pipeline Error: {str(pipeline_err)}"
-            print(f"❌ Pipeline rollback triggered: {error_str}")
-            raise ValueError(error_str)
-        # =====================================================================
-
-        # 4. Initialize Cloud-Native Vector Engine Connection Dynamic Link[cite: 5]
-        chroma_client = get_chroma_client()
-        collection = chroma_client.get_or_create_collection(
-            name="rag_enterprise_vectors_v1",
-            metadata={"hnsw:space": "cosine"}
-        )
-        
-        gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not gemini_api_key:
-            raise ValueError("CRITICAL INITIALIZATION ERROR: GEMINI_API_KEY is missing.")
+            # 3. Setup AI & Vector DB
+            chroma_client = get_chroma_client()
+            collection = chroma_client.get_or_create_collection(
+                name="rag_enterprise_vectors_v1", 
+                metadata={"hnsw:space": "cosine"}
+            )
             
-        ai_client = genai.Client(api_key=gemini_api_key)
-        
-        ids = []
-        embeddings = []
-        documents = []
-        metadatas = []
-        
-        current_timestamp_iso = datetime.utcnow().strftime("%Y-%m-%d")
+            gemini_api_key = os.getenv("GEMINI_API_KEY")
+            ai_client = genai.Client(api_key=gemini_api_key)
+            chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
-        # 5. Process each plain text chunk[cite: 5]
-        for index, chunk_payload in enumerate(processed_chunks_pool):
-            plain_text_content = chunk_payload["text"]
-            if not plain_text_content.strip():
-                continue
-                
-            chunk_id = f"{doc.id}_chunk_{index}"
-            raw_vector_array = None
-            
-            for model_name in ["text-embedding-004", "gemini-embedding-001"]:
-                try:
-                    vector_response = ai_client.models.embed_content(
-                        model=model_name,
-                        contents=plain_text_content
-                    )
-                    candidate = vector_response.embeddings[0].values
-                    # Validate vector is a proper list/array and contains no NaN values
-                    import math
-                    if candidate and isinstance(candidate, (list, tuple)) and len(candidate) > 0:
-                        if not any(math.isnan(x) for x in candidate if isinstance(x, (int, float))):
-                            raw_vector_array = candidate
-                            break
-                except Exception:
+            # 4. Process Sections (Extraction + Chunking)
+            for section in saved_sections:
+                section_text = ""
+                for p in range(section.start_page - 1, section.end_page):
+                    if p < doc_page_count:
+                        section_text += doc_obj.load_page(p).get_text("text") + "\n"
+                        
+                if not section_text.strip(): 
                     continue
 
-            # Skip chunk entirely if embedding generation failed or returned NaN
-            if not raw_vector_array:
-                print(f"⚠️ Warning: Skipping chunk {index} due to invalid or null embedding response.")
-                continue
-
-            embeddings.append(raw_vector_array)
-            masked_payload_string = encrypt_text_string(plain_text=plain_text_content, workspace_id=doc.workspace_id)
-            
-            ids.append(chunk_id)
-            documents.append(masked_payload_string) 
-            
-            metadatas.append({
-                "workspace_id": str(doc.workspace_id),
-                "agent_id": str(doc.agent_id) if doc.agent_id else "None",
-                "document_id": str(doc.id),
-                "source_file": str(chunk_payload["source_file"]),          
-                "page_number": int(chunk_payload.get("page_number", 1)),
-                "strategy_used": str(chunk_payload.get("strategy_used", "Standard")),         
-                "last_updated": current_timestamp_iso,                    
-                "uploaded_by": uploader_email                              
-            })
-            
-        # 🚀 BATCHED INSERTION LOOP TO PREVENT DATABASE & VECTOR MEMORY OVERLOAD
-        BATCH_SIZE = 50
-        if ids:
-            for i in range(0, len(ids), BATCH_SIZE):
-                batch_ids = ids[i:i + BATCH_SIZE]
-                batch_embeddings = embeddings[i:i + BATCH_SIZE]
-                batch_documents = documents[i:i + BATCH_SIZE]
-                batch_metadatas = metadatas[i:i + BATCH_SIZE]
+                # A. Extraction AI (Telemetry & Entities)
+                extraction_data = run_section_knowledge_extraction(section.title, section_text, ai_client)
+                for ent in extraction_data.entities:
+                    db.add(ExtractedEntity(
+                        document_id=doc.id, 
+                        workspace_id=doc.workspace_id, 
+                        agent_id=doc.agent_id,
+                        name=ent.name, 
+                        category=ent.category, 
+                        description=ent.description
+                    ))
                 
-                collection.add(
-                    ids=batch_ids,
-                    embeddings=batch_embeddings,
-                    documents=batch_documents,
-                    metadatas=batch_metadatas
+                # B. Section-Bound Chunking
+                section_chunks = chunk_engine.execute_section_chunking(
+                    section_text=section_text, 
+                    section_id=section.id, 
+                    document_id=doc.id, 
+                    workspace_id=doc.workspace_id, 
+                    agent_id=doc.agent_id
                 )
-                # Incremental commit to keep connection sessions healthy and light
-                db.commit()
+                
+                last_chunk_db_id = None
+                for chunk_payload in section_chunks:
+                    pt_content = chunk_payload["text"]
+                    
+                    try:
+                        vector_response = ai_client.models.embed_content(
+                            model="text-embedding-004", 
+                            contents=pt_content
+                        )
+                        raw_vector = vector_response.embeddings[0].values
+                    except Exception as e: 
+                        print(f"⚠️ Vector generation failed for a chunk: {e}")
+                        continue
+                        
+                    chroma_id = f"vec_{uuid.uuid4().hex[:12]}"
+                    encrypted_doc = encrypt_text_string(pt_content, doc.workspace_id)
+                    
+                    collection.add(
+                        ids=[chroma_id], 
+                        embeddings=[raw_vector], 
+                        documents=[encrypted_doc],
+                        metadatas=[{
+                            "workspace_id": str(doc.workspace_id), 
+                            "section_id": str(section.id), 
+                            "document_id": str(doc.id)
+                        }]
+                    )
+                    
+                    new_db_chunk = DocumentChunk(
+                        document_id=doc.id, 
+                        section_id=section.id, 
+                        workspace_id=doc.workspace_id,
+                        agent_id=doc.agent_id,
+                        chroma_vector_id=chroma_id, 
+                        sequence_number=chunk_payload["sequence_number"],
+                        telemetry_summary=extraction_data.telemetry_summary, 
+                        prev_chunk_id=last_chunk_db_id
+                    )
+                    db.add(new_db_chunk)
+                    db.flush()
+                    
+                    if last_chunk_db_id:
+                        prev_chunk = db.query(DocumentChunk).filter(DocumentChunk.id == last_chunk_db_id).first()
+                        if prev_chunk:
+                            prev_chunk.next_chunk_id = new_db_chunk.id
+                            
+                    last_chunk_db_id = new_db_chunk.id
+
+            # Cleanup
+            doc_obj.close()
+            if os.path.exists(temp_pdf_path):
+                os.remove(temp_pdf_path)
+
+            doc.status = "ready"
+            db.commit()
+            print(f"🚀 Success: Hierarchical ingestion complete for '{doc.filename}'.")
+            return True
             
-        doc.status = "ready"
-        db.commit()
-        print(f"🚀 Success: Cloud server batched ingestion complete for '{doc.filename}'. Loaded {len(ids)} chunks safely.")
-        return True
-        
+        except Exception as pipeline_err:
+            db.rollback()
+            raise ValueError(f"Knowledge Ingestion Pipeline Error: {str(pipeline_err)}")
+
     except Exception as error:
         db.rollback()
         if doc:
             doc.status = "failed"
-            doc.error_message = str(error)
+            # Some models have an error_message field, wrapping safely
+            if hasattr(doc, 'error_message'):
+                doc.error_message = str(error)
             db.commit()
         print(f"❌ Background pipeline failure: {str(error)}")
         return False
