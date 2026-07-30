@@ -23,10 +23,9 @@ class AINavigationMapSchema(BaseModel):
     sections: List[AISectionItem] = []
 
 # =====================================================================
-# 2. Navigation AI Function (SDK Bug Fix Applied)
+# 2. Navigation AI Function (Now takes the condensed map string)
 # =====================================================================
-
-def run_navigation_ai(page_previews: List[Dict[str, Any]]) -> AINavigationMapSchema:
+def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
         raise ValueError("CRITICAL: API Key for Navigation AI is missing.")
@@ -36,11 +35,12 @@ def run_navigation_ai(page_previews: List[Dict[str, Any]]) -> AINavigationMapSch
     system_instruction = (
         "You are the Core Navigation & Outline AI for AgentPulse.\n\n"
         "🎯 MISSION:\n"
-        "Analyze page-by-page text previews from a document and generate a structured Table of Contents.\n"
+        "I am providing you with a condensed 'Header Map' extracted from a large document. It shows only the bold/large text and the page it was found on.\n"
+        "Analyze this map and generate a structured Table of Contents.\n"
         "1. Assign logical section codes (e.g., '1.0', '1.1', '1.2', '2.0').\n"
         "2. Identify clear titles for each section or chapter.\n"
         "3. Specify parent_code for sub-sections (e.g., parent_code of '1.1' is '1.0').\n"
-        "4. Set exact start_page and end_page boundaries.\n\n"
+        "4. Set exact start_page and end_page boundaries based on when the next section begins.\n\n"
         "⚠️ STRICT OUTPUT FORMAT:\n"
         "You must return ONLY a raw JSON object matching this exact structure. Do not include markdown formatting.\n"
         "{\n"
@@ -51,15 +51,10 @@ def run_navigation_ai(page_previews: List[Dict[str, Any]]) -> AINavigationMapSch
         "}"
     )
 
-    context_lines = []
-    for page in page_previews[:30]:  
-        context_lines.append(f"--- PAGE {page['page_num']} ---")
-        context_lines.append(page['text_snippet'][:500])
-
-    prompt = "DOCUMENT PAGE PREVIEWS:\n\n" + "\n".join(context_lines)
+    prompt = f"CONDENSED HEADER MAP:\n\n{condensed_header_map}"
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite", # Using stable flash model
+        model="gemini-2.5-flash-lite", 
         contents=prompt,
         config={
             "system_instruction": system_instruction,
@@ -71,7 +66,7 @@ def run_navigation_ai(page_previews: List[Dict[str, Any]]) -> AINavigationMapSch
     return AINavigationMapSchema.model_validate_json(response.text)
 
 # =====================================================================
-# 3. Master Navigation Service Function (Keep your existing function here)
+# 3. Master Navigation Service Function
 # =====================================================================
 def build_and_save_navigation_map(
     db: Session,
@@ -80,7 +75,7 @@ def build_and_save_navigation_map(
     agent_id: Optional[uuid.UUID],
     pymupdf_toc: List[List[Any]],
     doc_page_count: int,
-    page_text_samples: Optional[List[Dict[str, Any]]] = None
+    ai_header_map: Optional[str] = None # 🟢 Changed to accept the string map
 ) -> List[DocumentSection]:
     saved_sections: List[DocumentSection] = []
     code_to_db_id: Dict[str, uuid.UUID] = {}
@@ -100,11 +95,11 @@ def build_and_save_navigation_map(
             db.flush()  
             saved_sections.append(db_section)
     else:
-        print("🤖 No embedded TOC found. Triggering Navigation AI...")
-        if not page_text_samples:
-            raise ValueError("Page text samples required for Navigation AI fallback.")
+        print("🤖 No embedded TOC found. Triggering Navigation AI with Condensed Map...")
+        if not ai_header_map:
+            raise ValueError("Condensed Header Map required for Navigation AI fallback.")
 
-        ai_nav_map = run_navigation_ai(page_text_samples)
+        ai_nav_map = run_navigation_ai(ai_header_map)
 
         for item in ai_nav_map.sections:
             db_section = DocumentSection(

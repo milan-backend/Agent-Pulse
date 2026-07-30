@@ -185,15 +185,17 @@ def process_document_embedding(document_id: str):
                             "text_snippet": page_text[:800]  # First 800 chars is enough context
                         })
 
-            # Now pass the page_text_samples variable into the function
+            # 2. Extract Structure and Build DB Navigation Map
+            struct_data = extract_document_structure(temp_pdf_path)
+            
             saved_sections = build_and_save_navigation_map(
                 db=db, 
                 document_id=doc.id, 
                 workspace_id=doc.workspace_id,
                 agent_id=doc.agent_id, 
-                pymupdf_toc=pymupdf_toc,
+                pymupdf_toc=struct_data.get("toc", []),
                 doc_page_count=doc_page_count, 
-                page_text_samples=page_text_samples  # 🟢 Fixed: No longer hardcoded to None
+                ai_header_map=struct_data.get("ai_header_map") # 🟢 Pass the condensed map
             )
             
             # 3. Setup AI & Vector DB

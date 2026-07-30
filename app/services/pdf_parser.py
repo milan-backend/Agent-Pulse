@@ -1,72 +1,96 @@
 import fitz  # PyMuPDF
 
-def extract_toc(doc: fitz.Document) -> list:
+def calculate_base_font_size(doc: fitz.Document, pages_to_scan: int = 5) -> float:
     """
-    Extracts the Table of Contents from a PyMuPDF document.
-    Returns a list of lists: [level, title, page_number].
+    Pass 1: Scans the first few pages to determine the most common font size (body text).
     """
-    return doc.get_toc(simple=True) # Extracts standard hierarchical outline
-
-def build_heuristic_toc(doc: fitz.Document) -> list:
-    """
-    If no built-in TOC exists, scans the document for larger, bold fonts to build a 
-    custom outline based on text formatting heuristics.
-    """
-    heuristic_toc = []
+    font_counts = {}
+    limit = min(pages_to_scan, doc.page_count)
     
-    # We will assume that text larger than the average on the page is a heading. 
-    # This logic extracts font size and style from every line of text in the document.
-    for page_num in range(doc.page_count): # Iterate through all pages
-        page = doc[page_num] # Load the page
+    for page_num in range(limit):
+        page = doc[page_num]
+        content = page.get_text("dict")
+        for block in content.get("blocks", []):
+            if block.get("type") != 0:  # 0 means text block
+                continue
+            for line in block.get("lines", []):
+                for span in line.get("spans", []):
+                    size = round(span["size"], 1)
+                    font_counts[size] = font_counts.get(size, 0) + len(span["text"].strip())
+                    
+    if not font_counts:
+        return 11.0 # Safe default
         
-        # Extract a detailed dictionary of all text, including meta-information like font size
-        content = page.get_text("dict") 
+    # Return the font size that has the most characters associated with it
+    return max(font_counts, key=font_counts.get)
+
+
+def extract_advanced_header_map(doc: fitz.Document) -> str:
+    """
+    Pass 2: Scans ALL pages. Extracts ONLY text that is significantly larger than 
+    the base font OR is flagged as Bold. Returns a condensed text map.
+    """
+    base_size = calculate_base_font_size(doc)
+    header_threshold = base_size * 1.15  # Text must be 15% larger than body text
+    
+    header_map_lines = []
+    
+    for page_num in range(doc.page_count):
+        page = doc[page_num]
+        content = page.get_text("dict")
         
-        for block in content.get("blocks", []): # Blocks are the top hierarchy of a page's text
-            if "lines" not in block:
+        page_headers = []
+        for block in content.get("blocks", []):
+            if block.get("type") != 0:
                 continue
                 
-            for line in block["lines"]:
-                for span in line["spans"]:
-                    # Check if the text might be a header.
-                    # We are looking for large text (e.g., > 12pt) and bold fonts.
+            for line in block.get("lines", []):
+                line_text = ""
+                is_header = False
+                
+                for span in line.get("spans", []):
                     text = span["text"].strip()
-                    font_size = span["size"]
-                    font_flags = span["flags"]
+                    if not text:
+                        continue
+                        
+                    size = span["size"]
+                    flags = span["flags"]
                     
-                    # 16 in PyMuPDF flags often indicates bold. You can adjust this threshold.
-                    is_bold = bool(font_flags & 16) 
+                    # In PyMuPDF, bit 4 (16) often denotes bold. 
+                    is_bold = bool(flags & 16) or "Bold" in span["font"]
                     
-                    if text and font_size >= 14 and is_bold:
-                        # Add to our heuristic TOC list.
-                        # We use level 1 for all found headers in this simple heuristic.
-                        heuristic_toc.append([1, text, page_num + 1]) 
-    return heuristic_toc
+                    if size >= header_threshold or is_bold:
+                        is_header = True
+                        line_text += text + " "
+                
+                if is_header and len(line_text.strip()) > 3: # Ignore tiny artifacts
+                    page_headers.append(line_text.strip())
+                    
+        if page_headers:
+            header_map_lines.append(f"--- PAGE {page_num + 1} ---")
+            for h in page_headers:
+                header_map_lines.append(h)
+                
+    # Join into a single highly condensed string for the AI
+    return "\n".join(header_map_lines)
 
 
 def extract_document_structure(pdf_path: str) -> dict:
     """
-    Main function to parse the PDF. It prioritizes the embedded TOC,
-    but falls back to visual heuristics if the TOC is missing.
+    Prioritizes embedded TOC, falls back to Advanced Header Map.
     """
-    # Open the PDF file
     doc = fitz.open(pdf_path) 
+    toc = doc.get_toc(simple=True)
     
-    # Attempt to grab the embedded Table of Contents first
-    toc = extract_toc(doc)
-    
+    condensed_map = None
     if not toc:
-        print("No embedded TOC found. Building one using font size heuristics...")
-        toc = build_heuristic_toc(doc)
+        print("No embedded TOC found. Executing Advanced PyMuPDF Header Extraction across all pages...")
+        condensed_map = extract_advanced_header_map(doc)
         
-    doc.close() # Close the document when finished processing
+    doc.close() 
     
     return {
         "status": "success",
-        "toc": toc
+        "toc": toc,
+        "ai_header_map": condensed_map
     }
-
-# Example usage:
-if __name__ == "__main__":
-    result = extract_document_structure("test_document.pdf")
-    print(result)
