@@ -29,7 +29,6 @@ class ChromaVectorSyncService:
         Takes ingestion plan, uses ChunkEngine to split text based on guidance, 
         maps chunks to Navigation AI's topics, generates embeddings, and syncs to ChromaDB.
         """
-        # 1. Initialize ChunkEngine using the ingestion plan parameters
         chunk_engine = ChunkEngine(ingestion_plan)
         raw_chunks = chunk_engine.execute_chunking(full_text, filename)
 
@@ -40,18 +39,15 @@ class ChromaVectorSyncService:
             chunk_id = str(uuid.uuid4())
             chunk_text = chunk["text"]
             
-            # 2. Map chunk to nearest Navigation AI topic/sub-topic based on order/content match
             matched_topic = topic_nodes[idx % len(topic_nodes)] if topic_nodes else None
             topic_title = matched_topic.title if matched_topic else "General Section"
             hierarchy_level = matched_topic.hierarchy_level if matched_topic else 1
             page_num = matched_topic.page_number if matched_topic else 1
 
-            # 3. Generate vector embedding using Gemini embedding model
             embedding_vector = self._generate_embedding(chunk_text)
             if not embedding_vector:
                 continue
 
-            # 4. Define metadata matching your architecture (ChromaDB stores ID, topic tags, and references)
             metadata = {
                 "document_id": str(document_id),
                 "workspace_id": str(workspace_id),
@@ -62,7 +58,6 @@ class ChromaVectorSyncService:
                 "strategy_used": chunk.get("strategy_used", "Standard")
             }
 
-            # 5. Insert into ChromaDB collection
             self.collection.add(
                 ids=[chunk_id],
                 embeddings=[embedding_vector],
@@ -75,15 +70,17 @@ class ChromaVectorSyncService:
         return stored_chunk_ids
 
     def _generate_embedding(self, text: str) -> List[float]:
-        """Generates vector embedding for chunk text securely via Gemini client using text-embedding-005."""
-        for model_name in ["text-embedding-005", "embedding-001"]:
+        """Generates vector embedding matching working rag_tasks syntax."""
+        for model_name in ["text-embedding-004", "gemini-embedding-001"]:
             try:
-                res = self.embedding_client.models.embed_content(
+                vector_response = self.embedding_client.models.embed_content(
                     model=model_name,
                     contents=text
                 )
-                if res and res.embeddings and res.embeddings[0].values:
-                    return res.embeddings[0].values
+                if vector_response and vector_response.embeddings:
+                    candidate = vector_response.embeddings[0].values
+                    if candidate and isinstance(candidate, (list, tuple)) and len(candidate) > 0:
+                        return list(candidate)
             except Exception as e:
                 continue
         print(f"⚠️ Vector embedding generation failed for text chunk.")
