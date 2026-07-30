@@ -252,7 +252,9 @@ def process_document_embedding(document_id: str):
                 filename=doc.filename,
                 full_text=extracted_text,
                 ingestion_plan=validated_plan,
-                navigation_map=navigation_map
+                navigation_map=navigation_map,
+                agent_id=str(doc.agent_id) if doc.agent_id else None,
+                uploader_email=uploader_email
             )
 
             print(f"🚀 Success: Cloud server batched ingestion complete for '{doc.filename}'. Loaded {len(stored_chunk_ids)} chunks safely into ChromaDB.")

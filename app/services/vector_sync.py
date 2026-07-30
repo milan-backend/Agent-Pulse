@@ -9,7 +9,7 @@ from app.schemas.ingestion_plan_schema import KnowledgeIngestionPlan
 class ChromaVectorSyncService:
     """
     Bridges the Navigation AI's topic maps, the ChunkEngine's splitting strategy, 
-    and ChromaDB synchronization to ensure chunks are stored with precise topic tags and IDs.
+    and ChromaDB synchronization to ensure chunks are stored with precise topic tags, IDs, and agent isolation.
     """
 
     def __init__(self, chroma_collection, embedding_client):
@@ -23,11 +23,13 @@ class ChromaVectorSyncService:
         filename: str,
         full_text: str,
         ingestion_plan: KnowledgeIngestionPlan,
-        navigation_map: NavigationMapSchema
+        navigation_map: NavigationMapSchema,
+        agent_id: str = None,
+        uploader_email: str = "System Operator"
     ) -> List[str]:
         """
-        Takes ingestion plan, uses ChunkEngine to split text based on guidance, 
-        maps chunks to Navigation AI's topics, generates embeddings, and syncs to ChromaDB.
+        Takes ingestion plan, splits text, maps to Navigation AI topics, generates embeddings, 
+        and syncs to ChromaDB with strict agent and workspace metadata tags.
         """
         chunk_engine = ChunkEngine(ingestion_plan)
         raw_chunks = chunk_engine.execute_chunking(full_text, filename)
@@ -48,14 +50,17 @@ class ChromaVectorSyncService:
             if not embedding_vector:
                 continue
 
+            # 🟢 Restoring original dual-tier agent and workspace scope metadata tags
             metadata = {
                 "document_id": str(document_id),
                 "workspace_id": str(workspace_id),
+                "agent_id": str(agent_id) if agent_id else "None",
                 "source_file": filename,
                 "topic": topic_title,
                 "hierarchy_level": hierarchy_level,
                 "page_number": page_num,
-                "strategy_used": chunk.get("strategy_used", "Standard")
+                "strategy_used": chunk.get("strategy_used", "Standard"),
+                "uploaded_by": uploader_email
             }
 
             self.collection.add(
@@ -70,7 +75,7 @@ class ChromaVectorSyncService:
         return stored_chunk_ids
 
     def _generate_embedding(self, text: str) -> List[float]:
-        """Generates vector embedding matching working rag_tasks syntax."""
+        """Generates vector embedding matching working syntax."""
         for model_name in ["text-embedding-004", "gemini-embedding-001"]:
             try:
                 vector_response = self.embedding_client.models.embed_content(

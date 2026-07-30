@@ -162,3 +162,4 @@ check_docs.py
 force_cleanup.py
 add_tables.py
 document_insight.py
+check.py
