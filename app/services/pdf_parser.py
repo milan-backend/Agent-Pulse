@@ -43,7 +43,7 @@ class AdvancedPDFParser:
     """
     Enterprise-grade PDF Parser implementing multi-signal heading confidence, 
     reading-order reconstruction, header/footer stripping, OCR artifact cleaning, 
-    and block-level hierarchical graphs.
+    and block-level hierarchical graphs with full logging visibility.
     """
     def __init__(self, pdf_path: str):
         self.pdf_path = pdf_path
@@ -52,11 +52,8 @@ class AdvancedPDFParser:
         """Removes broken line breaks, duplicate spaces, and OCR noise."""
         if not text:
             return ""
-        # Fix hyphenated line breaks
         text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)
-        # Normalize whitespace
         text = re.sub(r'[ \t]+', ' ', text)
-        # Clean weird symbols often produced by broken OCR
         text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
         return text.strip()
 
@@ -72,19 +69,17 @@ class AdvancedPDFParser:
             
             blocks = page.get_text("dict", flags=fitz.TEXT_DEHYPHENATE).get("blocks", [])
             for b in blocks:
-                if b.get("type") == 0:  # Text block
+                if b.get("type") == 0:
                     for l in b.get("lines", []):
                         line_text = "".join([s.get("text", "") for s in l.get("spans", [])]).strip()
                         if len(line_text) > 4:
                             bbox = l.get("bbox")
-                            # Check if line is in top 8% or bottom 8% of the page
                             is_margin = bbox[1] < (rect.height * 0.08) or bbox[3] > (rect.height * 0.92)
                             if is_margin:
-                                norm_text = re.sub(r'\d+', 'X', line_text)  # Normalize numbers (page numbers)
+                                norm_text = re.sub(r'\d+', 'X', line_text)
                                 page_lines[page_num].append((norm_text, bbox))
                                 line_counts[norm_text] = line_counts.get(norm_text, 0) + 1
 
-        # Identify items appearing on > 40% of pages as headers/footers
         threshold = max(2, doc.page_count * 0.4)
         repeated_signatures = {text for text, count in line_counts.items() if count >= threshold}
         
@@ -92,12 +87,11 @@ class AdvancedPDFParser:
         for page_num, lines in page_lines.items():
             excluded_boxes[page_num] = [bbox for text, bbox in lines if text in repeated_signatures]
             
+        print(f"🧹 [PARSER LOG] Detected {len(repeated_signatures)} recurring header/footer signatures to strip.")
         return excluded_boxes
 
     def _reconstruct_reading_order(self, spans: List[Dict]) -> List[Dict]:
         """Sorts bounding boxes into a logical multi-column reading order."""
-        # Simple heuristic layout sorting based on vertical (y0) and horizontal (x0) coordinates
-        # For complex multi-column documents, sort primarily by x-cluster then y-cluster
         sorted_spans = sorted(spans, key=lambda s: (round(s['bbox'][0] / 50), s['bbox'][1]))
         return sorted_spans
 
@@ -107,28 +101,22 @@ class AdvancedPDFParser:
         size = span.get("size", base_font)
         flags = span.get("flags", 0)
         font_name = span.get("font", "").lower()
-        bbox = span.get("bbox", [0, 0, 0, 0])
 
-        # Signal 1: Font Size
         if size > base_font * 1.15:
             score += 0.3
         elif size > base_font * 1.05:
             score += 0.15
 
-        # Signal 2: Bold Weight
         is_bold = bool((flags & 2) or (flags & 16) or "bold" in font_name or "demi" in font_name)
         if is_bold:
             score += 0.25
 
-        # Signal 3: Numbering Pattern (e.g., "1.", "1.1", "Chapter", "Section")
         if re.match(r'^(\d+(\.\d+)*[\.\)]?|chapter|section|appendix)\s+[A-Z]', line_text, re.IGNORECASE):
             score += 0.25
 
-        # Signal 4: All Caps
         if line_text.isupper() and len(line_text) > 3:
             score += 0.1
 
-        # Signal 5: Short line length (headings are usually concise)
         if len(line_text) < 60:
             score += 0.1
 
@@ -136,10 +124,10 @@ class AdvancedPDFParser:
 
     def parse_document(self) -> Dict[str, Any]:
         """Main execution flow parsing the entire document into an intelligent structured representation."""
+        print(f"📄 [PARSER LOG] Starting Advanced PDF Parsing for: {self.pdf_path}")
         doc = fitz.open(self.pdf_path)
         doc_page_count = doc.page_count
         
-        # Determine base font size for typography comparisons
         font_sizes = []
         for p in range(min(15, doc_page_count)):
             for b in doc[p].get_text("dict").get("blocks", []):
@@ -150,6 +138,7 @@ class AdvancedPDFParser:
                             if len(t) > 1:
                                 font_sizes.append(round(s.get("size", 11.0), 1))
         base_font = max(set(font_sizes), key=font_sizes.count) if font_sizes else 10.0
+        print(f"📏 [PARSER LOG] Calculated Base Body Font Size: {base_font}pt")
 
         excluded_headers_footers = self._detect_and_strip_headers_footers(doc)
         
@@ -162,7 +151,6 @@ class AdvancedPDFParser:
                 plumber_page = plumber_pdf.pages[page_num]
                 page_rect = page.rect
 
-                # Page Quality Metrics Evaluation
                 text_len = len(page.get_text("text").strip())
                 image_count = len(page.get_images())
                 has_tables = len(plumber_page.extract_tables() or []) > 0
@@ -175,7 +163,6 @@ class AdvancedPDFParser:
                 page_blocks: List[DocumentBlock] = []
                 page_tables = []
 
-                # Extract Tables safely
                 try:
                     extracted_tables = plumber_page.extract_tables()
                     if extracted_tables:
@@ -184,7 +171,6 @@ class AdvancedPDFParser:
                 except Exception as e:
                     logger.warning(f"Table extraction error on page {page_num + 1}: {e}")
 
-                # Process Text Blocks via PyMuPDF with Header/Footer Filter & Reading Order
                 blocks = page.get_text("dict", flags=fitz.TEXT_DEHYPHENATE).get("blocks", [])
                 page_spans = []
 
@@ -196,7 +182,6 @@ class AdvancedPDFParser:
                                 if not s_text:
                                     continue
                                 
-                                # Check if span falls inside a detected header/footer box
                                 bbox = s.get("bbox")
                                 is_hf = any(
                                     bbox[0] >= h_box[0] - 5 and bbox[1] >= h_box[1] - 5 and 
@@ -206,12 +191,7 @@ class AdvancedPDFParser:
                                 if not is_hf:
                                     page_spans.append(s)
 
-                # Reconstruct reading order
                 ordered_spans = self._reconstruct_reading_order(page_spans)
-
-                # Build Document Blocks
-                current_block_text = ""
-                current_block_spans = []
                 
                 for span in ordered_spans:
                     text = span.get("text", "")
@@ -236,6 +216,7 @@ class AdvancedPDFParser:
 
                     if confidence >= 0.5:
                         block.block_type = "heading"
+                        print(f"🎯 [HEADING FOUND] Page {page_num + 1} | Conf: {confidence} | Text: {text}")
                     elif re.match(r'^[•\-\*]|\d+[\.\)]\s+', text):
                         block.block_type = "list_item"
                     else:
@@ -243,7 +224,6 @@ class AdvancedPDFParser:
 
                     page_blocks.append(block)
 
-                # Link block graph relationships (prev/next)
                 for i in range(len(page_blocks)):
                     if i > 0:
                         page_blocks[i].prev_block = page_blocks[i-1]
@@ -260,6 +240,7 @@ class AdvancedPDFParser:
                 })
 
         doc.close()
+        print(f"✅ [PARSER LOG] Successfully parsed {doc_page_count} pages into {global_block_counter} structured blocks.")
         return {
             "status": "success",
             "total_pages": doc_page_count,
@@ -267,16 +248,22 @@ class AdvancedPDFParser:
         }
 
 def extract_document_structure(pdf_path: str) -> dict:
-    """Main entry point called by rag_tasks.py conforming to expected pipeline signatures."""
+    """Main entry point called by rag_tasks.py with log verification prints."""
     try:
         parser = AdvancedPDFParser(pdf_path)
         result = parser.parse_document()
+        
+        # 🟢 PRINT THE EXACT PAYLOAD BEING SENT TO NAVIGATION AI
+        payload_json = json.dumps(result["document_structure"], indent=2)
+        print(f"📤 [NAVIGATION AI PAYLOAD] Handing over structured JSON map to Navigation AI. Length: {len(payload_json)} chars.")
+        
         return {
             "status": result["status"],
             "toc": [],
-            "ai_header_map": json.dumps(result["document_structure"], indent=2)
+            "ai_header_map": payload_json
         }
     except Exception as e:
+        print(f"❌ [PARSER ERROR] Advanced parser execution failure: {e}")
         logger.error(f"Advanced parser execution failure: {e}")
         return {
             "status": "error",
