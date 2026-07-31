@@ -206,8 +206,12 @@ def process_document_embedding(document_id: str):
                 metadata={"hnsw:space": "cosine"}
             )
             
-            gemini_api_key = os.getenv("GEMINI_API_KEY")
-            ai_client = genai.Client(api_key=gemini_api_key)
+            # 🟢 Explicitly look for your paid custom key name
+            paid_api_key = os.getenv("INTELLIGENCE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            if not paid_api_key:
+                raise ValueError("CRITICAL: INTELLIGENCE_API_KEY environment variable is missing for embeddings.")
+                
+            ai_client = genai.Client(api_key=paid_api_key)
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
             # 4. Process Sections (Extraction + Chunking)
