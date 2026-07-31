@@ -164,3 +164,4 @@ add_tables.py
 check.py
 document_insight.py
 verify_data.py
+check_embedding_models.py

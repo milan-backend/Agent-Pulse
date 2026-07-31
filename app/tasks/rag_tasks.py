@@ -246,9 +246,9 @@ def process_document_embedding(document_id: str):
                     
                     try:
                         vector_response = ai_client.models.embed_content(
-                            model="text-embedding-001", 
-                            contents=pt_content
-                        )
+                           model="models/gemini-embedding-2", 
+                           contents=pt_content
+                          )
                         raw_vector = vector_response.embeddings[0].values
                     except Exception as e: 
                         print(f"⚠️ Vector generation failed for a chunk: {e}")
