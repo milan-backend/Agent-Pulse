@@ -207,7 +207,7 @@ def process_document_embedding(document_id: str):
             )
             
             # 🟢 Explicitly look for your paid custom key name
-            paid_api_key = os.getenv("INTELLIGENCE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            paid_api_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
             if not paid_api_key:
                 raise ValueError("CRITICAL: INTELLIGENCE_API_KEY environment variable is missing for embeddings.")
                 
