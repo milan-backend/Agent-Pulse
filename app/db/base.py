@@ -15,3 +15,4 @@ from app.models.workspace_usage_limit import WorkspaceUsageLimit
 from app.models.workspace_invitation import WorkspaceInvitation
 from app.models.refresh_token import RefreshToken
 from app.models.uploaded_document import UploadedDocument
+from app.models.new_arch import DocumentSection, DocumentChunk, EntityRelationship, ExtractedEntity

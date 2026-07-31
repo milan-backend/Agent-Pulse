@@ -2,10 +2,11 @@ import uuid
 from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import relationship
 
-# Use your existing Base if you were importing this, but for testing in a standalone file:
-Base = declarative_base()
+# 🟢 THE FIX: Import the REAL Base from your app, do NOT create a new one!
+# (Adjust this import path to wherever your main Base is defined in your project)
+from app.db.session import Base 
 
 # ====================================================================
 # 1. DOCUMENT SECTIONS (The Navigation Map)
@@ -25,7 +26,7 @@ class DocumentSection(Base):
     section_code = Column(String(50), nullable=False)  # e.g., '1.1', '2.3.1'
     title = Column(String(255), nullable=False)
     
-    # Self-referencing FK for nested headers (e.g., 1.1 -> 1.1.1)
+    # 🟢 THE FIX: Removed the duplicate definition. Kept the one with CASCADE.
     parent_section_id = Column(UUID(as_uuid=True), ForeignKey("document_sections.id", ondelete="CASCADE"), nullable=True)
     
     start_page = Column(Integer, nullable=True)
@@ -33,8 +34,9 @@ class DocumentSection(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    # Relationship for nested tree logic
-    subsections = relationship("DocumentSection", backref="parent_section", remote_side=[parent_section_id], cascade="all, delete-orphan")
+    # The Python relationships (Celery cares about this)
+    parent_section = relationship("DocumentSection", remote_side=[id], back_populates="subsections")
+    subsections = relationship("DocumentSection", back_populates="parent_section", cascade="all, delete-orphan")
 
 
 # ====================================================================
