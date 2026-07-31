@@ -137,7 +137,7 @@ def generate_page_reasoning(doc: fitz.Document, pdf_path: str) -> str:
                 if page_headings:
                     ai_payload.append({
                         "page": page_num + 1,
-                        "extracted_text": " | ".join(page_headings[:15]),  // Capped for token optimization
+                        "extracted_text": " | ".join(page_headings[:15]),  # Capped for token optimization
                         "tables_found": len(page_tables),
                         "python_reasoning": " ".join(reasoning_parts)
                     })
