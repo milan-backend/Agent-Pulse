@@ -2,193 +2,282 @@ import fitz  # PyMuPDF
 import pdfplumber
 import json
 import logging
-from typing import List, Dict
+import re
+from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-def calculate_base_font_size(doc: fitz.Document, sample_pages: int = 15) -> float:
-    """
-    Scans sample pages, rounding font sizes to identify the most 
-    frequently occurring body text size robustly.
-    """
-    font_sizes = []
-    limit = min(sample_pages, doc.page_count)
-    
-    for page_num in range(limit):
-        page = doc[page_num]
-        try:
-            blocks = page.get_text("dict").get("blocks", [])
-            for block in blocks:
-                if block.get("type") == 0:  # Text block
-                    for line in block.get("lines", []):
-                        for span in line.get("spans", []):
-                            text = span.get("text", "").strip()
-                            if text and len(text) > 1:
-                                font_sizes.append(round(span.get("size", 11.0), 1))
-        except Exception as e:
-            logger.debug(f"Font sampling error on page {page_num + 1}: {e}")
-                            
-    if font_sizes:
-        return max(set(font_sizes), key=font_sizes.count)
-    return 10.0
+class DocumentBlock:
+    """Represents a structural block in the document hierarchy."""
+    def __init__(self, block_id: str, page_number: int, bbox: List[float], text: str, 
+                 font_size: float, font_name: str, is_bold: bool):
+        self.block_id = block_id
+        self.page_number = page_number
+        self.bbox = bbox  # [x0, y0, x1, y1]
+        self.text = text
+        self.font_size = font_size
+        self.font_name = font_name
+        self.is_bold = is_bold
+        self.parent_block: Optional['DocumentBlock'] = None
+        self.child_blocks: List['DocumentBlock'] = []
+        self.prev_block: Optional['DocumentBlock'] = None
+        self.next_block: Optional['DocumentBlock'] = None
+        self.block_type = "paragraph"  # heading, paragraph, list_item, table, image, caption
 
-def is_span_bold(span: Dict) -> bool:
-    """
-    Multi-tier robust check for bold attributes across various PDF generators.
-    Inspects PyMuPDF bit flags, font descriptor strings, and weight attributes.
-    """
-    flags = span.get("flags", 0)
-    font_name = span.get("font", "").lower()
-    
-    # PyMuPDF flag checks: Bit 1 (value 2) or Bit 4 (value 16) often indicate bold
-    flag_bold = bool((flags & 2) or (flags & 16))
-    
-    # Comprehensive string matching for font names
-    name_bold = any(kw in font_name for kw in ["bold", "black", "heavy", "demi", "medi"])
-    
-    return flag_bold or name_bold
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "block_id": self.block_id,
+            "page_number": self.page_number,
+            "bounding_box": self.bbox,
+            "text": self.text,
+            "font_size": self.font_size,
+            "font_name": self.font_name,
+            "is_bold": self.is_bold,
+            "block_type": self.block_type,
+            "parent_block_id": self.parent_block.block_id if self.parent_block else None,
+            "child_block_ids": [c.block_id for c in self.child_blocks]
+        }
 
-def generate_page_reasoning(doc: fitz.Document, pdf_path: str) -> str:
+
+class AdvancedPDFParser:
     """
-    Extremely resilient page analyzer designed to extract headings, bold text, 
-    and tables even from poorly formatted or messy PDFs.
+    Enterprise-grade PDF Parser implementing multi-signal heading confidence, 
+    reading-order reconstruction, header/footer stripping, OCR artifact cleaning, 
+    and block-level hierarchical graphs.
     """
-    base_font = calculate_base_font_size(doc)
-    header_threshold = base_font * 1.10  # Sensitive 10% threshold
-    
-    ai_payload: List[Dict] = []
-    
-    try:
-        with pdfplumber.open(pdf_path) as plumber_pdf:
-            for page_num in range(doc.page_count):
+    def __init__(self, pdf_path: str):
+        self.pdf_path = pdf_path
+
+    def _clean_ocr_artifacts(self, text: str) -> str:
+        """Removes broken line breaks, duplicate spaces, and OCR noise."""
+        if not text:
+            return ""
+        # Fix hyphenated line breaks
+        text = re.sub(r'(\w+)-\s*\n\s*(\w+)', r'\1\2', text)
+        # Normalize whitespace
+        text = re.sub(r'[ \t]+', ' ', text)
+        # Clean weird symbols often produced by broken OCR
+        text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
+        return text.strip()
+
+    def _detect_and_strip_headers_footers(self, doc: fitz.Document) -> Dict[int, List[List[float]]]:
+        """Identifies text blocks repeated across multiple pages to remove them."""
+        line_counts = {}
+        page_lines = {}
+
+        for page_num in range(doc.page_count):
+            page = doc[page_num]
+            rect = page.rect
+            page_lines[page_num] = []
+            
+            blocks = page.get_text("dict", flags=fitz.TEXT_DEHYPHENATE).get("blocks", [])
+            for b in blocks:
+                if b.get("type") == 0:  # Text block
+                    for l in b.get("lines", []):
+                        line_text = "".join([s.get("text", "") for s in l.get("spans", [])]).strip()
+                        if len(line_text) > 4:
+                            bbox = l.get("bbox")
+                            # Check if line is in top 8% or bottom 8% of the page
+                            is_margin = bbox[1] < (rect.height * 0.08) or bbox[3] > (rect.height * 0.92)
+                            if is_margin:
+                                norm_text = re.sub(r'\d+', 'X', line_text)  # Normalize numbers (page numbers)
+                                page_lines[page_num].append((norm_text, bbox))
+                                line_counts[norm_text] = line_counts.get(norm_text, 0) + 1
+
+        # Identify items appearing on > 40% of pages as headers/footers
+        threshold = max(2, doc.page_count * 0.4)
+        repeated_signatures = {text for text, count in line_counts.items() if count >= threshold}
+        
+        excluded_boxes = {}
+        for page_num, lines in page_lines.items():
+            excluded_boxes[page_num] = [bbox for text, bbox in lines if text in repeated_signatures]
+            
+        return excluded_boxes
+
+    def _reconstruct_reading_order(self, spans: List[Dict]) -> List[Dict]:
+        """Sorts bounding boxes into a logical multi-column reading order."""
+        # Simple heuristic layout sorting based on vertical (y0) and horizontal (x0) coordinates
+        # For complex multi-column documents, sort primarily by x-cluster then y-cluster
+        sorted_spans = sorted(spans, key=lambda s: (round(s['bbox'][0] / 50), s['bbox'][1]))
+        return sorted_spans
+
+    def _calculate_heading_confidence(self, line_text: str, span: Dict, base_font: float, page_width: float) -> float:
+        """Calculates a multi-signal Heading Confidence Score (0.0 to 1.0)."""
+        score = 0.0
+        size = span.get("size", base_font)
+        flags = span.get("flags", 0)
+        font_name = span.get("font", "").lower()
+        bbox = span.get("bbox", [0, 0, 0, 0])
+
+        # Signal 1: Font Size
+        if size > base_font * 1.15:
+            score += 0.3
+        elif size > base_font * 1.05:
+            score += 0.15
+
+        # Signal 2: Bold Weight
+        is_bold = bool((flags & 2) or (flags & 16) or "bold" in font_name or "demi" in font_name)
+        if is_bold:
+            score += 0.25
+
+        # Signal 3: Numbering Pattern (e.g., "1.", "1.1", "Chapter", "Section")
+        if re.match(r'^(\d+(\.\d+)*[\.\)]?|chapter|section|appendix)\s+[A-Z]', line_text, re.IGNORECASE):
+            score += 0.25
+
+        # Signal 4: All Caps
+        if line_text.isupper() and len(line_text) > 3:
+            score += 0.1
+
+        # Signal 5: Short line length (headings are usually concise)
+        if len(line_text) < 60:
+            score += 0.1
+
+        return min(score, 1.0)
+
+    def parse_document(self) -> Dict[str, Any]:
+        """Main execution flow parsing the entire document into an intelligent structured representation."""
+        doc = fitz.open(self.pdf_path)
+        doc_page_count = doc.page_count
+        
+        # Determine base font size for typography comparisons
+        font_sizes = []
+        for p in range(min(15, doc_page_count)):
+            for b in doc[p].get_text("dict").get("blocks", []):
+                if b.get("type") == 0:
+                    for l in b.get("lines", []):
+                        for s in l.get("spans", []):
+                            t = s.get("text", "").strip()
+                            if len(t) > 1:
+                                font_sizes.append(round(s.get("size", 11.0), 1))
+        base_font = max(set(font_sizes), key=font_sizes.count) if font_sizes else 10.0
+
+        excluded_headers_footers = self._detect_and_strip_headers_footers(doc)
+        
+        structured_pages = []
+        global_block_counter = 0
+
+        with pdfplumber.open(self.pdf_path) as plumber_pdf:
+            for page_num in range(doc_page_count):
                 page = doc[page_num]
                 plumber_page = plumber_pdf.pages[page_num]
+                page_rect = page.rect
+
+                # Page Quality Metrics Evaluation
+                text_len = len(page.get_text("text").strip())
+                image_count = len(page.get_images())
+                has_tables = len(plumber_page.extract_tables() or []) > 0
                 
-                page_headings = []
-                has_body_text = False
-                has_vector_elements = False
-                
-                # 1. Table Extraction via pdfplumber
+                quality_score = 0.95 if text_len > 200 else (0.5 if text_len > 50 else 0.2)
+                layout_type = "two_column" if text_len > 1500 and image_count == 0 else "single_column"
+                if has_tables:
+                    layout_type = "table_page"
+
+                page_blocks: List[DocumentBlock] = []
                 page_tables = []
+
+                # Extract Tables safely
                 try:
-                    tables = plumber_page.extract_tables()
-                    if tables:
-                        for table in tables:
-                            if table:
-                                page_tables.append(table)
-                except Exception as table_err:
-                    logger.warning(f"Table extraction warning on page {page_num + 1}: {table_err}")
-                
-                # 2. Layout-aware Text Block Parsing via PyMuPDF
-                try:
-                    text_dict = page.get_text("dict", flags=fitz.TEXT_DEHYPHENATE)
-                    blocks = text_dict.get("blocks", [])
-                    
-                    for block in blocks:
-                        if block.get("type") != 0:
-                            has_vector_elements = True
-                            continue
-                            
-                        # Sort lines vertically and spans horizontally to fix messy layouts
-                        lines = block.get("lines", [])
-                        for line in lines:
-                            line_text = ""
-                            line_is_bold = False
-                            line_has_large_font = False
-                            has_content = False
-                            
-                            spans = line.get("spans", [])
-                            for span in spans:
-                                text = span.get("text", "").strip()
-                                if not text:
+                    extracted_tables = plumber_page.extract_tables()
+                    if extracted_tables:
+                        for tbl in extracted_tables:
+                            page_tables.append(tbl)
+                except Exception as e:
+                    logger.warning(f"Table extraction error on page {page_num + 1}: {e}")
+
+                # Process Text Blocks via PyMuPDF with Header/Footer Filter & Reading Order
+                blocks = page.get_text("dict", flags=fitz.TEXT_DEHYPHENATE).get("blocks", [])
+                page_spans = []
+
+                for b in blocks:
+                    if b.get("type") == 0:
+                        for l in b.get("lines", []):
+                            for s in l.get("spans", []):
+                                s_text = self._clean_ocr_artifacts(s.get("text", ""))
+                                if not s_text:
                                     continue
                                 
-                                has_content = True
-                                size = span.get("size", base_font)
-                                bold_status = is_span_bold(span)
-                                
-                                if bold_status:
-                                    line_is_bold = True
-                                if size >= header_threshold:
-                                    line_has_large_font = True
-                                    
-                                if size <= base_font + 1.0:
-                                    has_body_text = True
-                                    
-                                line_text += text + " "
-                                
-                            cleaned_line = line_text.strip()
-                            if has_content and len(cleaned_line) > 2:
-                                # Catch headings via size, bold weight, or numbered item patterns (e.g., "50. National...")
-                                if line_has_large_font or line_is_bold or cleaned_line[:3].replace('.', '').isdigit():
-                                    page_headings.append(cleaned_line)
-                except Exception as text_err:
-                    logger.warning(f"Text extraction parsing warning on page {page_num + 1}: {text_err}")
+                                # Check if span falls inside a detected header/footer box
+                                bbox = s.get("bbox")
+                                is_hf = any(
+                                    bbox[0] >= h_box[0] - 5 and bbox[1] >= h_box[1] - 5 and 
+                                    bbox[2] <= h_box[2] + 5 and bbox[3] <= h_box[3] + 5
+                                    for h_box in excluded_headers_footers.get(page_num, [])
+                                )
+                                if not is_hf:
+                                    page_spans.append(s)
 
-                # 3. Compile Reasoning and Observations for Navigation AI
-                reasoning_parts = []
-                if page_headings:
-                    reasoning_parts.append(f"HEADING_OR_KEY_ITEM_DETECTED: Identified prominent or bold structural text lines.")
-                if page_tables:
-                    reasoning_parts.append(f"TABLE_DETECTED: Found {len(page_tables)} structured table(s) on this page.")
-                elif has_vector_elements:
-                    reasoning_parts.append("GRAPHICS_DETECTED: Non-text vector blocks present.")
+                # Reconstruct reading order
+                ordered_spans = self._reconstruct_reading_order(page_spans)
 
-                if page_headings:
-                    ai_payload.append({
-                        "page": page_num + 1,
-                        "extracted_text": " | ".join(page_headings[:15]),  # Capped for token optimization
-                        "tables_found": len(page_tables),
-                        "python_reasoning": " ".join(reasoning_parts)
-                    })
-                elif has_body_text or page_tables:
-                    ai_payload.append({
-                        "page": page_num + 1,
-                        "extracted_text": "None",
-                        "tables_found": len(page_tables),
-                        "python_reasoning": " ".join(reasoning_parts) if reasoning_parts else "CONTINUATION_PAGE: Standard body text or tables detected. No prominent structural headers found."
-                    })
-                else:
-                    ai_payload.append({
-                        "page": page_num + 1,
-                        "extracted_text": "None",
-                        "tables_found": 0,
-                        "python_reasoning": "BLANK_OR_IMAGE_PAGE: No readable body text or headings detected."
-                    })
+                # Build Document Blocks
+                current_block_text = ""
+                current_block_spans = []
+                
+                for span in ordered_spans:
+                    text = span.get("text", "")
+                    size = span.get("size", base_font)
+                    font_name = span.get("font", "")
+                    is_bold = bool((span.get("flags", 0) & 2) or "bold" in font_name.lower())
                     
-    except Exception as e:
-        logger.error(f"Critical error during page reasoning generation: {e}")
-        
-    return json.dumps(ai_payload, indent=2)
+                    confidence = self._calculate_heading_confidence(text, span, base_font, page_rect.width)
 
-def extract_document_structure(pdf_path: str) -> dict:
-    """
-    Main entry point called by rag_tasks.py.
-    Prioritizes embedded TOC, falls back to the resilient AI Sensor Payload.
-    """
-    try:
-        doc = fitz.open(pdf_path) 
-        toc = doc.get_toc(simple=True)
-        
-        if toc:
-            doc.close()
-            return {
-                "status": "success",
-                "toc": toc,
-                "ai_header_map": None
-            }
-        
-        print("🤖 No embedded TOC found. Executing Resilient AI Sensor Payload Generator...")
-        ai_payload = generate_page_reasoning(doc, pdf_path)
-        doc.close() 
-        
+                    global_block_counter += 1
+                    block_id = f"blk_{global_block_counter:04d}"
+                    
+                    block = DocumentBlock(
+                        block_id=block_id,
+                        page_number=page_num + 1,
+                        bbox=span.get("bbox"),
+                        text=text,
+                        font_size=size,
+                        font_name=font_name,
+                        is_bold=is_bold
+                    )
+
+                    if confidence >= 0.5:
+                        block.block_type = "heading"
+                    elif re.match(r'^[•\-\*]|\d+[\.\)]\s+', text):
+                        block.block_type = "list_item"
+                    else:
+                        block.block_type = "paragraph"
+
+                    page_blocks.append(block)
+
+                # Link block graph relationships (prev/next)
+                for i in range(len(page_blocks)):
+                    if i > 0:
+                        page_blocks[i].prev_block = page_blocks[i-1]
+                        page_blocks[i-1].next_block = page_blocks[i]
+
+                structured_pages.append({
+                    "page": page_num + 1,
+                    "layout": layout_type,
+                    "quality_score": quality_score,
+                    "section_start": any(b.block_type == "heading" for b in page_blocks),
+                    "blocks": [b.to_dict() for b in page_blocks],
+                    "tables": page_tables,
+                    "images_count": image_count
+                })
+
+        doc.close()
         return {
             "status": "success",
+            "total_pages": doc_page_count,
+            "document_structure": structured_pages
+        }
+
+def extract_document_structure(pdf_path: str) -> dict:
+    """Main entry point called by rag_tasks.py conforming to expected pipeline signatures."""
+    try:
+        parser = AdvancedPDFParser(pdf_path)
+        result = parser.parse_document()
+        return {
+            "status": result["status"],
             "toc": [],
-            "ai_header_map": ai_payload
+            "ai_header_map": json.dumps(result["document_structure"], indent=2)
         }
     except Exception as e:
-        logger.error(f"Failed to extract document structure for {pdf_path}: {e}")
+        logger.error(f"Advanced parser execution failure: {e}")
         return {
             "status": "error",
             "toc": [],
