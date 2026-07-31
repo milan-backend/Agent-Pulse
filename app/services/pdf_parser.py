@@ -1,96 +1,108 @@
-import fitz  # PyMuPDF
+import fitz
+import json
+from typing import List, Dict
 
-def calculate_base_font_size(doc: fitz.Document, pages_to_scan: int = 5) -> float:
+def calculate_base_font_size(doc: fitz.Document, sample_pages: int = 10) -> float:
     """
-    Pass 1: Scans the first few pages to determine the most common font size (body text).
+    Scans the first few pages to determine the most common font size (body text).
     """
-    font_counts = {}
-    limit = min(pages_to_scan, doc.page_count)
+    font_sizes = []
+    limit = min(sample_pages, doc.page_count)
     
     for page_num in range(limit):
         page = doc[page_num]
-        content = page.get_text("dict")
-        for block in content.get("blocks", []):
-            if block.get("type") != 0:  # 0 means text block
-                continue
-            for line in block.get("lines", []):
-                for span in line.get("spans", []):
-                    size = round(span["size"], 1)
-                    font_counts[size] = font_counts.get(size, 0) + len(span["text"].strip())
-                    
-    if not font_counts:
-        return 11.0 # Safe default
-        
-    # Return the font size that has the most characters associated with it
-    return max(font_counts, key=font_counts.get)
+        blocks = page.get_text("dict").get("blocks", [])
+        for block in blocks:
+            if block.get("type") == 0:  # 0 means text block
+                for line in block.get("lines", []):
+                    for span in line.get("spans", []):
+                        text = span.get("text", "").strip()
+                        if text:
+                            font_sizes.append(round(span["size"], 1))
+                            
+    # Return the most frequent font size, default to 11.0 if empty
+    if font_sizes:
+        return max(set(font_sizes), key=font_sizes.count)
+    return 11.0
 
-
-def extract_advanced_header_map(doc: fitz.Document) -> str:
+def generate_page_reasoning(pdf_path: str) -> str:
     """
-    Pass 2: Scans ALL pages. Extracts ONLY text that is significantly larger than 
-    the base font OR is flagged as Bold. Returns a condensed text map.
+    Scans ALL pages and generates a structured JSON array of observations
+    and reasoning for the Navigation AI to read.
     """
-    base_size = calculate_base_font_size(doc)
-    header_threshold = base_size * 1.15  # Text must be 15% larger than body text
+    doc = fitz.open(pdf_path)
+    base_font = calculate_base_font_size(doc)
+    header_threshold = base_font * 1.15  # 15% larger than body text
     
-    header_map_lines = []
+    ai_payload: List[Dict] = []
     
     for page_num in range(doc.page_count):
         page = doc[page_num]
-        content = page.get_text("dict")
+        blocks = page.get_text("dict").get("blocks", [])
         
-        page_headers = []
-        for block in content.get("blocks", []):
+        page_headings = []
+        has_body_text = False
+        has_table_elements = False
+        
+        for block in blocks:
+            # Type 0 is text. Other types (like 1) are images/drawings
             if block.get("type") != 0:
+                has_table_elements = True
                 continue
                 
             for line in block.get("lines", []):
                 line_text = ""
-                is_header = False
+                is_heading = False
                 
                 for span in line.get("spans", []):
-                    text = span["text"].strip()
+                    text = span.get("text", "").strip()
                     if not text:
                         continue
                         
                     size = span["size"]
-                    flags = span["flags"]
-                    
-                    # In PyMuPDF, bit 4 (16) often denotes bold. 
-                    is_bold = bool(flags & 16) or "Bold" in span["font"]
+                    # Check if bold using font flags or font name
+                    is_bold = bool(span["flags"] & 16) or "Bold" in span["font"]
                     
                     if size >= header_threshold or is_bold:
-                        is_header = True
+                        is_heading = True
                         line_text += text + " "
+                    elif size == base_font:
+                        has_body_text = True
                 
-                if is_header and len(line_text.strip()) > 3: # Ignore tiny artifacts
-                    page_headers.append(line_text.strip())
-                    
-        if page_headers:
-            header_map_lines.append(f"--- PAGE {page_num + 1} ---")
-            for h in page_headers:
-                header_map_lines.append(h)
+                if is_heading and len(line_text.strip()) > 3:
+                    page_headings.append(line_text.strip())
+
+        # Now, formulate the reasoning for this specific page
+        if page_headings:
+            reasoning = f"HEADING_DETECTED: Found text larger than base font ({base_font}pt) or flagged as Bold."
+            if has_table_elements:
+                reasoning += " TABLE_OR_GRAPHICS_DETECTED: Non-text vector blocks present."
                 
-    # Join into a single highly condensed string for the AI
-    return "\n".join(header_map_lines)
-
-
-def extract_document_structure(pdf_path: str) -> dict:
-    """
-    Prioritizes embedded TOC, falls back to Advanced Header Map.
-    """
-    doc = fitz.open(pdf_path) 
-    toc = doc.get_toc(simple=True)
+            ai_payload.append({
+                "page": page_num + 1,
+                "extracted_text": " | ".join(page_headings),
+                "python_reasoning": reasoning
+            })
+            
+        elif has_body_text:
+            ai_payload.append({
+                "page": page_num + 1,
+                "extracted_text": "None",
+                "python_reasoning": "CONTINUATION_PAGE: Only standard body text detected. No structural headings found."
+            })
+            
+        else:
+            ai_payload.append({
+                "page": page_num + 1,
+                "extracted_text": "None",
+                "python_reasoning": "BLANK_OR_IMAGE_PAGE: No readable body text or headings detected."
+            })
+            
+    doc.close()
     
-    condensed_map = None
-    if not toc:
-        print("No embedded TOC found. Executing Advanced PyMuPDF Header Extraction across all pages...")
-        condensed_map = extract_advanced_header_map(doc)
-        
-    doc.close() 
-    
-    return {
-        "status": "success",
-        "toc": toc,
-        "ai_header_map": condensed_map
-    }
+    # Return as a formatted JSON string to inject directly into the AI prompt
+    return json.dumps(ai_payload, indent=2)
+
+# --- Example Usage ---
+# payload = generate_page_reasoning("sbe26.pdf")
+# print(payload)
