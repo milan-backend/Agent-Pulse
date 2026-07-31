@@ -220,7 +220,7 @@ def process_document_embedding(document_id: str):
                 if not section_text.strip(): 
                     continue
 
-                # A. Extraction AI (Telemetry & Entities)
+                # A Extraction AI (Telemetry & Entities)
                 extraction_data = run_section_knowledge_extraction(section.title, section_text, ai_client)
                 for ent in extraction_data.entities:
                     db.add(ExtractedEntity(
