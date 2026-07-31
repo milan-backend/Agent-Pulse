@@ -3,6 +3,7 @@ import io
 import uuid
 from datetime import datetime
 import chromadb
+import time
 from celery import Celery
 from sqlalchemy.orm import Session
 from pypdf import PdfReader
@@ -278,6 +279,7 @@ def process_document_embedding(document_id: str):
                         telemetry_summary=extraction_data.telemetry_summary, 
                         prev_chunk_id=last_chunk_db_id
                     )
+                    time.sleep(2)
                     db.add(new_db_chunk)
                     db.flush()
                     
