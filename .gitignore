@@ -163,3 +163,4 @@ force_cleanup.py
 add_tables.py
 check.py
 document_insight.py
+verify_data.py
