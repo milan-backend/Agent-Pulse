@@ -20,17 +20,15 @@ def calculate_base_font_size(doc: fitz.Document, sample_pages: int = 10) -> floa
                         if text:
                             font_sizes.append(round(span["size"], 1))
                             
-    # Return the most frequent font size, default to 11.0 if empty
     if font_sizes:
         return max(set(font_sizes), key=font_sizes.count)
     return 11.0
 
-def generate_page_reasoning(pdf_path: str) -> str:
+def generate_page_reasoning(doc: fitz.Document) -> str:
     """
     Scans ALL pages and generates a structured JSON array of observations
     and reasoning for the Navigation AI to read.
     """
-    doc = fitz.open(pdf_path)
     base_font = calculate_base_font_size(doc)
     header_threshold = base_font * 1.15  # 15% larger than body text
     
@@ -45,7 +43,6 @@ def generate_page_reasoning(pdf_path: str) -> str:
         has_table_elements = False
         
         for block in blocks:
-            # Type 0 is text. Other types (like 1) are images/drawings
             if block.get("type") != 0:
                 has_table_elements = True
                 continue
@@ -60,7 +57,6 @@ def generate_page_reasoning(pdf_path: str) -> str:
                         continue
                         
                     size = span["size"]
-                    # Check if bold using font flags or font name
                     is_bold = bool(span["flags"] & 16) or "Bold" in span["font"]
                     
                     if size >= header_threshold or is_bold:
@@ -72,7 +68,6 @@ def generate_page_reasoning(pdf_path: str) -> str:
                 if is_heading and len(line_text.strip()) > 3:
                     page_headings.append(line_text.strip())
 
-        # Now, formulate the reasoning for this specific page
         if page_headings:
             reasoning = f"HEADING_DETECTED: Found text larger than base font ({base_font}pt) or flagged as Bold."
             if has_table_elements:
@@ -98,11 +93,32 @@ def generate_page_reasoning(pdf_path: str) -> str:
                 "python_reasoning": "BLANK_OR_IMAGE_PAGE: No readable body text or headings detected."
             })
             
-    doc.close()
-    
-    # Return as a formatted JSON string to inject directly into the AI prompt
     return json.dumps(ai_payload, indent=2)
 
-# --- Example Usage ---
-# payload = generate_page_reasoning("sbe26.pdf")
-# print(payload)
+def extract_document_structure(pdf_path: str) -> dict:
+    """
+    Main entry point called by rag_tasks.py.
+    Prioritizes embedded TOC, falls back to Advanced Sensor Reasoning.
+    """
+    doc = fitz.open(pdf_path) 
+    toc = doc.get_toc(simple=True)
+    
+    # If the PDF has a native table of contents built-in, use it to save AI costs!
+    if toc:
+        doc.close()
+        return {
+            "status": "success",
+            "toc": toc,
+            "ai_header_map": None
+        }
+    
+    # Otherwise, generate the reasoning payload for Gemini
+    print("🤖 No embedded TOC found. Generating AI Sensor Payload...")
+    ai_payload = generate_page_reasoning(doc)
+    doc.close() 
+    
+    return {
+        "status": "success",
+        "toc": [],
+        "ai_header_map": ai_payload
+    }
