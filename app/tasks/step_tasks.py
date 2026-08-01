@@ -304,10 +304,25 @@ def process_step(self, step_id: str):
                         DocumentSection.document_id.in_(target_doc_ids)
                     )
                     
+                    # 🟢 FIX 1: Search by BOTH section_code and title
                     if target_codes:
-                        query = query.filter(DocumentSection.section_code.in_(target_codes))
+                        from sqlalchemy import or_
+                        query = query.filter(
+                            or_(
+                                DocumentSection.section_code.in_(target_codes),
+                                DocumentSection.title.in_(target_codes)
+                            )
+                        )
                         
                     target_sections = query.all()
+                    
+                    # 🟢 FIX 2: Failsafe. If the AI hallucinated the names, grab the document anyway.
+                    if not target_sections and target_doc_ids:
+                        print(f"⚠️ Intent AI guessed invalid section codes {target_codes}. Executing Failsafe.")
+                        target_sections = db.query(DocumentSection).filter(
+                            DocumentSection.workspace_id == current_workspace_id,
+                            DocumentSection.document_id.in_(target_doc_ids)
+                        ).limit(40).all()
                     
                     sec_ids = [s.id for s in target_sections]
                     if sec_ids:
