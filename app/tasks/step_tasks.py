@@ -268,8 +268,6 @@ def process_step(self, step_id: str):
                     "blueprint_notes": ""
                 }
 
-                ✅ PASTE THIS REPLACEMENT BLOCK IN ITS PLACE:
-
                 # --- 1. REGISTRY FILTER (Document Level Scoring) ---
                 print(f"📡 Executing Registry Filter for Step ID: {step.id}")
                 registry_candidates = []
