@@ -167,26 +167,7 @@ def process_document_embedding(document_id: str):
             doc_obj = fitz.open(temp_pdf_path)
             doc_page_count = doc_obj.page_count
             
-            # 2. Extract Structure and Build DB Navigation Map
-            struct_data = extract_document_structure(temp_pdf_path)
-            pymupdf_toc = struct_data.get("toc", [])
-            
-            # 🟢 NEW FIX: Prepare page text samples if the TOC is missing
-            page_text_samples = None
-            if not pymupdf_toc:
-                print("🔄 Preparing page text samples for Navigation AI fallback...")
-                page_text_samples = []
-                # Grab up to the first 30 pages so the AI can figure out the outline
-                sample_limit = min(30, doc_page_count)
-                for p in range(sample_limit):
-                    page_text = doc_obj.load_page(p).get_text("text")
-                    if page_text.strip():
-                        page_text_samples.append({
-                            "page_num": p + 1,
-                            "text_snippet": page_text[:800]  # First 800 chars is enough context
-                        })
-
-            # 2. Extract Structure and Build DB Navigation Map
+            # 2. Single Structure Extraction & DB Navigation Map Build
             struct_data = extract_document_structure(temp_pdf_path)
             
             saved_sections = build_and_save_navigation_map(
@@ -196,7 +177,7 @@ def process_document_embedding(document_id: str):
                 agent_id=doc.agent_id, 
                 pymupdf_toc=struct_data.get("toc", []),
                 doc_page_count=doc_page_count, 
-                ai_header_map=struct_data.get("ai_header_map") # 🟢 Pass the condensed map
+                ai_header_map=struct_data.get("ai_header_map")
             )
             
             # 3. Setup AI & Vector DB
@@ -206,10 +187,9 @@ def process_document_embedding(document_id: str):
                 metadata={"hnsw:space": "cosine"}
             )
             
-            # 🟢 Explicitly look for your paid custom key name
             paid_api_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
             if not paid_api_key:
-                raise ValueError("CRITICAL: INTELLIGENCE_API_KEY environment variable is missing for embeddings.")
+                raise ValueError("CRITICAL: INTELLIGENCE_LAYER_API_KEY / GEMINI_API_KEY missing for embeddings.")
                 
             ai_client = genai.Client(api_key=paid_api_key)
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
@@ -224,7 +204,7 @@ def process_document_embedding(document_id: str):
                 if not section_text.strip(): 
                     continue
 
-                # A Extraction AI (Telemetry & Entities)
+                # A. Extraction AI (Telemetry & Entities)
                 extraction_data = run_section_knowledge_extraction(section.title, section_text, ai_client)
                 for ent in extraction_data.entities:
                     db.add(ExtractedEntity(
@@ -250,13 +230,14 @@ def process_document_embedding(document_id: str):
                     pt_content = chunk_payload["text"]
                     
                     try:
+                        # 🟢 Updated to standard text-embedding-004 model
                         vector_response = ai_client.models.embed_content(
-                           model="models/gemini-embedding-001", 
-                           contents=pt_content
-                          )
+                            model="text-embedding-004", 
+                            contents=pt_content
+                        )
                         raw_vector = vector_response.embeddings[0].values
                     except Exception as e: 
-                        print(f"⚠️ Vector generation failed for a chunk: {e}")
+                        print(f"⚠️ Vector generation failed for chunk: {e}")
                         continue
                         
                     chroma_id = f"vec_{uuid.uuid4().hex[:12]}"
@@ -283,7 +264,7 @@ def process_document_embedding(document_id: str):
                         telemetry_summary=extraction_data.telemetry_summary, 
                         prev_chunk_id=last_chunk_db_id
                     )
-                    time.sleep(2)
+                    
                     db.add(new_db_chunk)
                     db.flush()
                     
@@ -312,7 +293,6 @@ def process_document_embedding(document_id: str):
         db.rollback()
         if doc:
             doc.status = "failed"
-            # Some models have an error_message field, wrapping safely
             if hasattr(doc, 'error_message'):
                 doc.error_message = str(error)
             db.commit()
