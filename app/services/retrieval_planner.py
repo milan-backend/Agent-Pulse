@@ -29,7 +29,7 @@ def execute_retrieval_planning_triage(
     chunk_telemetry_candidates: List[dict]
 ) -> RetrievalBlueprintSchema:
     """
-    Planner AI: Examines Chunk Telemetry Summaries and Navigation Map context to resolve 
+    Planner AI: Examines Chunk Telemetry Summaries and Intent Diagnostics to resolve 
     the exact list of target Chunk IDs for direct SQL/Vector retrieval.
     """
     if not chunk_telemetry_candidates:
@@ -68,11 +68,13 @@ def execute_retrieval_planning_triage(
         "- Deep: Select 6 to 10 chunks, set include_neighbor_chunks = True.\n"
     )
     
+    # Injected target_document_ids into the prompt context for better alignment
     prompt = (
         f"USER QUESTION: \"{user_prompt}\"\n\n"
         f"INTENT DIAGNOSTICS:\n"
         f" - Intent Type: {intent_strategy.intent_type}\n"
         f" - Main Topic: {intent_strategy.main_topic}\n"
+        f" - Target Documents: {intent_strategy.target_document_ids}\n"
         f" - Requested Depth: {intent_strategy.retrieval_depth}\n"
         f" - Target Sections: {intent_strategy.target_section_codes}\n"
         f"---------------------------------\n\n"

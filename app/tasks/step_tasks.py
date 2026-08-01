@@ -256,6 +256,7 @@ def process_step(self, step_id: str):
                 from app.services.intent_service import analyze_user_query_intent
                 from app.services.retrieval_planner import execute_retrieval_planning_triage
                 from app.services.retrieval_service import RetrievalService
+                from app.services.registry_filter_service import RegistryFilterService
                 
                 context_fragments = []
                 documents_influencing_list = []
@@ -267,25 +268,48 @@ def process_step(self, step_id: str):
                     "blueprint_notes": ""
                 }
 
-                # --- 1. INTENT AI ---
-                print(f"📡 Executing Intent Triage Layer for Step ID: {step.id}")
-                nav_sections = db.query(DocumentSection).filter(DocumentSection.workspace_id == current_workspace_id).limit(50).all()
-                nav_map_str = "\n".join([f"{s.section_code}: {s.title}" for s in nav_sections])
-                
-                intent_strategy = None
-                try:
-                    intent_strategy = analyze_user_query_intent(prompt, nav_map_str)
-                except Exception as intent_err:
-                    print(f"⚠️ Intent AI fallback: {intent_err}")
+                ✅ PASTE THIS REPLACEMENT BLOCK IN ITS PLACE:
 
-                # --- 2. PLANNER AI ---
+                # --- 1. REGISTRY FILTER (Document Level Scoring) ---
+                print(f"📡 Executing Registry Filter for Step ID: {step.id}")
+                registry_candidates = []
+                try:
+                    registry_candidates = RegistryFilterService.extract_top_candidates(
+                        db=db,
+                        workspace_id=current_workspace_id,
+                        target_departments=[], 
+                        user_prompt=prompt
+                    )
+                    rag_telemetry_node["sql_initial_candidates"] = len(registry_candidates)
+                except Exception as reg_err:
+                    print(f"⚠️ Registry Filter fallback: {reg_err}")
+
+                # --- 2. INTENT AI (Intelligent Decider) ---
+                print(f"📡 Executing Intent Triage Layer for Step ID: {step.id}")
+                intent_strategy = None
+                if registry_candidates:
+                    try:
+                        # Feed the scored candidates & entities directly to the LLM judge
+                        intent_strategy = analyze_user_query_intent(prompt, registry_candidates)
+                    except Exception as intent_err:
+                        print(f"⚠️ Intent AI fallback: {intent_err}")
+
+                # --- 3. PLANNER AI ---
                 retrieval_blueprint = None
-                if intent_strategy and getattr(intent_strategy, "target_section_codes", None):
+                if intent_strategy and getattr(intent_strategy, "target_document_ids", None):
+                    target_doc_ids = intent_strategy.target_document_ids
                     target_codes = intent_strategy.target_section_codes
-                    target_sections = db.query(DocumentSection).filter(
+                    
+                    # Fetch ONLY the sections for the explicitly approved documents
+                    query = db.query(DocumentSection).filter(
                         DocumentSection.workspace_id == current_workspace_id,
-                        DocumentSection.section_code.in_(target_codes)
-                    ).all()
+                        DocumentSection.document_id.in_(target_doc_ids)
+                    )
+                    
+                    if target_codes:
+                        query = query.filter(DocumentSection.section_code.in_(target_codes))
+                        
+                    target_sections = query.all()
                     
                     sec_ids = [s.id for s in target_sections]
                     if sec_ids:

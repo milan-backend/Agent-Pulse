@@ -1,9 +1,22 @@
 import uuid
 import re
 from typing import List, Dict, Any, Optional
+from collections import defaultdict
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+
 from app.models.uploaded_document import UploadedDocument
+# 🟢 NEW ARCHITECTURE IMPORTS
+from app.models.new_arch import ExtractedEntity
+
+# Handle potential naming variations for the Navigation Map model
+try:
+    from app.models.new_arch import DocumentSection
+except ImportError:
+    try:
+        from app.models.new_arch import NavigationMap as DocumentSection
+    except ImportError:
+        DocumentSection = None
 
 class RegistryFilterService:
     @staticmethod
@@ -18,7 +31,8 @@ class RegistryFilterService:
         expanded_search_keywords: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Registry Filter Service - Advanced Scoring & Ranking Engine (Relevance & Recency Balanced)
+        Registry Filter Service - Advanced Scoring & Ranking Engine
+        Upgraded for Hierarchical RAG (Integrates Entities & Navigation Maps)
         """
         print("==================================================")
         print(f"DEBUG - current_workspace_id: {workspace_id}")
@@ -29,18 +43,36 @@ class RegistryFilterService:
         print(f"DEBUG - expanded_keywords   : {expanded_search_keywords}")
         print("==================================================")
 
-        # Phase 1: Workspace Isolation, Ready status (handling NULL document_status safely via or_)
+        workspace_uuid = uuid.UUID(workspace_id)
+
+        # Phase 1: Fetch Ready Documents
         query = db.query(UploadedDocument).filter(
-            UploadedDocument.workspace_id == uuid.UUID(workspace_id),
+            UploadedDocument.workspace_id == workspace_uuid,
             UploadedDocument.status == "ready",
             or_(
                 UploadedDocument.document_status == None,
                 UploadedDocument.document_status != "Archived"
             )
         )
-        
         all_workspace_docs = query.all()
-        
+        doc_ids = [doc.id for doc in all_workspace_docs]
+
+        # 🟢 PRE-FETCH NEW ARCHITECTURE DATA (Entities & Sections)
+        doc_entities = defaultdict(list)
+        doc_sections = defaultdict(list)
+
+        if doc_ids:
+            # Fetch Entities
+            entities = db.query(ExtractedEntity).filter(ExtractedEntity.document_id.in_(doc_ids)).all()
+            for ent in entities:
+                doc_entities[ent.document_id].append(ent)
+                
+            # Fetch Sections (Navigation Map)
+            if DocumentSection:
+                sections = db.query(DocumentSection).filter(DocumentSection.document_id.in_(doc_ids)).all()
+                for sec in sections:
+                    doc_sections[sec.document_id].append(sec)
+
         # Tokenize user prompt and expanded search keywords
         search_tokens = set()
         if user_prompt:
@@ -57,7 +89,7 @@ class RegistryFilterService:
         for doc in all_workspace_docs:
             meta_blob = doc.knowledge_metadata or {}
             
-            # Read keywords from dynamic_metadata JSON array as well
+            # Legacy Keyword Parsing
             raw_dynamic_meta = meta_blob.get("dynamic_metadata", [])
             retrieval_keywords = []
             
@@ -105,7 +137,7 @@ class RegistryFilterService:
                 if str(doc.document_role).lower().strip() == intent_document_role.lower().strip():
                     relevance_score += 15.0
                         
-            # 4. Keyword Overlap (+6 per match, max 30)
+            # 4. Legacy Keyword Overlap (+6 per match, max 30)
             if search_tokens and retrieval_keywords:
                 clean_keywords = set(str(k).lower().strip() for k in retrieval_keywords if k)
                 keyword_intersection = search_tokens.intersection(clean_keywords)
@@ -118,7 +150,31 @@ class RegistryFilterService:
                 if summary_intersection:
                     relevance_score += min(len(summary_intersection) * 3.0, 20.0)
 
-            # 6. Authority & Importance Bonus
+            # 🟢 6. NEW ARCHITECTURE: Extracted Entities Overlap (+5 per matched entity, max 25)
+            doc_extracted_entities = doc_entities.get(doc.id, [])
+            matched_entity_names = []
+            if search_tokens and doc_extracted_entities:
+                for ent in doc_extracted_entities:
+                    ent_tokens = set(re.findall(r'\b\w{3,}\b', str(ent.name).lower()))
+                    if search_tokens.intersection(ent_tokens):
+                        matched_entity_names.append(ent.name)
+                
+                if matched_entity_names:
+                    relevance_score += min(len(matched_entity_names) * 5.0, 25.0)
+
+            # 🟢 7. NEW ARCHITECTURE: Section/Navigation Map Overlap (+8 per matched section, max 24)
+            doc_nav_sections = doc_sections.get(doc.id, [])
+            matched_section_titles = []
+            if search_tokens and doc_nav_sections:
+                for sec in doc_nav_sections:
+                    sec_tokens = set(re.findall(r'\b\w{3,}\b', str(sec.title).lower()))
+                    if search_tokens.intersection(sec_tokens):
+                        matched_section_titles.append(sec.title)
+                
+                if matched_section_titles:
+                    relevance_score += min(len(matched_section_titles) * 8.0, 24.0)
+
+            # 8. Authority, Freshness & Importance Bonus
             doc_authority = float(doc.authority_score or 50)
             doc_importance = float(doc.importance_score or 50)
             authority_bonus = (doc_authority + doc_importance) / 10.0
@@ -132,6 +188,8 @@ class RegistryFilterService:
                 "doc_obj": doc,
                 "calculated_score": final_calculated_score,
                 "keywords": retrieval_keywords,
+                "matched_entities": list(set(matched_entity_names)),
+                "matched_sections": list(set(matched_section_titles)),
                 "created_at": doc.created_at
             })
             
@@ -154,14 +212,14 @@ class RegistryFilterService:
             print(
                 f"FINAL SCORE: {item['calculated_score']:.2f} | "
                 f"{d.filename} | "
-                f"{d.document_type} | "
-                f"{d.document_role} | "
-                f"Time: {d.time_scope}"
+                f"Matched Entities: {len(item['matched_entities'])} | "
+                f"Matched Sections: {len(item['matched_sections'])}"
             )
         print("--------------------------------------------")
         print(f"DEBUG - SQL ROWS RETRIEVED: {len(all_workspace_docs)} | RANKED TOP CANDIDATES RETURNED: {len(top_candidates)}")
         print("==================================================")
         
+        # Format the final output to pass down to the AI
         lightweight_candidates = []
         for item in top_candidates:
             doc = item["doc_obj"]
@@ -180,6 +238,8 @@ class RegistryFilterService:
                 "freshness": float(doc.freshness or 0.5),
                 "planner_summary": str(doc.planner_summary or ""),
                 "retrieval_keywords": item["keywords"],
+                "relevant_entities": item["matched_entities"],      # 🟢 Exposes Entities to AI
+                "relevant_sections": item["matched_sections"],      # 🟢 Exposes Sections to AI
                 "questions_this_document_can_answer": questions,
                 "retrieval_score": round(item["calculated_score"], 2)
             })

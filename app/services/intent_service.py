@@ -1,7 +1,8 @@
 import os
+import json
 from google import genai
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Dict, Any
 
 
 class IntentAnalysisSchema(BaseModel):
@@ -14,8 +15,11 @@ class IntentAnalysisSchema(BaseModel):
     retrieval_depth: str = Field(
         description="Granularity/depth of information required. MUST be one of: ['Shallow', 'Medium', 'Deep']."
     )
+    target_document_ids: List[str] = Field(
+        description="List of document UUIDs selected from the candidate pool that are highly relevant to the query."
+    )
     target_section_codes: List[str] = Field(
-        description="List of section codes (e.g. ['1.1', '1.2']) from the Navigation Map that are likely relevant."
+        description="List of section codes or titles from the selected documents that are likely relevant."
     )
     include_sibling_sections: bool = Field(
         description="True if query depth requires pulling neighboring sections/chunks."
@@ -24,14 +28,14 @@ class IntentAnalysisSchema(BaseModel):
         description="Maximum relationship hops (0 for direct fact, 1 for immediate context, 2-3 for deep multi-step workflows)."
     )
     depth_reasoning: str = Field(
-        description="Brief reasoning for why this depth and section target were selected."
+        description="Brief reasoning for why these specific documents, sections, and depths were selected."
     )
 
 
-def analyze_user_query_intent(user_prompt: str, navigation_map_summary: str) -> IntentAnalysisSchema:
+def analyze_user_query_intent(user_prompt: str, registry_candidates: List[Dict[str, Any]]) -> IntentAnalysisSchema:
     """
-    Component 4 Intent Understanding AI: Compares user prompt against the Document Navigation Map 
-    to output target section codes and depth controls for downstream Planner AI.
+    Component 4 Intent Understanding AI (LLM-as-a-Judge): Evaluates the Registry Filter's top 
+    document candidates (including their entities and sections) to determine exact targets.
     """
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
@@ -40,18 +44,25 @@ def analyze_user_query_intent(user_prompt: str, navigation_map_summary: str) -> 
     client = genai.Client(api_key=gemini_key)
     
     system_instruction = (
-        "You are the Core Strategic Intent & Navigation Depth Analyst for AgentPulse.\n\n"
+        "You are the Core Strategic Intent & Document Selection Analyst for AgentPulse.\n\n"
         "🎯 MISSION:\n"
-        "Analyze human user questions against the provided Document Navigation Map (sections & codes).\n"
-        "Identify target section codes (e.g., '1.1', '1.2') and determine retrieval depth:\n"
-        "1. Shallow (Hops=0, include_sibling_sections=False): For direct single-fact lookups.\n"
-        "2. Medium (Hops=1, include_sibling_sections=True): For fact + immediate surrounding context.\n"
-        "3. Deep (Hops=2-3, include_sibling_sections=True): For end-to-end multi-section processes or policies.\n"
+        "Analyze human user questions against the provided Top Registry Candidates.\n"
+        "These candidates include relevance scores, extracted domain entities, and navigation sections.\n\n"
+        "Your job is to act as an intelligent filter:\n"
+        "1. Select the exact `target_document_ids` that actually contain the answer.\n"
+        "2. Identify `target_section_codes` (or section titles) from those specific documents.\n"
+        "3. Determine retrieval depth:\n"
+        "   - Shallow (Hops=0, include_sibling_sections=False): For direct single-fact lookups.\n"
+        "   - Medium (Hops=1, include_sibling_sections=True): For fact + immediate surrounding context.\n"
+        "   - Deep (Hops=2-3, include_sibling_sections=True): For end-to-end multi-section processes.\n"
     )
+    
+    # Convert the Python list of dicts to a formatted JSON string for the LLM prompt
+    candidates_json = json.dumps(registry_candidates, indent=2)
     
     prompt = (
         f"USER QUESTION: \"{user_prompt}\"\n\n"
-        f"DOCUMENT NAVIGATION MAP:\n{navigation_map_summary}"
+        f"TOP REGISTRY CANDIDATES (WITH ENTITIES & SECTIONS):\n{candidates_json}"
     )
 
     response = client.models.generate_content(
