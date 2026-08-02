@@ -1,6 +1,6 @@
 import os
 from google import genai
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Optional
 from typing import List
 from app.services.intent_service import IntentAnalysisSchema
 
