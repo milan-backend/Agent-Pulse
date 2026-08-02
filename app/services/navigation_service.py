@@ -58,6 +58,7 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
+            "response_schema": AINavigationMapSchema,  # 🟢 ADD THIS LINE
             "temperature": 0.0
         }
     )
