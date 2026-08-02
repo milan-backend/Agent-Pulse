@@ -49,32 +49,55 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
     client = genai.Client(api_key=gemini_key)
 
     system_instruction = (
-        "You are the Core Navigation & Chunking Strategy AI.\n\n"
-        "🎯 MISSION:\n"
-        "Analyze the raw PDF pages provided. Output the Document Hierarchy and recommend a Chunking Strategy. "
-        "Do NOT extract entities, summaries, or metadata.\n\n"
+        "You are the Navigation & Document Structure Intelligence Engine for AgentPulse.\n\n"
+        "MISSION:\n"
+        "Your responsibility is NOT to summarize, extract entities, or answer questions. "
+        "Your sole responsibility is to reconstruct the logical structure of a document exactly as a human expert would understand it.\n\n"
+        "GENERAL PRINCIPLES:\n"
+        "- Discover logical structure only from the document itself; do not assume specific industries.\n"
+        "- A section represents one continuous logical topic, NOT simply a bold line, larger text, or every numbered item.\n"
+        "- Maintain hierarchy (Parents contain children; children inherit parent context; if no parent exists, parent = null).\n"
+        "- NEVER create sections for: table headers, page headers/footers, page numbers, running titles, figure/table captions, bullet points, reference lists, copyright notices, single rows inside tables, or single procedures belonging to an existing parent.\n"
+        "- Documents frequently continue a section across pages. A page break does NOT create a new section. Avoid over-segmentation.\n"
+        "- Recommend semantic chunking strategies based on logical shifts (new topic, policy, procedure, chapter, etc.), never solely on page numbers or token counts.\n\n"
         "🧠 THE BATON (CURRENT ACTIVE STATE):\n"
-        "You are receiving a batch of pages from a larger document. Use this state to maintain continuity:\n"
+        "You are processing a batch of pages from a larger document. Use this state to maintain continuity:\n"
         f"- Current Active Parent: {state.current_parent or 'None'}\n"
         f"- Current Active Section: {state.current_section or 'None'}\n"
         f"- Current Section Type: {state.current_type or 'None'}\n"
         f"- Last Scanned Page: {state.last_page}\n\n"
-        "If the text continues the 'Current Active Section', DO NOT create a new section. Only create a new section if a distinct new heading appears.\n\n"
-        "✂️ CHUNKING STRATEGY RULES:\n"
-        "- Do not count tokens or suggest numeric chunk sizes.\n"
-        "- Recommend split triggers like: ['new heading', 'new topic', 'new procedure', 'new table'].\n\n"
-        "⚠️ OUTPUT FORMAT:\n"
-        "Return ONLY a raw JSON object exactly matching this structure. No markdown wrappers.\n"
+        "If text continues the current active section, do not create a new section unless clear evidence shows a new logical topic begins.\n\n"
+        "⚠️ OUTPUT REQUIREMENTS:\n"
+        "Return ONLY a raw JSON object matching this exact structure. Do not include markdown formatting, explanations, or extra text.\n"
         "{\n"
         '  "hierarchy": [\n'
-        '    {"title": "III Semester", "type": "container", "parent": null, "start_page": 12, "end_page": 25},\n'
-        '    {"title": "Digital Electronics", "type": "course", "parent": "III Semester", "start_page": 15, "end_page": 17}\n'
+        '    {\n'
+        '      "title": "Document Title or Parent Division",\n'
+        '      "type": "container",\n'
+        '      "parent": null,\n'
+        '      "start_page": 1,\n'
+        '      "end_page": 10\n'
+        '    },\n'
+        '    {\n'
+        '      "title": "Child Section or Topic",\n'
+        '      "type": "course",\n'
+        '      "parent": "Document Title or Parent Division",\n'
+        '      "start_page": 2,\n'
+        '      "end_page": 5\n'
+        '    }\n'
         '  ],\n'
         '  "chunk_suggestions": [\n'
-        '    {"section": "Digital Electronics", "strategy": "topic_based", "reason": "Units discuss different concepts.", "preserve_tables": true, "preserve_lists": true, "split_triggers": ["new unit heading", "new table"]}\n'
+        '    {\n'
+        '      "section": "Child Section or Topic",\n'
+        '      "strategy": "topic_based",\n'
+        '      "reason": "Each unit discusses different concepts.",\n'
+        '      "preserve_tables": true,\n'
+        '      "preserve_lists": true,\n'
+        '      "split_triggers": ["new heading", "new topic", "new procedure"]\n'
+        '    }\n'
         '  ],\n'
         '  "confidence": 0.95,\n'
-        '  "notes": "Pages contained standard syllabus structures."\n'
+        '  "notes": "Any notes if the document structure is ambiguous, otherwise leave empty."\n'
         "}"
     )
 
