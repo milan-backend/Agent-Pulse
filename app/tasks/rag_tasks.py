@@ -17,7 +17,7 @@ from app.models.user import User
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
 # 🟢 NEW ARCHITECTURE IMPORTS
-from app.services.pdf_parser import extract_document_structure
+from app.services.pdf_parser import process_pdf_for_navigation
 from app.services.navigation_service import build_and_save_navigation_map
 from app.services.extraction_ai import run_section_knowledge_extraction
 from app.services.chunk_engine import ChunkEngine
@@ -167,17 +167,15 @@ def process_document_embedding(document_id: str):
             doc_obj = fitz.open(temp_pdf_path)
             doc_page_count = doc_obj.page_count
             
-            # 2. Single Structure Extraction & DB Navigation Map Build
-            struct_data = extract_document_structure(temp_pdf_path)
-            
-            saved_sections = build_and_save_navigation_map(
-                db=db, 
-                document_id=doc.id, 
-                workspace_id=doc.workspace_id,
-                agent_id=doc.agent_id, 
-                pymupdf_toc=struct_data.get("toc", []),
-                doc_page_count=doc_page_count, 
-                ai_header_map=struct_data.get("ai_header_map")
+            # 2. Batch-driven Extraction & Stitched Navigation Map Build
+            pdf_batches = process_pdf_for_navigation(temp_pdf_path, batch_size=15)
+
+            saved_sections, chunk_suggestions = build_and_save_navigation_map(
+            db=db, 
+            document_id=doc.id, 
+            workspace_id=doc.workspace_id,
+            agent_id=doc.agent_id, 
+            pdf_batches=pdf_batches
             )
             
             # 3. Setup AI & Vector DB

@@ -1,63 +1,84 @@
 import os
 import uuid
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from google import genai
 
 from app.models.new_arch import DocumentSection
 
 # =====================================================================
-# 1. Pydantic Schema for Navigation AI Output
+# 1. Pydantic Schemas for AI Output
 # =====================================================================
-
-class AISectionItem(BaseModel):
-    section_code: str
+class HierarchyItem(BaseModel):
     title: str
-    parent_code: Optional[str] = None
+    type: str  # 'container', 'course', 'unit', etc.
+    parent: Optional[str] = None
     start_page: int
     end_page: int
 
-class AINavigationMapSchema(BaseModel):
-    document_title: str
-    sections: List[AISectionItem] = []
+class ChunkSuggestion(BaseModel):
+    section: str
+    strategy: str
+    reason: str
+    preserve_tables: bool
+    preserve_lists: bool
+    split_triggers: List[str]
+
+class NavigationBatchResponse(BaseModel):
+    hierarchy: List[HierarchyItem] = []
+    chunk_suggestions: List[ChunkSuggestion] = []
+    confidence: float
+    notes: str
 
 # =====================================================================
-# 2. Navigation AI Function
+# 2. State "Baton" Object
 # =====================================================================
-def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
+class ActiveState:
+    def __init__(self):
+        self.current_parent: Optional[str] = None
+        self.current_section: Optional[str] = None
+        self.current_type: Optional[str] = None
+        self.last_page: int = 0
+
+# =====================================================================
+# 3. AI Execution Call
+# =====================================================================
+def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationBatchResponse:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
-        raise ValueError("CRITICAL: API Key for Navigation AI is missing.")
-
     client = genai.Client(api_key=gemini_key)
 
-    # We revert to your original JSON formatting block while keeping the new filtering rules
     system_instruction = (
-        "You are the Core Navigation & Outline AI for AgentPulse.\n\n"
+        "You are the Core Navigation & Chunking Strategy AI.\n\n"
         "🎯 MISSION:\n"
-        "Analyze the provided 'Contextual Header Map' to generate a strictly structured Table of Contents.\n\n"
-        "⚠️ CRITICAL RULES FOR REJECTION & FILTERING:\n"
-        "- Do NOT treat table headers (e.g., 'S. No.', 'Marks', 'Credits') as sections.\n"
-        "- Do NOT treat author names, publishers, or book references as sections.\n"
-        "- Do NOT treat standalone numbers, bullet points, or page footers as sections.\n"
-        "- Ignore fragments that are too short or lack semantic meaning.\n\n"
-        "🧠 HIERARCHY & MERGING INSTRUCTIONS:\n"
-        "- Detect repeating document patterns (e.g., Semester structure, Unit structure).\n"
-        "- Merge broken or split headings if they logically belong together.\n"
-        "- Assign logical hierarchical section codes (e.g., '1.0' for Semester III, '1.1' for Digital Electronics).\n"
-        "- Define exact start_page and end_page boundaries.\n\n"
-        "⚠️ STRICT OUTPUT FORMAT:\n"
-        "You must return ONLY a raw JSON object matching this exact structure. Do not include markdown formatting.\n"
+        "Analyze the raw PDF pages provided. Output the Document Hierarchy and recommend a Chunking Strategy. "
+        "Do NOT extract entities, summaries, or metadata.\n\n"
+        "🧠 THE BATON (CURRENT ACTIVE STATE):\n"
+        "You are receiving a batch of pages from a larger document. Use this state to maintain continuity:\n"
+        f"- Current Active Parent: {state.current_parent or 'None'}\n"
+        f"- Current Active Section: {state.current_section or 'None'}\n"
+        f"- Current Section Type: {state.current_type or 'None'}\n"
+        f"- Last Scanned Page: {state.last_page}\n\n"
+        "If the text continues the 'Current Active Section', DO NOT create a new section. Only create a new section if a distinct new heading appears.\n\n"
+        "✂️ CHUNKING STRATEGY RULES:\n"
+        "- Do not count tokens or suggest numeric chunk sizes.\n"
+        "- Recommend split triggers like: ['new heading', 'new topic', 'new procedure', 'new table'].\n\n"
+        "⚠️ OUTPUT FORMAT:\n"
+        "Return ONLY a raw JSON object exactly matching this structure. No markdown wrappers.\n"
         "{\n"
-        '  "document_title": "Title Here",\n'
-        '  "sections": [\n'
-        '    {"section_code": "1.0", "title": "Intro", "parent_code": null, "start_page": 1, "end_page": 4}\n'
-        "  ]\n"
+        '  "hierarchy": [\n'
+        '    {"title": "III Semester", "type": "container", "parent": null, "start_page": 12, "end_page": 25},\n'
+        '    {"title": "Digital Electronics", "type": "course", "parent": "III Semester", "start_page": 15, "end_page": 17}\n'
+        '  ],\n'
+        '  "chunk_suggestions": [\n'
+        '    {"section": "Digital Electronics", "strategy": "topic_based", "reason": "Units discuss different concepts.", "preserve_tables": true, "preserve_lists": true, "split_triggers": ["new unit heading", "new table"]}\n'
+        '  ],\n'
+        '  "confidence": 0.95,\n'
+        '  "notes": "Pages contained standard syllabus structures."\n'
         "}"
     )
 
-    prompt = f"CONTEXTUAL HEADER MAP:\n\n{condensed_header_map}"
+    prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
 
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite", 
@@ -65,72 +86,88 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
-            # Removed the buggy response_schema entirely. Relying on prompt formatting like the old code.
             "temperature": 0.0
         }
     )
 
-    return AINavigationMapSchema.model_validate_json(response.text)
+    return NavigationBatchResponse.model_validate_json(response.text)
 
 # =====================================================================
-# 3. Master Navigation Service Function
+# 4. Master Navigation & Stitching Loop
 # =====================================================================
 def build_and_save_navigation_map(
     db: Session,
     document_id: uuid.UUID,
     workspace_id: uuid.UUID,
     agent_id: Optional[uuid.UUID],
-    pymupdf_toc: List[List[Any]],
-    doc_page_count: int,
-    ai_header_map: Optional[str] = None
-) -> List[DocumentSection]:
-    saved_sections: List[DocumentSection] = []
-    code_to_db_id: Dict[str, uuid.UUID] = {}
+    pdf_batches: List[str]
+) -> tuple[List[DocumentSection], List[ChunkSuggestion]]:
+    
+    master_hierarchy: List[HierarchyItem] = []
+    master_chunk_suggestions: List[ChunkSuggestion] = []
+    active_state = ActiveState()
 
-    if pymupdf_toc and len(pymupdf_toc) > 0:
-        print("📌 Building Navigation Map using embedded PyMuPDF TOC...")
-        for idx, item in enumerate(pymupdf_toc):
-            level, title, start_page = item[0], item[1], item[2]
-            end_page = pymupdf_toc[idx + 1][2] if idx + 1 < len(pymupdf_toc) else doc_page_count
-            section_code = f"{level}.{idx + 1}"
+    print(f"🤖 Processing {len(pdf_batches)} batches through Navigation AI...")
 
-            db_section = DocumentSection(
-                document_id=document_id, workspace_id=workspace_id, agent_id=agent_id,
-                section_code=section_code, title=title, start_page=start_page, end_page=end_page
-            )
-            db.add(db_section)
-            db.flush()  
-            saved_sections.append(db_section)
-    else:
-        print("🤖 No embedded TOC found. Triggering Navigation AI with Contextual Map...")
-        if not ai_header_map:
-            raise ValueError("Contextual Header Map required for Navigation AI fallback.")
-
-        # Truncate to safety threshold to prevent prompt overflow
-        truncated_map = ai_header_map[:80000] if len(ai_header_map) > 80000 else ai_header_map
+    # --- THE BATCH LOOP ---
+    for idx, batch_text in enumerate(pdf_batches):
+        print(f"   -> Analyzing Batch {idx + 1}/{len(pdf_batches)}")
         
-        ai_nav_map = run_navigation_ai(truncated_map)
+        batch_response = run_navigation_batch(batch_text, active_state)
+        
+        # --- THE STITCHER ---
+        for item in batch_response.hierarchy:
+            # If the current item is an exact match to the last item in the master list, STITCH them.
+            if master_hierarchy and master_hierarchy[-1].title == item.title and master_hierarchy[-1].parent == item.parent:
+                master_hierarchy[-1].end_page = max(master_hierarchy[-1].end_page, item.end_page)
+            else:
+                # New section found, append it to master
+                master_hierarchy.append(item)
 
-        for item in ai_nav_map.sections:
-            clean_title = item.title[:250].strip() if item.title else "Untitled Section"
-            clean_code = item.section_code[:50].strip() if item.section_code else str(uuid.uuid4())[:8]
-            
-            db_section = DocumentSection(
-                document_id=document_id, workspace_id=workspace_id, agent_id=agent_id,
-                section_code=clean_code, title=clean_title, start_page=item.start_page, end_page=item.end_page
-            )
-            db.add(db_section)
-            db.flush()
-            code_to_db_id[item.section_code] = db_section.id
-            saved_sections.append(db_section)
+        # Append Chunking Strategies (Deduplicating by section name)
+        existing_chunk_sections = {c.section for c in master_chunk_suggestions}
+        for chunk_strat in batch_response.chunk_suggestions:
+            if chunk_strat.section not in existing_chunk_sections:
+                master_chunk_suggestions.append(chunk_strat)
+                existing_chunk_sections.add(chunk_strat.section)
 
-        # Establish parent-child section relationships
-        for item in ai_nav_map.sections:
-            if item.parent_code and item.parent_code in code_to_db_id:
-                child_sec = db.query(DocumentSection).get(code_to_db_id[item.section_code])
-                if child_sec:
-                    child_sec.parent_section_id = code_to_db_id[item.parent_code]
+        # --- UPDATE THE BATON ---
+        if master_hierarchy:
+            last_item = master_hierarchy[-1]
+            active_state.current_section = last_item.title
+            active_state.current_parent = last_item.parent
+            active_state.current_type = last_item.type
+            active_state.last_page = last_item.end_page
+
+    # --- SAVE TO DATABASE ---
+    saved_sections: List[DocumentSection] = []
+    title_to_db_id: Dict[str, uuid.UUID] = {}
+
+    print("💾 Saving Stitched Hierarchy to Database...")
+    for item in master_hierarchy:
+        db_section = DocumentSection(
+            document_id=document_id, 
+            workspace_id=workspace_id, 
+            agent_id=agent_id,
+            section_code=str(uuid.uuid4())[:8], # Logical code can be generated via a separate numbering function if needed
+            title=item.title[:250], 
+            start_page=item.start_page, 
+            end_page=item.end_page
+        )
+        db.add(db_section)
+        db.flush()
+        title_to_db_id[item.title] = db_section.id
+        saved_sections.append(db_section)
+
+    # Establish Parent-Child Links based on the stitched titles
+    for item in master_hierarchy:
+        if item.parent and item.parent in title_to_db_id:
+            child_sec = db.query(DocumentSection).get(title_to_db_id[item.title])
+            if child_sec:
+                child_sec.parent_section_id = title_to_db_id[item.parent]
 
     db.commit()
-    print(f"✅ Navigation Map created with {len(saved_sections)} valid sections.")
-    return saved_sections
+    print(f"✅ Navigation Map finalized with {len(saved_sections)} stitched sections.")
+    
+    # Return both the Sections for saving, and the Chunk Suggestions to pass to your Chunk Engine
+    return saved_sections, master_chunk_suggestions
