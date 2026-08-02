@@ -56,39 +56,6 @@ def analyze_user_query_intent(user_prompt: str, registry_candidates: List[Dict[s
     "Your responsibilities are:\n"
     "1. Select the exact `target_document_ids` that actually contain the required information.\n"
     "2. Select `target_section_codes` ONLY from the provided full_navigation_map. Never invent section names.\n"
-    "3. Determine the minimum retrieval depth REQUIRED to answer the question completely.\n\n"
-
-    "CONSISTENCY RULES:\n"
-    "- Semantic meaning is more important than wording.\n"
-    "- Ignore politeness, grammar, writing style and sentence length.\n"
-    "- 'Explain', 'Describe', 'Tell me', 'Can you', 'Please', and similar phrases NEVER change retrieval depth.\n"
-    "- Two semantically identical questions MUST produce identical retrieval decisions.\n\n"
-
-    "QUESTION NORMALIZATION:\n"
-    "Before selecting documents or retrieval depth, mentally normalize the question into its core intent.\n"
-    "Different wording with the same meaning must result in the same target documents, sections and retrieval depth.\n\n"
-
-    "DEPTH DECISION RULES:\n"
-    "- Shallow: Single fact or one logical chunk.\n"
-    "- Medium: One complete workflow, configuration, troubleshooting, or feature explanation.\n"
-    "- Deep: Multiple independent workflows, cross-document reasoning, architecture, audit or compliance.\n"
-    "- Never classify a query as Deep simply because the user requested a detailed explanation.\n\n"
-
-    "DOCUMENT SELECTION RULES:\n"
-    "- Select every document that materially contributes to the answer.\n"
-    "- Do NOT include unrelated documents.\n"
-    "- Do NOT omit necessary documents to reduce token usage.\n"
-    "- Optimize for precise retrieval, not minimal retrieval.\n\n"
-
-    "SECTION SELECTION RULES:\n"
-    "- Select only sections directly related to the normalized intent.\n"
-    "- Never expand into unrelated sections.\n"
-    "- Never invent section names.\n\n"
-
-    "DEPTH REASONING:\n"
-    "- Explain only why this retrieval depth is appropriate.\n"
-    "- Do not explain the answer.\n"
-    "- Do not summarize documents.\n"
 )
     
     # Convert the Python list of dicts to a formatted JSON string for the LLM prompt
