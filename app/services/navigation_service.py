@@ -27,6 +27,7 @@ class AINavigationMapSchema(BaseModel):
 # (Bypasses Pydantic's $defs / $ref restrictions in the google-genai SDK)
 # =====================================================================
 
+# Raw OpenAPI Schema Dictionary for Gemini API
 NAVIGATION_MAP_RESPONSE_SCHEMA = {
     "type": "OBJECT",
     "properties": {
@@ -45,13 +46,13 @@ NAVIGATION_MAP_RESPONSE_SCHEMA = {
                     "start_page": {"type": "INTEGER"},
                     "end_page": {"type": "INTEGER"}
                 },
+                # 🟢 THE FIX IS HERE: Make sure this list matches the properties above perfectly
                 "required": ["section_code", "title", "start_page", "end_page"]
             }
         }
     },
     "required": ["document_title", "sections"]
 }
-
 # =====================================================================
 # 3. Navigation AI Function
 # =====================================================================
