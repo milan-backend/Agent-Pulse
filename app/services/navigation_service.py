@@ -8,7 +8,7 @@ from google import genai
 from app.models.new_arch import DocumentSection
 
 # =====================================================================
-# 1. Pydantic Schema for Navigation AI Output
+# 1. Pydantic Schema for Internal Application Validation
 # =====================================================================
 
 class AISectionItem(BaseModel):
@@ -23,8 +23,39 @@ class AINavigationMapSchema(BaseModel):
     sections: List[AISectionItem] = []
 
 # =====================================================================
-# 2. Navigation AI Function (Now takes the condensed map string)
+# 2. Raw OpenAPI Schema Dictionary for Gemini API
+# (Bypasses Pydantic's $defs / $ref restrictions in the google-genai SDK)
 # =====================================================================
+
+NAVIGATION_MAP_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "document_title": {
+            "type": "STRING", 
+            "description": "Title of the document"
+        },
+        "sections": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "section_code": {"type": "STRING", "description": "Logical code e.g. '1.0', '1.1'"},
+                    "title": {"type": "STRING", "description": "Cleaned section title"},
+                    "parent_code": {"type": "STRING", "nullable": True, "description": "Parent section code if nested"},
+                    "start_page": {"type": "INTEGER"},
+                    "end_page": {"type": "INTEGER"}
+                },
+                "required": ["section_code", "title", "start_page", "end_page"]
+            }
+        }
+    },
+    "required": ["document_title", "sections"]
+}
+
+# =====================================================================
+# 3. Navigation AI Function
+# =====================================================================
+
 def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
@@ -58,7 +89,7 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
-            "response_schema": AINavigationMapSchema,  # 🟢 ADD THIS LINE
+            "response_schema": NAVIGATION_MAP_RESPONSE_SCHEMA,
             "temperature": 0.0
         }
     )
@@ -66,8 +97,9 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
     return AINavigationMapSchema.model_validate_json(response.text)
 
 # =====================================================================
-# 3. Master Navigation Service Function
+# 4. Master Navigation Service Function
 # =====================================================================
+
 def build_and_save_navigation_map(
     db: Session,
     document_id: uuid.UUID,
@@ -88,8 +120,13 @@ def build_and_save_navigation_map(
             section_code = f"{level}.{idx + 1}"
 
             db_section = DocumentSection(
-                document_id=document_id, workspace_id=workspace_id, agent_id=agent_id,
-                section_code=section_code, title=title, start_page=start_page, end_page=end_page
+                document_id=document_id, 
+                workspace_id=workspace_id, 
+                agent_id=agent_id,
+                section_code=section_code, 
+                title=title, 
+                start_page=start_page, 
+                end_page=end_page
             )
             db.add(db_section)
             db.flush()  
@@ -99,26 +136,30 @@ def build_and_save_navigation_map(
         if not ai_header_map:
             raise ValueError("Contextual Header Map required for Navigation AI fallback.")
 
-        # Ensure the prompt string isn't massively overflowing context limits if it's a huge book
+        # Truncate to safety threshold to prevent prompt overflow on massive files
         truncated_map = ai_header_map[:80000] if len(ai_header_map) > 80000 else ai_header_map
         
         ai_nav_map = run_navigation_ai(truncated_map)
 
         for item in ai_nav_map.sections:
-            # Safely cap string lengths in case the AI hallucinates a massive title
             clean_title = item.title[:250].strip() if item.title else "Untitled Section"
             clean_code = item.section_code[:50].strip() if item.section_code else str(uuid.uuid4())[:8]
             
             db_section = DocumentSection(
-                document_id=document_id, workspace_id=workspace_id, agent_id=agent_id,
-                section_code=clean_code, title=clean_title, start_page=item.start_page, end_page=item.end_page
+                document_id=document_id, 
+                workspace_id=workspace_id, 
+                agent_id=agent_id,
+                section_code=clean_code, 
+                title=clean_title, 
+                start_page=item.start_page, 
+                end_page=item.end_page
             )
             db.add(db_section)
             db.flush()
             code_to_db_id[item.section_code] = db_section.id
             saved_sections.append(db_section)
 
-        # Second pass to establish SQL Parent-Child relationships
+        # Establish parent-child section relationships
         for item in ai_nav_map.sections:
             if item.parent_code and item.parent_code in code_to_db_id:
                 child_sec = db.query(DocumentSection).get(code_to_db_id[item.section_code])
