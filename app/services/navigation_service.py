@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from google import genai
+from google.genai import types  # 🟢 NEW: Official types for bulletproof schema
 
 from app.models.new_arch import DocumentSection
 
@@ -23,36 +24,35 @@ class AINavigationMapSchema(BaseModel):
     sections: List[AISectionItem] = []
 
 # =====================================================================
-# 2. Raw OpenAPI Schema Dictionary for Gemini API
-# (Bypasses Pydantic's $defs / $ref restrictions in the google-genai SDK)
+# 2. Official GenAI Types Schema 
+# (Guarantees zero INVALID_ARGUMENT errors from the API)
 # =====================================================================
 
-# Raw OpenAPI Schema Dictionary for Gemini API
-NAVIGATION_MAP_RESPONSE_SCHEMA = {
-    "type": "OBJECT",
-    "properties": {
-        "document_title": {
-            "type": "STRING", 
-            "description": "Title of the document"
-        },
-        "sections": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "section_code": {"type": "STRING", "description": "Logical code e.g. '1.0', '1.1'"},
-                    "title": {"type": "STRING", "description": "Cleaned section title"},
-                    "parent_code": {"type": "STRING", "nullable": True, "description": "Parent section code if nested"},
-                    "start_page": {"type": "INTEGER"},
-                    "end_page": {"type": "INTEGER"}
+NAVIGATION_MAP_RESPONSE_SCHEMA = types.Schema(
+    type=types.Type.OBJECT,
+    properties={
+        "document_title": types.Schema(
+            type=types.Type.STRING, 
+            description="Title of the document"
+        ),
+        "sections": types.Schema(
+            type=types.Type.ARRAY,
+            items=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "section_code": types.Schema(type=types.Type.STRING, description="Logical code e.g. '1.0', '1.1'"),
+                    "title": types.Schema(type=types.Type.STRING, description="Cleaned section title"),
+                    "parent_code": types.Schema(type=types.Type.STRING, nullable=True, description="Parent section code if nested"),
+                    "start_page": types.Schema(type=types.Type.INTEGER),
+                    "end_page": types.Schema(type=types.Type.INTEGER)
                 },
-                # 🟢 THE FIX IS HERE: Make sure this list matches the properties above perfectly
-                "required": ["section_code", "title", "start_page", "end_page"]
-            }
-        }
+                required=["section_code", "title", "start_page", "end_page"]
+            )
+        )
     },
-    "required": ["document_title", "sections"]
-}
+    required=["document_title", "sections"]
+)
+
 # =====================================================================
 # 3. Navigation AI Function
 # =====================================================================
@@ -87,12 +87,12 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite", 
         contents=prompt,
-        config={
-            "system_instruction": system_instruction,
-            "response_mime_type": "application/json",
-            "response_schema": NAVIGATION_MAP_RESPONSE_SCHEMA,
-            "temperature": 0.0
-        }
+        config=types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            response_mime_type="application/json",
+            response_schema=NAVIGATION_MAP_RESPONSE_SCHEMA,
+            temperature=0.0
+        )
     )
 
     return AINavigationMapSchema.model_validate_json(response.text)
