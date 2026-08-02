@@ -12,9 +12,9 @@ from app.models.new_arch import DocumentSection
 # =====================================================================
 
 class AISectionItem(BaseModel):
-    section_code: str
-    title: str
-    parent_code: Optional[str] = None
+    section_code: str = Field(description="Logical code e.g., '1.0', '1.1', '2.0'")
+    title: str = Field(description="Cleaned, meaningful section title.")
+    parent_code: Optional[str] = Field(None, description="Parent section code if nested.")
     start_page: int
     end_page: int
 
@@ -35,23 +35,22 @@ def run_navigation_ai(condensed_header_map: str) -> AINavigationMapSchema:
     system_instruction = (
         "You are the Core Navigation & Outline AI for AgentPulse.\n\n"
         "🎯 MISSION:\n"
-        "I am providing you with a condensed 'Header Map' extracted from a large document. It shows only the bold/large text and the page it was found on.\n"
-        "Analyze this map and generate a structured Table of Contents.\n"
-        "1. Assign logical section codes (e.g., '1.0', '1.1', '1.2', '2.0').\n"
-        "2. Identify clear titles for each section or chapter.\n"
-        "3. Specify parent_code for sub-sections (e.g., parent_code of '1.1' is '1.0').\n"
-        "4. Set exact start_page and end_page boundaries based on when the next section begins.\n\n"
+        "Analyze the provided 'Contextual Header Map' to generate a strictly structured Table of Contents.\n\n"
+        "⚠️ CRITICAL RULES FOR REJECTION & FILTERING:\n"
+        "- Do NOT treat table headers (e.g., 'S. No.', 'Marks', 'Credits') as sections.\n"
+        "- Do NOT treat author names, publishers, or book references (e.g., 'G. Hadley', 'McGraw Hill') as sections.\n"
+        "- Do NOT treat standalone numbers, bullet points, or page footers as sections.\n"
+        "- Ignore fragments that are too short or lack semantic meaning.\n\n"
+        "🧠 HIERARCHY & MERGING INSTRUCTIONS:\n"
+        "- Detect repeating document patterns (e.g., Semester structure, Unit structure).\n"
+        "- Merge broken or split headings if they logically belong together.\n"
+        "- Assign logical hierarchical section codes (e.g., '1.0' for Semester III, '1.1' for Digital Electronics, '1.1.1' for Unit I).\n"
+        "- Define exact start_page and end_page boundaries.\n\n"
         "⚠️ STRICT OUTPUT FORMAT:\n"
-        "You must return ONLY a raw JSON object matching this exact structure. Do not include markdown formatting.\n"
-        "{\n"
-        '  "document_title": "Title Here",\n'
-        '  "sections": [\n'
-        '    {"section_code": "1.0", "title": "Intro", "parent_code": null, "start_page": 1, "end_page": 4}\n'
-        "  ]\n"
-        "}"
+        "Return ONLY a raw JSON object matching the requested schema. No markdown."
     )
 
-    prompt = f"CONDENSED HEADER MAP:\n\n{condensed_header_map}"
+    prompt = f"CONTEXTUAL HEADER MAP:\n\n{condensed_header_map}"
 
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite", 
@@ -75,7 +74,7 @@ def build_and_save_navigation_map(
     agent_id: Optional[uuid.UUID],
     pymupdf_toc: List[List[Any]],
     doc_page_count: int,
-    ai_header_map: Optional[str] = None # 🟢 Changed to accept the string map
+    ai_header_map: Optional[str] = None
 ) -> List[DocumentSection]:
     saved_sections: List[DocumentSection] = []
     code_to_db_id: Dict[str, uuid.UUID] = {}
@@ -95,22 +94,30 @@ def build_and_save_navigation_map(
             db.flush()  
             saved_sections.append(db_section)
     else:
-        print("🤖 No embedded TOC found. Triggering Navigation AI with Condensed Map...")
+        print("🤖 No embedded TOC found. Triggering Navigation AI with Contextual Map...")
         if not ai_header_map:
-            raise ValueError("Condensed Header Map required for Navigation AI fallback.")
+            raise ValueError("Contextual Header Map required for Navigation AI fallback.")
 
-        ai_nav_map = run_navigation_ai(ai_header_map)
+        # Ensure the prompt string isn't massively overflowing context limits if it's a huge book
+        truncated_map = ai_header_map[:80000] if len(ai_header_map) > 80000 else ai_header_map
+        
+        ai_nav_map = run_navigation_ai(truncated_map)
 
         for item in ai_nav_map.sections:
+            # Safely cap string lengths in case the AI hallucinates a massive title
+            clean_title = item.title[:250].strip() if item.title else "Untitled Section"
+            clean_code = item.section_code[:50].strip() if item.section_code else str(uuid.uuid4())[:8]
+            
             db_section = DocumentSection(
                 document_id=document_id, workspace_id=workspace_id, agent_id=agent_id,
-                section_code=item.section_code, title=item.title, start_page=item.start_page, end_page=item.end_page
+                section_code=clean_code, title=clean_title, start_page=item.start_page, end_page=item.end_page
             )
             db.add(db_section)
             db.flush()
             code_to_db_id[item.section_code] = db_section.id
             saved_sections.append(db_section)
 
+        # Second pass to establish SQL Parent-Child relationships
         for item in ai_nav_map.sections:
             if item.parent_code and item.parent_code in code_to_db_id:
                 child_sec = db.query(DocumentSection).get(code_to_db_id[item.section_code])
@@ -118,5 +125,5 @@ def build_and_save_navigation_map(
                     child_sec.parent_section_id = code_to_db_id[item.parent_code]
 
     db.commit()
-    print(f"✅ Navigation Map created with {len(saved_sections)} sections.")
+    print(f"✅ Navigation Map created with {len(saved_sections)} valid sections.")
     return saved_sections
