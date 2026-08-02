@@ -57,9 +57,7 @@ def analyze_user_query_intent(user_prompt: str, registry_candidates: List[Dict[s
     "1. Select the exact `target_document_ids` that actually contain the required information.\n"
     "2. Select `target_section_codes` ONLY from the provided full_navigation_map. Never invent section names.\n"
     "3. Determine the minimum retrieval depth REQUIRED to answer the question completely.\n\n"
-)
 
-    system_instruction += (
     "CONSISTENCY RULES:\n"
     "- Semantic meaning is more important than wording.\n"
     "- Ignore politeness, grammar, writing style and sentence length.\n"
