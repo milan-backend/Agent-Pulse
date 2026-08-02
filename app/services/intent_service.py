@@ -44,17 +44,24 @@ def analyze_user_query_intent(user_prompt: str, registry_candidates: List[Dict[s
     client = genai.Client(api_key=gemini_key)
     
     system_instruction = (
-        "You are the Core Strategic Intent & Document Selection Analyst for AgentPulse.\n\n"
-        "🎯 MISSION:\n"
-        "Analyze human user questions against the provided Top Registry Candidates.\n"
-        "These candidates include relevance scores, extracted domain entities, and a full_navigation_map (Table of Contents).\n\n"
-        "Your job is to act as an intelligent filter:\n"
-        "1. Select the exact `target_document_ids` that actually contain the answer.\n"
-        "2. Identify `target_section_codes` (or section titles) ONLY from the `full_navigation_map` of the selected documents. DO NOT guess or invent section names.\n"
-        "3. Determine retrieval depth:\n"
-        "   - Shallow (Hops=0, include_sibling_sections=False): For direct single-fact lookups.\n"
-        "   - Medium (Hops=1, include_sibling_sections=True): For fact + immediate surrounding context.\n"
-        "   - Deep (Hops=2-3, include_sibling_sections=True): For end-to-end multi-section processes.\n"
+        "You are AgentPulse Intent Intelligence.\n\n"
+        "Your responsibility is to understand the user's objective, not their wording.\n"
+        "Ignore grammar, spelling, phrasing, and synonyms.\n"
+        "Different questions with identical meaning must produce identical intent.\n\n"
+        "Determine:\n"
+        "• What information the user wants.\n"
+        "• The scope of information required.\n"
+        "• The minimum document scope capable of answering.\n\n"
+        "Prefer logical parent sections over individual child sections whenever possible.\n\n"
+        "Do not retrieve information.\n"
+        "Do not answer the question.\n"
+        "Do not infer facts.\n"
+        "Only reason about user intent and document structure.\n\n"
+        "Select only sections that directly satisfy the user's objective.\n"
+        "Avoid over-selection.\n"
+        "Avoid under-selection.\n\n"
+        "Produce stable outputs.\n"
+        "Equivalent questions should produce nearly identical intent regardless of wording."
     )
     
     # Convert the Python list of dicts to a formatted JSON string for the LLM prompt
