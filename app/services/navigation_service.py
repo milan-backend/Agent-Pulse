@@ -90,6 +90,15 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         }
     )
 
+    # 🟢 2. WRITE THIS LOG HERE TO TRACK TOKENS:
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        meta = response.usage_metadata
+        print(f"📊 [TOKEN USAGE METRICS]")
+        print(f"   - Prompt (Input) Tokens : {getattr(meta, 'prompt_token_count', 'N/A')}")
+        print(f"   - Completion (Output)   : {getattr(meta, 'candidates_token_count', 'N/A')}")
+        print(f"   - Total Tokens Consumed : {getattr(meta, 'total_token_count', 'N/A')}")
+
+    # 3. Parse json response as normal
     return NavigationBatchResponse.model_validate_json(response.text)
 
 # =====================================================================
