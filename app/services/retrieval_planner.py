@@ -26,11 +26,12 @@ class RetrievalBlueprintSchema(BaseModel):
 def execute_retrieval_planning_triage(
     user_prompt: str,
     intent_strategy: IntentAnalysisSchema,
-    chunk_telemetry_candidates: List[dict]
+    chunk_telemetry_candidates: List[dict],
+    navigation_map_summary: Optional[str] = None  # 🟢 Added navigation map parameter
 ) -> RetrievalBlueprintSchema:
     """
-    Planner AI: Examines Chunk Telemetry Summaries and Intent Diagnostics to resolve 
-    the exact list of target Chunk IDs for direct SQL/Vector retrieval.
+    Planner AI: Examines Chunk Telemetry Summaries, Intent Diagnostics, and the Navigation Map 
+    to resolve the exact list of target Chunk IDs for direct SQL/Vector retrieval.
     """
     if not chunk_telemetry_candidates:
         return RetrievalBlueprintSchema(
@@ -51,7 +52,7 @@ def execute_retrieval_planning_triage(
     for c in chunk_telemetry_candidates:
         telemetry_blocks.append(
             f"🔹 [CHUNK ID: {c['id']} | CHROMA VECTOR ID: {c.get('chroma_vector_id')}]\n"
-            f" - Section Code: {c.get('section_code', 'N/A')} ({c.get('section_title', '')})\n"
+            f" - Section Title: {c.get('section_title', 'N/A')}\n"
             f" - Telemetry Summary: {c.get('telemetry_summary', '')}\n"
             f"--------------------------------------------------"
         )
@@ -60,7 +61,7 @@ def execute_retrieval_planning_triage(
     system_instruction = (
         "You are the Core Director of the AgentPulse Retrieval Planner AI Layer.\n\n"
         "🎯 MISSION:\n"
-        "Review Intent Diagnostics and Chunk Telemetry Summaries to select the precise target chunks.\n"
+        "Review Intent Diagnostics, the Document Navigation Map, and Chunk Telemetry Summaries to select precise target chunks.\n"
         "Bypass generic vector similarity search by picking the exact Chroma Vector IDs needed to answer the prompt.\n\n"
         "🎯 DEPTH & BUDGET RULES:\n"
         "- Shallow: Select 1 to 3 exact chunks, set include_neighbor_chunks = False.\n"
@@ -68,7 +69,9 @@ def execute_retrieval_planning_triage(
         "- Deep: Select 6 to 10 chunks, set include_neighbor_chunks = True.\n"
     )
     
-    # Injected target_document_ids into the prompt context for better alignment
+    # 🟢 Injected navigation map summary into the prompt context for structural alignment
+    nav_map_text = navigation_map_summary if navigation_map_summary else "No structural map provided."
+    
     prompt = (
         f"USER QUESTION: \"{user_prompt}\"\n\n"
         f"INTENT DIAGNOSTICS:\n"
@@ -78,12 +81,15 @@ def execute_retrieval_planning_triage(
         f" - Requested Depth: {intent_strategy.retrieval_depth}\n"
         f" - Target Sections: {intent_strategy.target_section_codes}\n"
         f"---------------------------------\n\n"
+        f"DOCUMENT NAVIGATION MAP STRUCTURE:\n"
+        f"{nav_map_text}\n"
+        f"---------------------------------\n\n"
         f"CHUNK TELEMETRY CANDIDATES:\n"
         f"{candidates_context}"
     )
 
     response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
+        model="models/gemini-2.5-flash-lite", # Updated to a reliable flash model
         contents=prompt,
         config={
             "system_instruction": system_instruction,
