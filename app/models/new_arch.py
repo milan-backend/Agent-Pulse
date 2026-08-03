@@ -1,6 +1,6 @@
 import uuid
 from sqlalchemy import Column, String, Integer, Text, DateTime, ForeignKey, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 
@@ -26,11 +26,16 @@ class DocumentSection(Base):
     section_code = Column(String(50), nullable=False)  # e.g., '1.1', '2.3.1'
     title = Column(String(255), nullable=False)
     
-    # 🟢 THE FIX: Removed the duplicate definition. Kept the one with CASCADE.
     parent_section_id = Column(UUID(as_uuid=True), ForeignKey("document_sections.id", ondelete="CASCADE"), nullable=True)
     
     start_page = Column(Integer, nullable=True)
     end_page = Column(Integer, nullable=True)
+
+    # 🟢 Universal Enterprise Attributes for Custom Navigation Maps
+    content_type = Column(String(100), default="narrative_paragraph", nullable=False)  # e.g., 'master_scheme_table', 'policy_rule', 'code_block'
+    semantic_summary = Column(Text, nullable=True)                                     # Dense summary read by Planner AI
+    key_entities = Column(JSONB, default=list, nullable=False)                       # Pre-extracted course codes, terms, or IDs
+    chunking_strategy_hint = Column(JSONB, default=dict, nullable=False)             # Rules for how to split this specific section
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
