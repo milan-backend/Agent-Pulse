@@ -31,7 +31,7 @@ def execute_retrieval_planning_triage(
 ) -> RetrievalBlueprintSchema:
     """
     Planner AI: Examines Chunk Telemetry Summaries, Intent Diagnostics, and the Navigation Map 
-    to resolve the exact list of target Chunk IDs for direct SQL/Vector retrieval.
+    to resolve the exact list of target Chunk IDs for direct SQL/Vector retrieval.and make sure that the answer is fully correct but also make sure that the useful chunks takes out not unuseful and the answer also must be sufficent.
     """
     if not chunk_telemetry_candidates:
         return RetrievalBlueprintSchema(
