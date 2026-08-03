@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import time
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -46,7 +47,7 @@ class ActiveState:
         self.last_page: int = 0
 
 # =====================================================================
-# 3. AI Execution Call (Optimized for Cost & Speed)
+# 3. AI Execution Call (Optimized for Cost, Speed & Resilience)
 # =====================================================================
 def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationBatchResponse:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -55,7 +56,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
-    # 🟢 CONDENSED SYSTEM INSTRUCTION: Saves token cost per batch while enforcing strict rules.
+    # CONDENSED SYSTEM INSTRUCTION: Saves token cost per batch while enforcing strict rules.
     system_instruction = (
         "You are the Universal Navigation Engine. Map the logical structure of the raw document text.\n"
         "RULES:\n"
@@ -72,30 +73,65 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
 
-    # Using Flash Lite for Phase 1 cost efficiency
-    response = client.models.generate_content(
-        model="gemini-2.5-flash-lite", 
-        contents=prompt,
-        config={
-            "system_instruction": system_instruction,
-            "response_mime_type": "application/json",
-            "temperature": 0.0
-        }
-    )
+    # 🟢 RETRY LOOP WITH EXPONENTIAL BACKOFF FOR 503 / RATE LIMITS
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Using Flash Lite for Phase 1 cost efficiency
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite", 
+                contents=prompt,
+                config={
+                    "system_instruction": system_instruction,
+                    "response_mime_type": "application/json",
+                    "temperature": 0.0
+                }
+            )
 
-    # 🟢 EXACT TOKEN LOGGING
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        meta = response.usage_metadata
-        prompt_tokens = getattr(meta, 'prompt_token_count', 0)
-        completion_tokens = getattr(meta, 'candidates_token_count', 0)
-        total_tokens = getattr(meta, 'total_token_count', 0)
-        
-        print(f"📊 [NAVIGATION AI TOKEN USAGE]")
-        print(f"   - Prompt Tokens     : {prompt_tokens}")
-        print(f"   - Completion Tokens : {completion_tokens}")
-        print(f"   - Total Tokens      : {total_tokens}")
+            # EXACT TOKEN LOGGING
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                meta = response.usage_metadata
+                prompt_tokens = getattr(meta, 'prompt_token_count', 0)
+                completion_tokens = getattr(meta, 'candidates_token_count', 0)
+                total_tokens = getattr(meta, 'total_token_count', 0)
+                
+                print(f"📊 [NAVIGATION AI TOKEN USAGE]")
+                print(f"   - Prompt Tokens     : {prompt_tokens}")
+                print(f"   - Completion Tokens : {completion_tokens}")
+                print(f"   - Total Tokens      : {total_tokens}")
 
-    return NavigationBatchResponse.model_validate_json(response.text)
+            # 🟢 ROBUST JSON SHAPE RECOVERY
+            raw_json_str = response.text.strip()
+            
+            # Strip markdown code blocks if the AI accidentally included them
+            if raw_json_str.startswith("```json"):
+                raw_json_str = raw_json_str[7:-3].strip()
+            elif raw_json_str.startswith("```"):
+                raw_json_str = raw_json_str[3:-3].strip()
+                
+            parsed_data = json.loads(raw_json_str)
+            
+            # If the AI returned a list instead of the root object, recover the shape
+            if isinstance(parsed_data, list):
+                print("⚠️ AI returned a list instead of an object. Recovering shape...")
+                parsed_data = {
+                    "hierarchy": parsed_data,
+                    "chunk_suggestions": [],
+                    "confidence": 0.5,
+                    "notes": "Recovered from raw list format"
+                }
+                
+            # Use Pydantic model validation on the recovered dictionary
+            return NavigationBatchResponse(**parsed_data)
+
+        except Exception as e:
+            if ("503" in str(e) or "UNAVAILABLE" in str(e) or "429" in str(e)) and attempt < max_retries - 1:
+                sleep_time = (attempt + 1) * 3 
+                print(f"⏳ 503/429 High Demand detected on batch attempt {attempt + 1}. Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
+            elif attempt == max_retries - 1:
+                # If we hit the max retries or a strict parsing failure, raise it so the stitcher catches it
+                raise e
 
 # =====================================================================
 # 4. Master Navigation & Stitching Loop (Phase 1 Ingestion)
@@ -168,7 +204,7 @@ def build_and_save_navigation_map(
             agent_id=agent_id,
             section_code=str(uuid.uuid4())[:8],
             title=item.title[:250], 
-            parent_path=full_path[:500], # 🟢 Saved for Phase 2 Routing
+            parent_path=full_path[:500], # Saved for Phase 2 Routing
             start_page=item.start_page, 
             end_page=item.end_page,
             content_type=item.content_type,
