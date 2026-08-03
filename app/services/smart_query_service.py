@@ -83,7 +83,7 @@ def execute_smart_routing(
     
     # Using a capable model for reasoning accuracy
     response = client.models.generate_content(
-        model="gemini-2.5-flash", 
+        model="gemini-3.1-flash-lite", 
         contents=prompt,
         config={
             "system_instruction": system_instruction,
