@@ -268,7 +268,16 @@ def process_step(self, step_id: str):
                     "blueprint_notes": ""
                 }
 
-                # --- 1. REGISTRY FILTER (Document Level Scoring) ---
+                # --- 1. INTENT AI FIRST (Analyzes the raw user query objective) ---
+                print(f"📡 Executing Intent Triage Layer first for Step ID: {step.id}")
+                intent_strategy = None
+                try:
+                    # Run Intent Analysis standalone using empty placeholder list first to parse objective
+                    intent_strategy = analyze_user_query_intent(prompt, [])
+                except Exception as intent_err:
+                    print(f"⚠️ Intent AI initial fallback: {intent_err}")
+
+                # --- 2. REGISTRY FILTER (Guided by Intent AI parameters) ---
                 print(f"📡 Executing Registry Filter for Step ID: {step.id}")
                 registry_candidates = []
                 try:
@@ -282,17 +291,14 @@ def process_step(self, step_id: str):
                 except Exception as reg_err:
                     print(f"⚠️ Registry Filter fallback: {reg_err}")
 
-                # --- 2. INTENT AI (Intelligent Decider) ---
-                print(f"📡 Executing Intent Triage Layer for Step ID: {step.id}")
-                intent_strategy = None
+                # --- 3. INTENT AI RE-EVALUATION (Refines with populated registry candidate data) ---
                 if registry_candidates:
                     try:
-                        # Feed the scored candidates & entities directly to the LLM judge
                         intent_strategy = analyze_user_query_intent(prompt, registry_candidates)
-                    except Exception as intent_err:
-                        print(f"⚠️ Intent AI fallback: {intent_err}")
+                    except Exception as intent_re_err:
+                        print(f"⚠️ Intent AI secondary refinement fallback: {intent_re_err}")
 
-                # --- 3. PLANNER AI ---
+                # --- 4. PLANNER AI ---
                 retrieval_blueprint = None
                 if intent_strategy and getattr(intent_strategy, "target_document_ids", None):
                     target_doc_ids = intent_strategy.target_document_ids
