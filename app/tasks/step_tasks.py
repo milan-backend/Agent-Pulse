@@ -253,10 +253,12 @@ def process_step(self, step_id: str):
                 # =====================================================================
                 # 🎯 NEW AGENTIC ROUTING PIPELINE
                 # =====================================================================
+                # =====================================================================
+                # 🎯 NEW PURE NAVIGATION & INTENT-FIRST ROUTING PIPELINE
+                # =====================================================================
                 from app.services.intent_service import analyze_user_query_intent
                 from app.services.retrieval_planner import execute_retrieval_planning_triage
                 from app.services.retrieval_service import RetrievalService
-                from app.services.registry_filter_service import RegistryFilterService
                 
                 context_fragments = []
                 documents_influencing_list = []
@@ -268,49 +270,57 @@ def process_step(self, step_id: str):
                     "blueprint_notes": ""
                 }
 
-                # --- 1. INTENT AI FIRST (Analyzes the raw user query objective) ---
-                print(f"📡 Executing Intent Triage Layer first for Step ID: {step.id}")
+                # --- 1. FETCH DOCUMENTS & NAVIGATION MAPS DIRECTLY (Bypassing SQL Registry Filter) ---
+                print(f"📡 Loading Document Navigation Maps for Workspace ID: {current_workspace_id}")
+                all_docs = db.query(UploadedDocument).filter(
+                    UploadedDocument.workspace_id == current_workspace_id,
+                    UploadedDocument.status == "ready"
+                ).all()
+
+                registry_candidates = []
+                full_navigation_map_summary_text = ""
+
+                for doc in all_docs:
+                    # Fetch sections for this document to build its navigation context
+                    sections = db.query(DocumentSection).filter(
+                        DocumentSection.document_id == doc.id
+                    ).all()
+                    
+                    nav_list = []
+                    for s in sections:
+                        nav_list.append(f"[{s.section_code}] {s.title} (Pages {s.start_page}-{s.end_page})")
+                    
+                    nav_map_str = "\n".join(nav_list)
+                    full_navigation_map_summary_text += f"\nDocument Name: {doc.filename} (ID: {doc.id})\nNavigation Map:\n{nav_map_str}\n"
+
+                    registry_candidates.append({
+                        "document_id": str(doc.id),
+                        "filename": doc.filename,
+                        "full_navigation_map": nav_list
+                    })
+
+                rag_telemetry_node["sql_initial_candidates"] = len(registry_candidates)
+
+                # --- 2. INTENT AI RUNS FIRST (Analyzes prompt against Navigation Map) ---
+                print(f"📡 Executing Intent Triage Layer over Navigation Map for Step ID: {step.id}")
                 intent_strategy = None
                 try:
-                    # Run Intent Analysis standalone using empty placeholder list first to parse objective
-                    intent_strategy = analyze_user_query_intent(prompt, [])
+                    intent_strategy = analyze_user_query_intent(prompt, registry_candidates)
                 except Exception as intent_err:
-                    print(f"⚠️ Intent AI initial fallback: {intent_err}")
+                    print(f"⚠️ Intent AI evaluation error: {intent_err}")
 
-                # --- 2. REGISTRY FILTER (Guided by Intent AI parameters) ---
-                print(f"📡 Executing Registry Filter for Step ID: {step.id}")
-                registry_candidates = []
-                try:
-                    registry_candidates = RegistryFilterService.extract_top_candidates(
-                        db=db,
-                        workspace_id=current_workspace_id,
-                        target_departments=[], 
-                        user_prompt=prompt
-                    )
-                    rag_telemetry_node["sql_initial_candidates"] = len(registry_candidates)
-                except Exception as reg_err:
-                    print(f"⚠️ Registry Filter fallback: {reg_err}")
-
-                # --- 3. INTENT AI RE-EVALUATION (Refines with populated registry candidate data) ---
-                if registry_candidates:
-                    try:
-                        intent_strategy = analyze_user_query_intent(prompt, registry_candidates)
-                    except Exception as intent_re_err:
-                        print(f"⚠️ Intent AI secondary refinement fallback: {intent_re_err}")
-
-                # --- 4. PLANNER AI ---
+                # --- 3. PLANNER AI (Evaluates Chunk Telemetry + Navigation Map) ---
                 retrieval_blueprint = None
                 if intent_strategy and getattr(intent_strategy, "target_document_ids", None):
                     target_doc_ids = intent_strategy.target_document_ids
                     target_codes = intent_strategy.target_section_codes
                     
-                    # Fetch ONLY the sections for the explicitly approved documents
+                    # Fetch sections for the target documents approved by Intent AI
                     query = db.query(DocumentSection).filter(
                         DocumentSection.workspace_id == current_workspace_id,
                         DocumentSection.document_id.in_(target_doc_ids)
                     )
                     
-                    # 🟢 FIX 1: Search by BOTH section_code and title
                     if target_codes:
                         from sqlalchemy import or_
                         query = query.filter(
@@ -322,9 +332,8 @@ def process_step(self, step_id: str):
                         
                     target_sections = query.all()
                     
-                    # 🟢 FIX 2: Failsafe. If the AI hallucinated the names, grab the document anyway.
+                    # Failsafe if codes don't match exactly
                     if not target_sections and target_doc_ids:
-                        print(f"⚠️ Intent AI guessed invalid section codes {target_codes}. Executing Failsafe.")
                         target_sections = db.query(DocumentSection).filter(
                             DocumentSection.workspace_id == current_workspace_id,
                             DocumentSection.document_id.in_(target_doc_ids)
@@ -344,19 +353,20 @@ def process_step(self, step_id: str):
                         ]
 
                         if telemetry_candidates:
-                            print(f"📡 Executing Planner AI over {len(telemetry_candidates)} chunk summaries...")
+                            print(f"📡 Executing Planner AI over {len(telemetry_candidates)} chunk summaries with Navigation Map...")
                             try:
                                 retrieval_blueprint = execute_retrieval_planning_triage(
                                     user_prompt=prompt,
                                     intent_strategy=intent_strategy,
-                                    chunk_telemetry_candidates=telemetry_candidates
+                                    chunk_telemetry_candidates=telemetry_candidates,
+                                    navigation_map_summary=full_navigation_map_summary_text
                                 )
                             except Exception as planner_err:
                                 print(f"⚠️ Planner AI fallback: {planner_err}")
 
-                # --- 3. DIRECT ID RETRIEVAL ---
+                # --- 4. DIRECT CHROMA ID RETRIEVAL ---
                 if retrieval_blueprint and retrieval_blueprint.target_chroma_vector_ids:
-                    print(f"📡 Fetching {len(retrieval_blueprint.target_chroma_vector_ids)} exact Chunk IDs...")
+                    print(f"📡 Fetching {len(retrieval_blueprint.target_chroma_vector_ids)} exact Chunk IDs from Chroma...")
                     retrieval_service = RetrievalService()
                     reconstructed_chunks = retrieval_service.execute_direct_id_retrieval(
                         target_chroma_ids=retrieval_blueprint.target_chroma_vector_ids,
@@ -373,7 +383,6 @@ def process_step(self, step_id: str):
                         if chunk.get("document_id"):
                             unique_doc_ids.add(chunk["document_id"])
                             
-                    # Resolve Document Names for Telemetry Output
                     if unique_doc_ids:
                         doc_records = db.query(UploadedDocument).filter(UploadedDocument.id.in_(list(unique_doc_ids))).all()
                         for d in doc_records:
