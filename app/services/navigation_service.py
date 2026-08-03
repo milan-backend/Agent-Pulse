@@ -73,18 +73,45 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         f"- Current Section Type: {state.current_type or 'None'}\n"
         f"- Last Scanned Page: {state.last_page}\n\n"
         "⚠️ OUTPUT REQUIREMENTS:\n"
-        "Return ONLY a raw JSON object matching the requested schema structure. Do not include markdown formatting."
+        "Return ONLY a raw JSON object matching this exact schema format:\n"
+        "{\n"
+        '  "hierarchy": [\n'
+        '    {\n'
+        '      "title": "string",\n'
+        '      "type": "string",\n'
+        '      "parent": "string or null",\n'
+        '      "start_page": 0,\n'
+        '      "end_page": 0,\n'
+        '      "content_type": "master_scheme_table | narrative_paragraph | policy_rule | code_block",\n'
+        '      "semantic_summary": "string",\n'
+        '      "key_entities": ["string"]\n'
+        '    }\n'
+        '  ],\n'
+        '  "chunk_suggestions": [\n'
+        '    {\n'
+        '      "section": "string",\n'
+        '      "strategy": "string",\n'
+        '      "reason": "string",\n'
+        '      "preserve_tables": true,\n'
+        '      "preserve_lists": true,\n'
+        '      "split_triggers": ["string"]\n'
+        '    }\n'
+        '  ],\n'
+        '  "confidence": 0.95,\n'
+        '  "notes": "string"\n'
+        "}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
 
+    # 🟢 FIX: Remove response_schema from config and enforce JSON via system instructions 
+    # to avoid the Pydantic v2 $defs extra_forbidden crash in google-genai SDK.
     response = client.models.generate_content(
         model="gemini-2.5-flash-lite", 
         contents=prompt,
         config={
             "system_instruction": system_instruction,
             "response_mime_type": "application/json",
-            "response_schema": NavigationBatchResponse,
             "temperature": 0.0
         }
     )
@@ -95,6 +122,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         print(f"   - Input Tokens  : {getattr(meta, 'prompt_token_count', 'N/A')}")
         print(f"   - Output Tokens : {getattr(meta, 'candidates_token_count', 'N/A')}")
 
+    # Safely parse the text output using Pydantic validation
     return NavigationBatchResponse.model_validate_json(response.text)
 
 # =====================================================================
