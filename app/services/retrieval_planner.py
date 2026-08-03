@@ -42,7 +42,7 @@ def execute_retrieval_planning_triage(
             planner_notes="No candidate chunks available."
         )
 
-    gemini_key = os.getenv("INTENT_API_KEY") or os.getenv("GEMINI_API_KEY")
+    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not gemini_key:
         raise ValueError("CRITICAL: API Key for Retrieval Planner is missing.")
         
