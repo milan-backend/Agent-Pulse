@@ -74,7 +74,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
 
     # Using Flash Lite for Phase 1 cost efficiency
     response = client.models.generate_content(
-        model="gemini-2.5-flash-lite", 
+        model="gemini-3.1-flash-lite", 
         contents=prompt,
         config={
             "system_instruction": system_instruction,
