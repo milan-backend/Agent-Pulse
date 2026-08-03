@@ -67,7 +67,7 @@ def analyze_user_query_intent(user_prompt: str, registry_candidates: List[Dict[s
     )
 
     response = client.models.generate_content(
-        model="models/gemini-2.5-flash-lite",
+        model="models/gemini-3.1-flash-lite",
         contents=prompt,
         config={
             "system_instruction": system_instruction,
