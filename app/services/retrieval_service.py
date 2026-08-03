@@ -11,7 +11,6 @@ from app.core.rag_crypto import decrypt_text_string
 
 load_dotenv()
 
-
 class RetrievalService:
     def __init__(self):
         chroma_host = str(os.getenv("CHROMA_HOST")).strip().rstrip("/")
@@ -38,7 +37,7 @@ class RetrievalService:
     ) -> List[Dict[str, Any]]:
         """
         Direct ID Retrieval Engine:
-        1. Fetches exact vectors from Chroma DB using chroma_vector_ids selected by Planner AI.
+        1. Fetches exact vectors from Chroma DB using chroma_vector_ids selected by the Smart Router AI.
         2. If include_neighbor_chunks is True, traverses prev_chunk_id / next_chunk_id in SQL 
            to dynamically expand retrieval context without extra vector search cost.
         """

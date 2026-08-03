@@ -252,141 +252,57 @@ def process_step(self, step_id: str):
             else:
                 # =====================================================================
                 # 🎯 NEW AGENTIC ROUTING PIPELINE
+                                # =====================================================================
+                # 🎯 SYMMETRIC SMART ROUTER PIPELINE (NEW DESIGN)
                 # =====================================================================
-                # =====================================================================
-                # 🎯 NEW PURE NAVIGATION & INTENT-FIRST ROUTING PIPELINE
-                # =====================================================================
-                from app.services.intent_service import analyze_user_query_intent
-                from app.services.retrieval_planner import execute_retrieval_planning_triage
+                from app.services.smart_query_service import execute_smart_routing
                 from app.services.retrieval_service import RetrievalService
-                
+
                 context_fragments = []
                 documents_influencing_list = []
+
                 rag_telemetry_node = {
-                    "event_name": "PLANNED_KNOWLEDGE_RETRIEVAL",
-                    "sql_initial_candidates": 0,
-                    "sql_pruned_candidates": 0,
-                    "planner_selected_count": 0,
-                    "blueprint_notes": ""
+                    "event_name": "SYMMETRIC_SMART_ROUTING",
+                    "selected_vectors_count": 0
                 }
 
-                # --- 1. FETCH DOCUMENTS & NAVIGATION MAPS DIRECTLY (Bypassing SQL Registry Filter) ---
-                print(f"📡 Loading Document Navigation Maps for Workspace ID: {current_workspace_id}")
-                all_docs = db.query(UploadedDocument).filter(
-                    UploadedDocument.workspace_id == current_workspace_id,
-                    UploadedDocument.status == "ready"
-                ).all()
+                # 1. Run Smart Navigation Router (Phase 2)
+                target_vector_ids = execute_smart_routing(
+                    user_prompt=prompt,
+                    workspace_id=uuid.UUID(current_workspace_id),
+                    db=db
+                )
 
-                registry_candidates = []
-                full_navigation_map_summary_text = ""
-
-                for doc in all_docs:
-                    # Fetch sections for this document to build its navigation context
-                    sections = db.query(DocumentSection).filter(
-                        DocumentSection.document_id == doc.id
-                    ).all()
-                    
-                    nav_list = []
-                    for s in sections:
-                        nav_list.append(f"[{s.section_code}] {s.title} (Pages {s.start_page}-{s.end_page})")
-                    
-                    nav_map_str = "\n".join(nav_list)
-                    full_navigation_map_summary_text += f"\nDocument Name: {doc.filename} (ID: {doc.id})\nNavigation Map:\n{nav_map_str}\n"
-
-                    registry_candidates.append({
-                        "document_id": str(doc.id),
-                        "filename": doc.filename,
-                        "full_navigation_map": nav_list
-                    })
-
-                rag_telemetry_node["sql_initial_candidates"] = len(registry_candidates)
-
-                # --- 2. INTENT AI RUNS FIRST (Analyzes prompt against Navigation Map) ---
-                print(f"📡 Executing Intent Triage Layer over Navigation Map for Step ID: {step.id}")
-                intent_strategy = None
-                try:
-                    intent_strategy = analyze_user_query_intent(prompt, registry_candidates)
-                except Exception as intent_err:
-                    print(f"⚠️ Intent AI evaluation error: {intent_err}")
-
-                # --- 3. PLANNER AI (Evaluates Chunk Telemetry + Navigation Map) ---
-                retrieval_blueprint = None
-                if intent_strategy and getattr(intent_strategy, "target_document_ids", None):
-                    target_doc_ids = intent_strategy.target_document_ids
-                    target_codes = intent_strategy.target_section_codes
-                    
-                    # Fetch sections for the target documents approved by Intent AI
-                    query = db.query(DocumentSection).filter(
-                        DocumentSection.workspace_id == current_workspace_id,
-                        DocumentSection.document_id.in_(target_doc_ids)
-                    )
-                    
-                    if target_codes:
-                        from sqlalchemy import or_
-                        query = query.filter(
-                            or_(
-                                DocumentSection.section_code.in_(target_codes),
-                                DocumentSection.title.in_(target_codes)
-                            )
-                        )
-                        
-                    target_sections = query.all()
-                    
-                    # Failsafe if codes don't match exactly
-                    if not target_sections and target_doc_ids:
-                        target_sections = db.query(DocumentSection).filter(
-                            DocumentSection.workspace_id == current_workspace_id,
-                            DocumentSection.document_id.in_(target_doc_ids)
-                        ).limit(40).all()
-                    
-                    sec_ids = [s.id for s in target_sections]
-                    if sec_ids:
-                        chunks_db = db.query(DocumentChunk).filter(DocumentChunk.section_id.in_(sec_ids)).all()
-                        telemetry_candidates = [
-                            {
-                                "id": str(c.id), 
-                                "chroma_vector_id": c.chroma_vector_id, 
-                                "telemetry_summary": c.telemetry_summary,
-                                "section_code": next((s.section_code for s in target_sections if s.id == c.section_id), "N/A"),
-                                "section_title": next((s.title for s in target_sections if s.id == c.section_id), "")
-                            } for c in chunks_db
-                        ]
-
-                        if telemetry_candidates:
-                            print(f"📡 Executing Planner AI over {len(telemetry_candidates)} chunk summaries with Navigation Map...")
-                            try:
-                                retrieval_blueprint = execute_retrieval_planning_triage(
-                                    user_prompt=prompt,
-                                    intent_strategy=intent_strategy,
-                                    chunk_telemetry_candidates=telemetry_candidates,
-                                    navigation_map_summary=full_navigation_map_summary_text
-                                )
-                            except Exception as planner_err:
-                                print(f"⚠️ Planner AI fallback: {planner_err}")
-
-                # --- 4. DIRECT CHROMA ID RETRIEVAL ---
-                if retrieval_blueprint and retrieval_blueprint.target_chroma_vector_ids:
-                    print(f"📡 Fetching {len(retrieval_blueprint.target_chroma_vector_ids)} exact Chunk IDs from Chroma...")
+                # 2. Direct ID Retrieval from Chroma DB
+                if target_vector_ids:
                     retrieval_service = RetrievalService()
+
                     reconstructed_chunks = retrieval_service.execute_direct_id_retrieval(
-                        target_chroma_ids=retrieval_blueprint.target_chroma_vector_ids,
+                        target_chroma_ids=target_vector_ids,
                         workspace_id=uuid.UUID(current_workspace_id),
-                        include_neighbor_chunks=retrieval_blueprint.include_neighbor_chunks
+                        include_neighbor_chunks=True
                     )
 
-                    rag_telemetry_node["planner_selected_count"] = len(reconstructed_chunks)
-                    rag_telemetry_node["blueprint_notes"] = retrieval_blueprint.planner_notes
-                    
+                    rag_telemetry_node["selected_vectors_count"] = len(reconstructed_chunks)
+
                     unique_doc_ids = set()
+
                     for chunk in reconstructed_chunks:
                         context_fragments.append(chunk["text"])
+
                         if chunk.get("document_id"):
                             unique_doc_ids.add(chunk["document_id"])
-                            
+
                     if unique_doc_ids:
-                        doc_records = db.query(UploadedDocument).filter(UploadedDocument.id.in_(list(unique_doc_ids))).all()
-                        for d in doc_records:
-                            documents_influencing_list.append(d.filename)
+                        doc_records = (
+                            db.query(UploadedDocument)
+                            .filter(UploadedDocument.id.in_(list(unique_doc_ids)))
+                            .all()
+                        )
+
+                        for document in doc_records:
+                            documents_influencing_list.append(document.filename)
+                
 
 
                 # =====================================================================

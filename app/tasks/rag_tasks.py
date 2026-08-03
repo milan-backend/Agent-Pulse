@@ -19,9 +19,8 @@ from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 # 🟢 NEW ARCHITECTURE IMPORTS
 from app.services.pdf_parser import process_pdf_for_navigation
 from app.services.navigation_service import build_and_save_navigation_map
-from app.services.extraction_ai import run_section_knowledge_extraction
 from app.services.chunk_engine import ChunkEngine
-from app.models.new_arch import DocumentChunk, ExtractedEntity
+from app.models.new_arch import DocumentChunk
 
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
@@ -201,18 +200,6 @@ def process_document_embedding(document_id: str):
                         
                 if not section_text.strip(): 
                     continue
-
-                # A. Extraction AI (Telemetry & Entities)
-                extraction_data = run_section_knowledge_extraction(section.title, section_text, ai_client)
-                for ent in extraction_data.entities:
-                    db.add(ExtractedEntity(
-                        document_id=doc.id, 
-                        workspace_id=doc.workspace_id, 
-                        agent_id=doc.agent_id,
-                        name=ent.name, 
-                        category=ent.category, 
-                        description=ent.description
-                    ))
                 
                 # B. Section-Bound Chunking
                 section_chunks = chunk_engine.execute_section_chunking(
@@ -259,7 +246,7 @@ def process_document_embedding(document_id: str):
                         agent_id=doc.agent_id,
                         chroma_vector_id=chroma_id, 
                         sequence_number=chunk_payload["sequence_number"],
-                        telemetry_summary=extraction_data.telemetry_summary, 
+                        telemetry_summary=chunk_payload.get("telemetry_summary", ""),
                         prev_chunk_id=last_chunk_db_id
                     )
                     

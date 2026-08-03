@@ -2,7 +2,6 @@ import re
 import uuid
 from typing import List, Dict, Any, Optional
 
-
 class ChunkEngine:
     def __init__(self, chunk_size: int = 400, overlap: int = 50):
         """
@@ -23,7 +22,7 @@ class ChunkEngine:
     ) -> List[Dict[str, Any]]:
         """
         Slices section text into word/token-bounded chunks strictly within section boundaries.
-        Generates sequence numbers for PostgreSQL linked-list building.
+        Generates sequence numbers for PostgreSQL linked-list building and a lightweight telemetry summary.
         """
         if not section_text or not section_text.strip():
             return []
@@ -40,6 +39,9 @@ class ChunkEngine:
             chunk_str = " ".join(chunk_words)
             
             if chunk_str.strip():
+                # 🟢 Generate a lightweight extractive summary for the Smart Router
+                extractive_summary = chunk_str[:150].strip() + "..." if len(chunk_str) > 150 else chunk_str
+                
                 chunks.append({
                     "text": chunk_str,
                     "section_id": section_id,
@@ -47,7 +49,8 @@ class ChunkEngine:
                     "workspace_id": workspace_id,
                     "agent_id": agent_id,
                     "sequence_number": sequence,
-                    "word_count": len(chunk_words)
+                    "word_count": len(chunk_words),
+                    "telemetry_summary": extractive_summary  # 🟢 Required by new_arch.py
                 })
                 sequence += 1
 
