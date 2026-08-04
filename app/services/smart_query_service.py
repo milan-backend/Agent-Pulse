@@ -7,10 +7,21 @@ from sqlalchemy.orm import Session
 from google import genai
 
 from app.models.new_arch import DocumentSection, DocumentChunk
+from app.models.uploaded_document import UploadedDocument  # 🟢 ADDED: To fetch document names
 
 # =====================================================================
-# 1. AI Output Schema (Strict & Simple)
+# 1. AI Output Schemas (Strict & Simple)
 # =====================================================================
+# 🟢 NEW: Schema for Step 1 (Cabinet Check)
+class DocumentTriageDecision(BaseModel):
+    target_document_ids: List[str] = Field(
+        description="The exact list of document string UUIDs likely to contain the answer."
+    )
+    reasoning: str = Field(
+        description="Brief explanation of why these documents were selected based on their titles."
+    )
+
+# Schema for Step 2 (Folder Check)
 class RoutingDecision(BaseModel):
     target_section_ids: List[str] = Field(
         description="The exact list of string UUIDs for the sections containing the answer."
@@ -31,22 +42,89 @@ def execute_smart_routing(
     """
     Symmetric AI Router: Reads the universal Document Map and outputs the exact
     Chroma Vector IDs to fetch, bypassing traditional SQL search limitations.
+    Includes Document-Level Pre-Triage to save token costs.
     """
     
-    # 1. Fetch the "Index Cards" (The Navigation Map)
-    query = db.query(DocumentSection).filter(DocumentSection.workspace_id == workspace_id)
-    if document_ids:
-        query = query.filter(DocumentSection.document_id.in_(document_ids))
+    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        raise ValueError("CRITICAL: API key for Smart Router AI is missing.")
         
-    available_sections = query.all()
+    client = genai.Client(api_key=gemini_key)
+
+    # =====================================================================
+    # 🟢 STEP 1: DOCUMENT PRE-TRIAGE (The "Cabinet Check")
+    # =====================================================================
+    target_doc_ids = []
     
-    if not available_sections:
-        print("⚠️ No navigation map found for this workspace.")
+    if document_ids:
+        target_doc_ids = [str(d) for d in document_ids]
+    else:
+        # Fetch all available documents (cabinets) in the workspace
+        workspace_docs = db.query(UploadedDocument).filter(
+            UploadedDocument.workspace_id == workspace_id,
+            UploadedDocument.status == "ready"
+        ).all()
+
+        if not workspace_docs:
+            print("⚠️ No ready documents found in this workspace.")
+            return []
+
+        # If there is only 1 document, skip the triage to save time and money
+        if len(workspace_docs) == 1:
+            target_doc_ids = [str(workspace_docs[0].id)]
+            print(f"📄 Only 1 document found ({workspace_docs[0].filename}). Skipping Triage.")
+        else:
+            # Build the lightweight Cabinet List
+            cabinet_list = [{"document_id": str(d.id), "filename": d.filename} for d in workspace_docs]
+            
+            triage_instruction = (
+                "You are the Document Triage AI. Read the user's question and review the list of available documents.\n"
+                "Select ONLY the `document_id`s that are likely to contain the answer based on their filenames.\n\n"
+                "OUTPUT EXACT JSON matching this schema:\n"
+                "{\"target_document_ids\": [\"uuid-string\"], \"reasoning\": \"string\"}"
+            )
+            triage_prompt = (
+                f"USER QUESTION: \"{user_prompt}\"\n\n"
+                f"AVAILABLE DOCUMENTS:\n{json.dumps(cabinet_list, indent=2)}"
+            )
+
+            print(f"🗄️ Triaging {len(workspace_docs)} documents to find the correct context...")
+            try:
+                # Use a fast/cheap model for Step 1
+                triage_resp = client.models.generate_content(
+                    model="gemini-2.5-flash-lite", 
+                    contents=triage_prompt,
+                    config={
+                        "system_instruction": triage_instruction,
+                        "response_mime_type": "application/json",
+                        "temperature": 0.0
+                    }
+                )
+                triage_decision = DocumentTriageDecision.model_validate_json(triage_resp.text)
+                target_doc_ids = triage_decision.target_document_ids
+                print(f"✅ Triage Decision: {triage_decision.reasoning}")
+                print(f"🎯 Selected Cabinets: {len(target_doc_ids)}")
+            except Exception as e:
+                print(f"⚠️ Triage failed, falling back to scanning ALL documents. Error: {e}")
+                target_doc_ids = [str(d.id) for d in workspace_docs]
+
+    if not target_doc_ids:
         return []
 
-    # 2. Build the Flat Semantic Index for the AI
-    # This is highly token-efficient because the AI isn't reading the raw text, 
-    # just the dense summaries and materialized paths.
+    # =====================================================================
+    # 🟢 STEP 2: THE SECTION ROUTER (The "Folder Check")
+    # =====================================================================
+    # Fetch the "Index Cards" ONLY for the documents the Triage AI selected
+    available_sections = db.query(DocumentSection).filter(
+        DocumentSection.workspace_id == workspace_id,
+        DocumentSection.document_id.in_(target_doc_ids)
+    ).all()
+    
+    if not available_sections:
+        print("⚠️ No navigation sections found for the selected documents.")
+        return []
+
+    # Build the Flat Semantic Index (Folders)
     index_cards = []
     for sec in available_sections:
         index_cards.append({
@@ -56,12 +134,6 @@ def execute_smart_routing(
             "type": sec.content_type,
             "summary": sec.semantic_summary
         })
-
-    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
-        raise ValueError("CRITICAL: API key for Smart Router AI is missing.")
-        
-    client = genai.Client(api_key=gemini_key)
 
     system_instruction = (
         "You are the Smart Query Router for AgentPulse.\n"
@@ -79,9 +151,9 @@ def execute_smart_routing(
         f"{json.dumps(index_cards, indent=2)}"
     )
 
-    print("🧠 Routing Query through Smart Navigation AI...")
+    print(f"🧠 Routing Query through Smart Navigation AI (Scanning {len(index_cards)} Index Cards)...")
     
-    # Using a capable model for reasoning accuracy
+    # Using the capable model for detailed section reasoning
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite", 
         contents=prompt,
@@ -92,7 +164,7 @@ def execute_smart_routing(
         }
     )
 
-    # 3. Print Token Usage Logs
+    # Print Token Usage Logs
     if hasattr(response, "usage_metadata") and response.usage_metadata:
         meta = response.usage_metadata
         print(f"📊 [SMART ROUTER TOKEN USAGE]")
@@ -100,7 +172,7 @@ def execute_smart_routing(
         print(f"   - Completion Tokens : {getattr(meta, 'candidates_token_count', 0)}")
         print(f"   - Total Tokens      : {getattr(meta, 'total_token_count', 0)}")
 
-    # 4. Parse the Decision
+    # Parse the Decision
     try:
         decision = RoutingDecision.model_validate_json(response.text)
         print(f"✅ Router AI Decision: {decision.routing_reasoning}")
@@ -109,7 +181,7 @@ def execute_smart_routing(
         print(f"❌ Failed to parse Router AI output: {e}")
         return []
 
-    # 5. Resolve Sections to exact Chroma Vector IDs
+    # Resolve Sections to exact Chroma Vector IDs
     if not decision.target_section_ids:
         return []
 
