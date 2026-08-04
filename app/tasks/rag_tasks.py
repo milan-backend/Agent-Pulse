@@ -179,8 +179,16 @@ def process_document_embedding(document_id: str):
             
             # 3. Setup AI & Vector DB
             chroma_client = get_chroma_client()
+            
+            # The original collection for raw text chunks
             collection = chroma_client.get_or_create_collection(
                 name="rag_enterprise_vectors_v1", 
+                metadata={"hnsw:space": "cosine"}
+            )
+            
+            # 🟢 NEW: The lightweight collection for the Smart Router Index Cards
+            nav_collection = chroma_client.get_or_create_collection(
+                name="navigation_index_cards",
                 metadata={"hnsw:space": "cosine"}
             )
             
@@ -193,6 +201,29 @@ def process_document_embedding(document_id: str):
 
             # 4. Process Sections (Extraction + Chunking)
             for section in saved_sections:
+                
+                # ==========================================================
+                # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
+                # ==========================================================
+                if section.semantic_summary and section.semantic_summary.strip():
+                    try:
+                        summary_vector_resp = ai_client.models.embed_content(
+                            model="models/gemini-embedding-001", 
+                            contents=section.semantic_summary
+                        )
+                        nav_collection.add(
+                            ids=[str(section.id)], # Map directly to the DocumentSection UUID
+                            embeddings=[summary_vector_resp.embeddings[0].values],
+                            documents=[section.semantic_summary],
+                            metadatas=[{
+                                "workspace_id": str(doc.workspace_id),
+                                "document_id": str(doc.id)
+                            }]
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
+                # ==========================================================
+                
                 section_text = ""
                 for p in range(section.start_page - 1, section.end_page):
                     if p < doc_page_count:

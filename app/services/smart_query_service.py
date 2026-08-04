@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import chromadb
 from typing import List, Dict
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ class RoutingDecision(BaseModel):
     )
 
 # =====================================================================
-# 2. The Smart Query Engine (Phase 2)
+# 2. The Smart Query Engine (Option 3: Hierarchical Vector Search)
 # =====================================================================
 def execute_smart_routing(
     user_prompt: str, 
@@ -28,25 +29,69 @@ def execute_smart_routing(
     db: Session,
     document_ids: List[uuid.UUID] = None
 ) -> List[str]:
-    """
-    Symmetric AI Router: Reads the universal Document Map and outputs the exact
-    Chroma Vector IDs to fetch, bypassing traditional SQL search limitations.
-    """
     
-    # 1. Fetch the "Index Cards" (The Navigation Map)
-    query = db.query(DocumentSection).filter(DocumentSection.workspace_id == workspace_id)
-    if document_ids:
-        query = query.filter(DocumentSection.document_id.in_(document_ids))
+    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not gemini_key:
+        raise ValueError("CRITICAL: API key for Smart Router AI is missing.")
         
-    available_sections = query.all()
+    client = genai.Client(api_key=gemini_key)
+
+    # =====================================================================
+    # 🟢 STEP 1: VECTOR SEARCH FILTER (ChromaDB gets the Top 15)
+    # =====================================================================
+    CHROMA_HOST = os.getenv("CHROMA_HOST")
+    CHROMA_TOKEN = os.getenv("CHROMA_TOKEN")
+    chroma_client = chromadb.HttpClient(
+        host=str(CHROMA_HOST).strip().rstrip("/"),
+        headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if CHROMA_TOKEN else None
+    )
     
-    if not available_sections:
-        print("⚠️ No navigation map found for this workspace.")
+    nav_collection = chroma_client.get_or_create_collection(
+        name="navigation_index_cards",
+        metadata={"hnsw:space": "cosine"}
+    )
+
+    print("🔍 Embedding user question for Navigation Search...")
+    try:
+        # 1. Turn the question into a mathematical vector
+        query_vector_resp = client.models.embed_content(
+            model="models/gemini-embedding-001",
+            contents=user_prompt
+        )
+        query_vector = query_vector_resp.embeddings[0].values
+
+        # 2. Setup the Workspace Filter
+        where_filter = {"workspace_id": str(workspace_id)}
+        if document_ids:
+            if len(document_ids) == 1:
+                where_filter["document_id"] = str(document_ids[0])
+            else:
+                where_filter["document_id"] = {"$in": [str(d) for d in document_ids]}
+
+        # 3. Pull strictly the Top 15 best semantic matches
+        chroma_results = nav_collection.query(
+            query_embeddings=[query_vector],
+            n_results=15,
+            where=where_filter
+        )
+        
+        top_section_ids = chroma_results["ids"][0] if chroma_results["ids"] else []
+    except Exception as e:
+        print(f"❌ Navigation Vector Search failed: {e}")
         return []
 
-    # 2. Build the Flat Semantic Index for the AI
-    # This is highly token-efficient because the AI isn't reading the raw text, 
-    # just the dense summaries and materialized paths.
+    if not top_section_ids:
+        print("⚠️ No relevant index cards found in ChromaDB.")
+        return []
+
+    # =====================================================================
+    # 🟢 STEP 2: BUILD THE MINI-CATALOG & ASK GEMINI
+    # =====================================================================
+    # Fetch full details from Postgres ONLY for the 15 IDs Chroma found
+    available_sections = db.query(DocumentSection).filter(
+        DocumentSection.id.in_(top_section_ids)
+    ).all()
+    
     index_cards = []
     for sec in available_sections:
         index_cards.append({
@@ -56,12 +101,6 @@ def execute_smart_routing(
             "type": sec.content_type,
             "summary": sec.semantic_summary
         })
-
-    gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
-        raise ValueError("CRITICAL: API key for Smart Router AI is missing.")
-        
-    client = genai.Client(api_key=gemini_key)
 
     system_instruction = (
         "You are the Smart Query Router for AgentPulse.\n"
@@ -79,16 +118,8 @@ def execute_smart_routing(
         f"{json.dumps(index_cards, indent=2)}"
     )
 
-    # 🟢 ADDED DEBUG PRINT: So you can see EXACTLY why it costs 7,000 tokens
-    print("\n" + "="*50)
-    print("🔍 DEBUG: PRINTING THE RAW PROMPT PAYLOAD")
-    print("="*50)
-    print(prompt)
-    print("="*50 + "\n")
-
-    print("🧠 Routing Query through Smart Navigation AI...")
+    print(f"🧠 Routing Query through Smart Navigation AI (Scanning {len(index_cards)} Filtered Index Cards)...")
     
-    # Using a capable model for reasoning accuracy
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite", 
         contents=prompt,
@@ -99,7 +130,6 @@ def execute_smart_routing(
         }
     )
 
-    # 3. Print Token Usage Logs
     if hasattr(response, "usage_metadata") and response.usage_metadata:
         meta = response.usage_metadata
         print(f"📊 [SMART ROUTER TOKEN USAGE]")
@@ -107,7 +137,6 @@ def execute_smart_routing(
         print(f"   - Completion Tokens : {getattr(meta, 'candidates_token_count', 0)}")
         print(f"   - Total Tokens      : {getattr(meta, 'total_token_count', 0)}")
 
-    # 4. Parse the Decision
     try:
         decision = RoutingDecision.model_validate_json(response.text)
         print(f"✅ Router AI Decision: {decision.routing_reasoning}")
@@ -116,7 +145,6 @@ def execute_smart_routing(
         print(f"❌ Failed to parse Router AI output: {e}")
         return []
 
-    # 5. Resolve Sections to exact Chroma Vector IDs
     if not decision.target_section_ids:
         return []
 
