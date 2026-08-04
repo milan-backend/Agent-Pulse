@@ -74,8 +74,22 @@ def execute_smart_routing(
             target_doc_ids = [str(workspace_docs[0].id)]
             print(f"📄 Only 1 document found ({workspace_docs[0].filename}). Skipping Triage.")
         else:
-            # Build the lightweight Cabinet List
-            cabinet_list = [{"document_id": str(d.id), "filename": d.filename} for d in workspace_docs]
+            
+            # 🟢 THE FIX: Build the Cabinet List WITH a Sneak Peek inside the file
+            cabinet_list = []
+            for d in workspace_docs:
+                # Grab the first 3 section titles to give the AI context about the file's actual contents
+                preview_sections = db.query(DocumentSection.title).filter(
+                    DocumentSection.document_id == d.id
+                ).limit(3).all()
+                
+                preview_text = ", ".join([sec[0] for sec in preview_sections]) if preview_sections else "Unknown contents"
+                
+                cabinet_list.append({
+                    "document_id": str(d.id), 
+                    "filename": d.filename,
+                    "content_preview": preview_text  # 🟢 Now the AI won't just judge by the filename!
+                })
             
             triage_instruction = (
                 "You are the Document Triage AI. Read the user's question and review the list of available documents.\n"
