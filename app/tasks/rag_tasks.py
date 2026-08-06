@@ -17,8 +17,8 @@ from app.models.user import User
 from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
 # 🟢 NEW ARCHITECTURE IMPORTS
-from app.services.pdf_parser import process_pdf_for_navigation
 from app.services.navigation_service import build_and_save_navigation_map
+from app.services.pdf_parser import process_pdf_for_navigation, extract_raw_pages, build_pdf_batches
 from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
 
@@ -92,65 +92,7 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        # 3. Extract Full Raw Text Content String with Ultimate OCR Fallback
-        extracted_text = ""
-        if doc.mime_type == "text/plain":
-            extracted_text = raw_file_bytes.decode("utf-8", errors="ignore")
-        elif doc.mime_type == "application/pdf":
-            pdf_stream = io.BytesIO(raw_file_bytes)
-            
-            # Attempt 1: Standard pypdf extraction
-            try:
-                reader = PdfReader(pdf_stream)
-                extracted_text = " ".join([page.extract_text() for page in reader.pages if page and page.extract_text()])
-            except Exception as e:
-                print(f"⚠️ pypdf extraction warning: {e}")
-
-            # Attempt 2: Fallback to layout-aware extraction mode
-            if not extracted_text.strip():
-                print("🔄 Standard extraction yielded empty text. Trying layout-aware extraction mode...")
-                try:
-                    pdf_stream.seek(0)
-                    reader = PdfReader(pdf_stream)
-                    extracted_text = " ".join([page.extract_text(extraction_mode="layout") for page in reader.pages if page])
-                except Exception as layout_err:
-                    print(f"⚠️ Layout extraction warning: {layout_err}")
-
-            # Attempt 3: pdfplumber table/grid parser
-            if not extracted_text.strip():
-                print("🔄 Layout extraction yielded empty text. Executing pdfplumber table/grid parser...")
-                try:
-                    pdf_stream.seek(0)
-                    with pdfplumber.open(pdf_stream) as pdf:
-                        plumber_text_parts = []
-                        for page in pdf.pages:
-                            txt = page.extract_text(layout=True)
-                            if txt:
-                                plumber_text_parts.append(txt)
-                        extracted_text = " ".join(plumber_text_parts)
-                except Exception as plumber_err:
-                    print(f"⚠️ pdfplumber fallback warning: {plumber_err}")
-
-            # Attempt 4: Ultimate OCR Fallback using PyTesseract & pdf2image for image-based PDFs
-            if not extracted_text.strip():
-                print("🔄 Text layers missing. Initializing PyTesseract OCR optical engine...")
-                try:
-                    from pdf2image import convert_from_bytes
-                    import pytesseract
-
-                    images = convert_from_bytes(raw_file_bytes)
-                    ocr_text_parts = []
-                    for img in images:
-                        text_page = pytesseract.image_to_string(img)
-                        if text_page:
-                            ocr_text_parts.append(text_page)
-                    extracted_text = " ".join(ocr_text_parts)
-                    print(f"✨ OCR Success: Extracted {len(extracted_text)} characters via optical scanning.")
-                except Exception as ocr_err:
-                    print(f"❌ OCR fallback error: {ocr_err}")
-            
-        if not extracted_text.strip():
-            raise ValueError("Zero human-readable text contents could be extracted even after OCR processing.")
+        
         
         # =====================================================================
         # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE
@@ -163,11 +105,12 @@ def process_document_embedding(document_id: str):
             with open(temp_pdf_path, "wb") as f:
                 f.write(raw_file_bytes)
             
-            doc_obj = fitz.open(temp_pdf_path)
-            doc_page_count = doc_obj.page_count
-            
-            # 2. Batch-driven Extraction & Stitched Navigation Map Build
-            pdf_batches = process_pdf_for_navigation(temp_pdf_path, batch_size=15)
+            # Use the parser to get both the raw text (with OCR) and the batches
+            pages_dict = extract_raw_pages(temp_pdf_path)
+            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=15)
+
+            if not pdf_batches:
+                raise ValueError("Zero human-readable text contents extracted.")
 
             saved_sections, chunk_suggestions = build_and_save_navigation_map(
             db=db, 
@@ -225,9 +168,10 @@ def process_document_embedding(document_id: str):
                 # ==========================================================
                 
                 section_text = ""
-                for p in range(section.start_page - 1, section.end_page):
-                    if p < doc_page_count:
-                        section_text += doc_obj.load_page(p).get_text("text") + "\n"
+                # Pull the text from the OCR'd pages_dict instead of PyMuPDF directly
+                for p in range(section.start_page, section.end_page + 1):
+                    if p in pages_dict:
+                        section_text += pages_dict[p] + "\n"
                         
                 if not section_text.strip(): 
                     continue
@@ -292,7 +236,6 @@ def process_document_embedding(document_id: str):
                     last_chunk_db_id = new_db_chunk.id
 
             # Cleanup
-            doc_obj.close()
             if os.path.exists(temp_pdf_path):
                 os.remove(temp_pdf_path)
 
