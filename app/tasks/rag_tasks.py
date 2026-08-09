@@ -180,29 +180,40 @@ def process_document_embedding(document_id: str):
                 # 🟢 THE REAL FIX: Dedicated AI Table Normalizer
                 # ==========================================================
                 # ONLY run the expensive cleaning AI if the Navigation AI flagged it as a table
+                # ==========================================================
+                # 🟢 THE REAL FIX: Universal AI Table Normalizer
+                # ==========================================================
                 if section.content_type in ["master_scheme_table", "table_section"]:
-                    print(f"🧹 Table detected! Running Data Cleaner on Section: {section.title}")
+                    print(f"🧹 Table detected! Running Universal Data Cleaner on Section: {section.title}")
+                    
+                    # 🟢 UNIVERSAL PROMPT: Makes the AI deduce the layout dynamically
                     clean_prompt = f"""
-                    You are a strict data cleaning AI. Analyze this extracted PDF list.
-                    It contains rows where the supervisor name is left blank because it implies 'same as the supervisor above'.
-                    You MUST physically rewrite the text so EVERY SINGLE student row explicitly includes their correct supervisor's name.
-                    Do not skip any students. Do not add markdown formatting. Just return the clean, explicit list.
+                    You are an expert Data Structuring AI. Analyze this raw text extracted from a PDF table.
+                    PDF tables often use visual groupings (e.g., merged cells) to apply one value (like a supervisor, category, or department) to multiple rows, leaving the surrounding cells blank.
+
+                    Your task is to reconstruct the logical rows of this table universally:
+                    1. DEDUCE THE LAYOUT: Look at the blank spaces. Figure out if the shared value is top-aligned (forward-fill), bottom-aligned (backward-fill), or center-aligned within its group.
+                    2. FILL THE BLANKS: Physically rewrite the text so EVERY SINGLE row explicitly includes all its assigned data. No blank implied cells should remain.
+                    3. IGNORE ARTIFACTS: Seamlessly bridge groups that are interrupted by page headers or footers (e.g., "Supervisor List", "Page 2").
+                    4. NO FORMATTING: Do not add markdown tables or framing. Just return the clean, explicit list of text.
+                    5. STANDARD TABLES: If there are no implied groupings and every row is already complete, just return the text exactly as it is.
 
                     RAW TEXT:
                     {section_text}
                     """
                     try:
                         clean_resp = ai_client.models.generate_content(
-                            model="gemini-2.5-flash-lite", 
+                            model="gemini-1.5-flash", 
                             contents=clean_prompt
                         )
                         if clean_resp and clean_resp.text:
                             section_text = clean_resp.text.strip()
-                            print("✨ Data cleaning successful: Implied names filled.")
+                            print("✨ Universal data cleaning successful.")
                     except Exception as e:
                         print(f"⚠️ AI Data Normalization failed, proceeding with raw text: {e}")
                 else:
                     print(f"⏩ Standard text detected. Skipping Data Cleaner for: {section.title}")
+                # ==========================================================
                 # ==========================================================
                 
                 # B. Section-Bound Chunking
