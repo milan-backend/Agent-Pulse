@@ -167,19 +167,43 @@ def process_document_embedding(document_id: str):
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
                 # ==========================================================
                 
-                # 🟢 1. Pull the AI-cleaned (forward-filled) text from Navigation AI's saved hint
-                hint_dict = section.chunking_strategy_hint or {}
-                section_text = hint_dict.get("normalized_text", "")
-
-                # 🟢 2. Fallback to raw OCR text only if AI normalized text is missing
-                if not section_text or not section_text.strip():
-                    section_text = ""
-                    for p in range(section.start_page, section.end_page + 1):
-                        if p in pages_dict:
-                            section_text += pages_dict[p] + "\n"
+                # 1. Pull the raw OCR text natively
+                section_text = ""
+                for p in range(section.start_page, section.end_page + 1):
+                    if p in pages_dict:
+                        section_text += pages_dict[p] + "\n"
                         
                 if not section_text.strip(): 
                     continue
+
+                # ==========================================================
+                # 🟢 THE REAL FIX: Dedicated AI Table Normalizer
+                # ==========================================================
+                # ONLY run the expensive cleaning AI if the Navigation AI flagged it as a table
+                if section.content_type in ["master_scheme_table", "table_section"]:
+                    print(f"🧹 Table detected! Running Data Cleaner on Section: {section.title}")
+                    clean_prompt = f"""
+                    You are a strict data cleaning AI. Analyze this extracted PDF list.
+                    It contains rows where the supervisor name is left blank because it implies 'same as the supervisor above'.
+                    You MUST physically rewrite the text so EVERY SINGLE student row explicitly includes their correct supervisor's name.
+                    Do not skip any students. Do not add markdown formatting. Just return the clean, explicit list.
+
+                    RAW TEXT:
+                    {section_text}
+                    """
+                    try:
+                        clean_resp = ai_client.models.generate_content(
+                            model="gemini-2.5-flash-lite", 
+                            contents=clean_prompt
+                        )
+                        if clean_resp and clean_resp.text:
+                            section_text = clean_resp.text.strip()
+                            print("✨ Data cleaning successful: Implied names filled.")
+                    except Exception as e:
+                        print(f"⚠️ AI Data Normalization failed, proceeding with raw text: {e}")
+                else:
+                    print(f"⏩ Standard text detected. Skipping Data Cleaner for: {section.title}")
+                # ==========================================================
                 
                 # B. Section-Bound Chunking
                 section_chunks = chunk_engine.execute_section_chunking(
