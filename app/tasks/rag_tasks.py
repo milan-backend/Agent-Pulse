@@ -167,11 +167,16 @@ def process_document_embedding(document_id: str):
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
                 # ==========================================================
                 
-                section_text = ""
-                # Pull the text from the OCR'd pages_dict instead of PyMuPDF directly
-                for p in range(section.start_page, section.end_page + 1):
-                    if p in pages_dict:
-                        section_text += pages_dict[p] + "\n"
+                # 🟢 1. Pull the AI-cleaned (forward-filled) text from Navigation AI's saved hint
+                hint_dict = section.chunking_strategy_hint or {}
+                section_text = hint_dict.get("normalized_text", "")
+
+                # 🟢 2. Fallback to raw OCR text only if AI normalized text is missing
+                if not section_text or not section_text.strip():
+                    section_text = ""
+                    for p in range(section.start_page, section.end_page + 1):
+                        if p in pages_dict:
+                            section_text += pages_dict[p] + "\n"
                         
                 if not section_text.strip(): 
                     continue
