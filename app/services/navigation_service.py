@@ -21,6 +21,8 @@ class HierarchyItem(BaseModel):
     content_type: str = Field(default="narrative_paragraph")
     semantic_summary: str = Field(description="1-sentence dense summary of contents.")
     key_entities: List[str] = Field(default=[])
+    # 🟢 NEW: AI will drop the cleaned, forward-filled text right here
+    normalized_text: str = Field(default="", description="The fully cleaned text for this section, with any implied table groupings explicitly forward-filled.")
 
 class ChunkSuggestion(BaseModel):
     section: str
@@ -56,7 +58,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
-    # CONDENSED SYSTEM INSTRUCTION: Saves token cost per batch while enforcing strict rules.
+    # 🟢 CONDENSED SYSTEM INSTRUCTION: Now includes Rule 6 for Data Cleaning
     system_instruction = (
         "You are the Universal Navigation Engine. Map the logical structure of the raw document text.\n"
         "RULES:\n"
@@ -64,16 +66,17 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "2. Assign 'content_type': 'master_scheme_table', 'narrative_paragraph', 'policy_rule', or 'code_block'.\n"
         "3. Write a 1-sentence 'semantic_summary' for each section.\n"
         "4. Extract 'key_entities' (codes, IDs, core topics).\n"
-        "5. Connect parents/children (Root parent = null).\n\n"
+        "5. Connect parents/children (Root parent = null).\n"
+        "6. 🟢 DATA CLEANING: Extract the full text for the section into 'normalized_text'. If the text is a table/list where blank spaces imply grouping (e.g., a supervisor name applied to multiple students), you MUST physically rewrite and forward-fill the blanks so every row explicitly states the grouped relationship.\n\n"
         f"BATON STATE (Continuity):\n"
         f"- Parent: {state.current_parent or 'None'} | Section: {state.current_section or 'None'} | Page: {state.last_page}\n\n"
         "OUTPUT EXACT JSON ONLY:\n"
-        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": \"...\", \"start_page\": 0, \"end_page\": 0, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"]}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"...\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\"}"
+        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": \"...\", \"start_page\": 0, \"end_page\": 0, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"...\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\"}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
 
-    # 🟢 RETRY LOOP WITH EXPONENTIAL BACKOFF FOR 503 / RATE LIMITS
+    # RETRY LOOP WITH EXPONENTIAL BACKOFF FOR 503 / RATE LIMITS
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -100,7 +103,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 print(f"   - Completion Tokens : {completion_tokens}")
                 print(f"   - Total Tokens      : {total_tokens}")
 
-            # 🟢 ROBUST JSON SHAPE RECOVERY
+            # ROBUST JSON SHAPE RECOVERY
             raw_json_str = response.text.strip()
             
             # Strip markdown code blocks if the AI accidentally included them
@@ -159,6 +162,8 @@ def build_and_save_navigation_map(
             for item in batch_response.hierarchy:
                 if master_hierarchy and master_hierarchy[-1].title == item.title and master_hierarchy[-1].parent == item.parent:
                     master_hierarchy[-1].end_page = max(master_hierarchy[-1].end_page, item.end_page)
+                    # 🟢 Combine normalized text if a section spans multiple batches
+                    master_hierarchy[-1].normalized_text += "\n" + item.normalized_text
                 else:
                     master_hierarchy.append(item)
 
@@ -189,7 +194,7 @@ def build_and_save_navigation_map(
     chunk_hint_map = {c.section: c.model_dump() for c in master_chunk_suggestions}
 
     for item in master_hierarchy:
-        # 🟢 Compute the Full Materialized Path (Breadcrumbs)
+        # Compute the Full Materialized Path (Breadcrumbs)
         if not item.parent:
             full_path = item.title
         else:
@@ -197,6 +202,10 @@ def build_and_save_navigation_map(
             full_path = f"{parent_full_path} > {item.title}"
             
         title_to_full_path[item.title] = full_path
+
+        # 🟢 Inject the AI-cleaned text into the JSON chunking_strategy_hint payload!
+        hint_data = chunk_hint_map.get(item.title, {})
+        hint_data["normalized_text"] = item.normalized_text
 
         db_section = DocumentSection(
             document_id=document_id, 
@@ -210,7 +219,7 @@ def build_and_save_navigation_map(
             content_type=item.content_type,
             semantic_summary=item.semantic_summary,
             key_entities=item.key_entities,
-            chunking_strategy_hint=chunk_hint_map.get(item.title, {})
+            chunking_strategy_hint=hint_data # 🟢 Database safely stores the text here
         )
         db.add(db_section)
         db.flush()
