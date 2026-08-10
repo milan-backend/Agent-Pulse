@@ -179,55 +179,69 @@ def process_document_embedding(document_id: str):
                 # ==========================================================
                 # 🟢 HYBRID UNIVERSAL DATA CLEANER (pdfplumber + Gemini AI)
                 # ==========================================================
+                # ==========================================================
+                # 🟢 THE AI-DRIVEN LINE-AWARE CLEANER (pdfplumber + Gemini AI)
+                # ==========================================================
                 if section.content_type in ["master_scheme_table", "table_section"]:
                     print(f"🧹 Table section detected: '{section.title}'")
                     
-                    grid_text_extracted = ""
-                    # 📐 Attempt physical grid detection via pdfplumber
+                    grid_data = []
+                    # 📐 1. Let pdfplumber "see" the physical lines and group the text
                     try:
                         with pdfplumber.open(temp_pdf_path) as pdf:
                             for page_num in range(section.start_page, section.end_page + 1):
                                 if 0 <= page_num - 1 < len(pdf.pages):
                                     page = pdf.pages[page_num - 1]
                                     tables = page.extract_tables()
-                                    for tbl in tables:
-                                        for row in tbl:
-                                            clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
-                                            if any(clean_row):
-                                                grid_text_extracted += " | ".join(clean_row) + "\n"
+                                    if tables:
+                                        for tbl in tables:
+                                            for row in tbl:
+                                                # Keep the \n intact! This tells the AI what is inside the physical box.
+                                                clean_row = [str(cell).strip() if cell else "" for cell in row]
+                                                if any(clean_row):
+                                                    grid_data.append(clean_row)
                     except Exception as plumber_err:
                         print(f"⚠️ pdfplumber grid extraction skipped: {plumber_err}")
 
-                    # Use pdfplumber grid output if found; fallback to raw page text
-                    raw_table_context = grid_text_extracted.strip() if grid_text_extracted.strip() else section_text.strip()
+                    import json
+                    # Convert the physical grid to JSON so the AI can read the boundaries perfectly
+                    raw_table_context = json.dumps(grid_data, indent=2) if grid_data else section_text.strip()
 
-                    # 🤖 Pass table structure to Universal AI Normalizer
+                    # 🤖 2. Give the physical boundaries to the AI to use its intelligence
                     clean_prompt = f"""
-                    You are an expert Data Structuring AI. Analyze this raw text extracted from a PDF table.
-                    PDF tables often use visual groupings (e.g., merged cells) to apply one value (like a supervisor, category, or department) to multiple rows, leaving the surrounding cells blank.
+                    You are an expert Data Structuring AI. I am giving you the exact physical layout of a PDF table.
+                    
+                    HOW TO READ THIS DATA:
+                    - The input is a JSON array of rows. Each row array represents ONE physical box drawn on the paper.
+                    - If a cell contains multiple items separated by '\\n', it means all those items were physically grouped inside the same drawn box.
+                    - Therefore, everything in the same JSON row array belongs together!
 
-                    Your task is to reconstruct the logical rows of this table universally:
-                    1. DEDUCE THE LAYOUT: Look at the blank spaces and content sequence. Figure out if shared values are top-aligned, bottom-aligned, or center-aligned within their respective groups.
-                    2. FILL THE BLANKS: Physically rewrite the text so EVERY SINGLE row explicitly includes all its assigned data (e.g., attach the supervisor name explicitly to every student row in that group).
-                    3. IGNORE ARTIFACTS: Seamlessly bridge groups that are interrupted by page headers or footers.
-                    4. NO FORMATTING: Do not add markdown table delimiters or explanations. Return only the explicit, clean text list.
-                    5. STANDARD TABLES: If every row is already complete with no implied groupings, return the text as-is.
-
-                    RAW TABLE CONTENT:
+                    YOUR TASK:
+                    Use your intelligence to flatten this physical grid. Write out the text so EVERY SINGLE student/item gets their own explicit line, paired with their supervisor/category from that same physical row.
+                    Do not output JSON. Do not output markdown tables. Return a clean, human-readable list of explicit text.
+                    
+                    PHYSICAL GRID DATA:
                     {raw_table_context}
                     """
                     try:
                         clean_resp = ai_client.models.generate_content(
-                            model="gemini-3.1-flash-lite", 
+                            model="models/gemini-3.1-flash-lite", 
                             contents=clean_prompt
                         )
                         if clean_resp and clean_resp.text:
                             section_text = clean_resp.text.strip()
-                            print(f"✨ Universal table normalization successful for section '{section.title}'.")
+                            print(f"✨ AI successfully used physical lines to flatten the table.")
+                            
+                            # 🟢 DEBUG PRINT: Verify the AI's intelligence!
+                            print("\n====== 🕵️ AI CLEANED TEXT OUTPUT ======")
+                            print(section_text[:500] + "...\n[TRUNCATED]") 
+                            print("========================================\n")
+                            
                     except Exception as ai_err:
-                        print(f"⚠️ AI Data Normalization failed, using default text: {ai_err}")
+                        print(f"⚠️ AI Data Normalization failed: {ai_err}")
                 else:
                     print(f"⏩ Standard narrative section detected ('{section.title}'). Skipping table normalizer.")
+                # ==========================================================
                 # ==========================================================
                 # ==========================================================
                 # ==========================================================
