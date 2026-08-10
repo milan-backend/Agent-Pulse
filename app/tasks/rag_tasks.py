@@ -218,7 +218,7 @@ def process_document_embedding(document_id: str):
                     """
                     try:
                         clean_resp = ai_client.models.generate_content(
-                            model="models/gemini-2.5-flash", 
+                            model="gemini-3.1-flash-lite", 
                             contents=clean_prompt
                         )
                         if clean_resp and clean_resp.text:
