@@ -167,7 +167,7 @@ def process_document_embedding(document_id: str):
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
                 # ==========================================================
                 
-                # 1. Pull the raw OCR text natively
+                # 1. Pull raw OCR/extracted text natively for this section
                 section_text = ""
                 for p in range(section.start_page, section.end_page + 1):
                     if p in pages_dict:
@@ -177,29 +177,44 @@ def process_document_embedding(document_id: str):
                     continue
 
                 # ==========================================================
-                # 🟢 THE REAL FIX: Dedicated AI Table Normalizer
-                # ==========================================================
-                # ONLY run the expensive cleaning AI if the Navigation AI flagged it as a table
-                # ==========================================================
-                # 🟢 THE REAL FIX: Universal AI Table Normalizer
+                # 🟢 HYBRID UNIVERSAL DATA CLEANER (pdfplumber + Gemini AI)
                 # ==========================================================
                 if section.content_type in ["master_scheme_table", "table_section"]:
-                    print(f"🧹 Table detected! Running Universal Data Cleaner on Section: {section.title}")
+                    print(f"🧹 Table section detected: '{section.title}'")
                     
-                    # 🟢 UNIVERSAL PROMPT: Makes the AI deduce the layout dynamically
+                    grid_text_extracted = ""
+                    # 📐 Attempt physical grid detection via pdfplumber
+                    try:
+                        with pdfplumber.open(temp_pdf_path) as pdf:
+                            for page_num in range(section.start_page, section.end_page + 1):
+                                if 0 <= page_num - 1 < len(pdf.pages):
+                                    page = pdf.pages[page_num - 1]
+                                    tables = page.extract_tables()
+                                    for tbl in tables:
+                                        for row in tbl:
+                                            clean_row = [str(cell).replace('\n', ' ').strip() if cell else "" for cell in row]
+                                            if any(clean_row):
+                                                grid_text_extracted += " | ".join(clean_row) + "\n"
+                    except Exception as plumber_err:
+                        print(f"⚠️ pdfplumber grid extraction skipped: {plumber_err}")
+
+                    # Use pdfplumber grid output if found; fallback to raw page text
+                    raw_table_context = grid_text_extracted.strip() if grid_text_extracted.strip() else section_text.strip()
+
+                    # 🤖 Pass table structure to Universal AI Normalizer
                     clean_prompt = f"""
                     You are an expert Data Structuring AI. Analyze this raw text extracted from a PDF table.
                     PDF tables often use visual groupings (e.g., merged cells) to apply one value (like a supervisor, category, or department) to multiple rows, leaving the surrounding cells blank.
 
                     Your task is to reconstruct the logical rows of this table universally:
-                    1. DEDUCE THE LAYOUT: Look at the blank spaces. Figure out if the shared value is top-aligned (forward-fill), bottom-aligned (backward-fill), or center-aligned within its group.
-                    2. FILL THE BLANKS: Physically rewrite the text so EVERY SINGLE row explicitly includes all its assigned data. No blank implied cells should remain.
-                    3. IGNORE ARTIFACTS: Seamlessly bridge groups that are interrupted by page headers or footers (e.g., "Supervisor List", "Page 2").
-                    4. NO FORMATTING: Do not add markdown tables or framing. Just return the clean, explicit list of text.
-                    5. STANDARD TABLES: If there are no implied groupings and every row is already complete, just return the text exactly as it is.
+                    1. DEDUCE THE LAYOUT: Look at the blank spaces and content sequence. Figure out if shared values are top-aligned, bottom-aligned, or center-aligned within their respective groups.
+                    2. FILL THE BLANKS: Physically rewrite the text so EVERY SINGLE row explicitly includes all its assigned data (e.g., attach the supervisor name explicitly to every student row in that group).
+                    3. IGNORE ARTIFACTS: Seamlessly bridge groups that are interrupted by page headers or footers.
+                    4. NO FORMATTING: Do not add markdown table delimiters or explanations. Return only the explicit, clean text list.
+                    5. STANDARD TABLES: If every row is already complete with no implied groupings, return the text as-is.
 
-                    RAW TEXT:
-                    {section_text}
+                    RAW TABLE CONTENT:
+                    {raw_table_context}
                     """
                     try:
                         clean_resp = ai_client.models.generate_content(
@@ -208,11 +223,12 @@ def process_document_embedding(document_id: str):
                         )
                         if clean_resp and clean_resp.text:
                             section_text = clean_resp.text.strip()
-                            print("✨ Universal data cleaning successful.")
-                    except Exception as e:
-                        print(f"⚠️ AI Data Normalization failed, proceeding with raw text: {e}")
+                            print(f"✨ Universal table normalization successful for section '{section.title}'.")
+                    except Exception as ai_err:
+                        print(f"⚠️ AI Data Normalization failed, using default text: {ai_err}")
                 else:
-                    print(f"⏩ Standard text detected. Skipping Data Cleaner for: {section.title}")
+                    print(f"⏩ Standard narrative section detected ('{section.title}'). Skipping table normalizer.")
+                # ==========================================================
                 # ==========================================================
                 # ==========================================================
                 
