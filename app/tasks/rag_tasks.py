@@ -185,11 +185,14 @@ def process_document_embedding(document_id: str):
                 # ==========================================================
                 # 🟢 THE TRULY UNIVERSAL VISUAL TABLE CLEANER
                 # ==========================================================
+                # ==========================================================
+                # 🟢 THE UNIVERSAL ROW-WISE FLATTENER (Your Architecture)
+                # ==========================================================
                 if section.content_type in ["master_scheme_table", "table_section"]:
-                    print(f"🧹 Table section detected: '{section.title}'")
+                    print(f"🧹 Table section detected: '{section.title}'. Executing Row-Wise Flattening...")
                     
                     raw_visual_table = ""
-                    # 📐 1. Extract the exact visual layout (No Python logic, just a picture in text)
+                    # 📐 1. Extract the full continuous visual table
                     try:
                         with pdfplumber.open(temp_pdf_path) as pdf:
                             for page_num in range(section.start_page, section.end_page + 1):
@@ -199,11 +202,11 @@ def process_document_embedding(document_id: str):
                                     if tables:
                                         for tbl in tables:
                                             for row in tbl:
-                                                # Preserve visual blanks as literal spaces
+                                                # Preserve blanks visually 
                                                 clean_row = [str(cell).replace('\n', ' ').strip() if cell else "      " for cell in row]
                                                 raw_visual_table += " | ".join(clean_row) + "\n"
                                         
-                                        # Show the AI exactly where the page broke
+                                        # Show the AI the page breaks so it can stitch them
                                         raw_visual_table += "\n--- PAGE BREAK ---\n\n"
                     except Exception as plumber_err:
                         print(f"⚠️ pdfplumber extraction skipped: {plumber_err}")
@@ -211,17 +214,20 @@ def process_document_embedding(document_id: str):
                     if not raw_visual_table.strip():
                         raw_visual_table = section_text
 
-                    # 🤖 2. The TRULY UNIVERSAL AI Prompt
+                    # 🤖 2. YOUR LOGIC: The Intelligent "Row-Wise" Universal Prompt
                     clean_prompt = f"""
-                    You are an expert Data Structuring AI. You are given a raw text grid extracted directly from a PDF table.
-                    The text preserves the exact visual layout, including blank spaces, empty cells, repeating headers, and page breaks.
+                    You are an expert Data Structuring AI. I am giving you a continuous raw text grid extracted from a PDF table. Page headers and page breaks have been preserved visually.
 
                     YOUR INSTRUCTIONS:
-                    1. DEDUCE TABLE LOGIC: Analyze the context of the table. Determine if the blank spaces represent intentional empty data (like an empty column in a spreadsheet) OR implied groupings (like vertically merged cells where one category/name applies to several items).
-                    2. FLATTEN (If needed): If there are implied groupings (merged cells), you MUST flatten the table. Explicitly attach the shared category/value to EVERY individual item in that group so no item is left without its full context.
-                    3. PRESERVE (If standard): If it is a standard table where blanks are just empty data, simply extract the rows clearly and accurately without filling anything.
-                    4. IGNORE ARTIFACTS: Seamlessly stitch groups together if they span across '--- PAGE BREAK ---' markers, and ignore repeating column headers.
-                    5. OUTPUT FORMAT: Return ONLY a clean, explicit, human-readable text list of the records. Do not output markdown tables, JSON, or conversational explanations.
+                    1. ANALYZE BLANKS: First, decide if the blank spaces in this table represent intentional empty data OR implied groupings (merged cells that apply to multiple items).
+                    2. ROW-WISE FLATTENING: You must write a single, self-contained line for EVERY individual item or record in the table.
+                    3. CONNECT THE DATA: If there are implied groupings, explicitly attach the shared value to every single row it belongs to. If a cell is just intentionally blank, leave that field out or mark it as "None".
+                    4. SAFE CHUNKING FORMAT: Format every single row like a database record so it can be safely cut at any point by a chunking engine.
+                    
+                    Format Example:
+                    [Header 1]: [Value] | [Header 2]: [Value] | [Header 3]: [Value]
+
+                    Return ONLY the flattened row-wise text list. Do not output markdown, JSON, or chat. Ignore repeating page headers.
 
                     RAW VISUAL TABLE:
                     {raw_visual_table}
@@ -233,17 +239,18 @@ def process_document_embedding(document_id: str):
                         )
                         if clean_resp and clean_resp.text:
                             section_text = clean_resp.text.strip()
-                            print(f"✨ AI successfully processed the universal visual table.")
+                            print(f"✨ AI successfully executed row-wise flattening.")
                             
                             # Debug output to verify the AI's logic
-                            print("\n====== 🕵️ AI CLEANED TEXT OUTPUT ======")
-                            print(section_text[:500] + "...\n[TRUNCATED]") 
+                            print("\n====== 🕵️ AI CLEANED (ROW-WISE) TEXT OUTPUT ======")
+                            print(section_text[:800] + "...\n[TRUNCATED]") 
                             print("========================================\n")
                             
                     except Exception as ai_err:
                         print(f"⚠️ AI Data Normalization failed: {ai_err}")
                 else:
                     print(f"⏩ Standard narrative section detected. Skipping table normalizer.")
+                # ==========================================================
                 # ==========================================================
                 # ==========================================================
                 # ==========================================================
