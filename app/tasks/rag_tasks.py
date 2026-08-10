@@ -182,11 +182,14 @@ def process_document_embedding(document_id: str):
                 # ==========================================================
                 # 🟢 THE AI-DRIVEN LINE-AWARE CLEANER (pdfplumber + Gemini AI)
                 # ==========================================================
+                # ==========================================================
+                # 🟢 THE TRULY UNIVERSAL VISUAL TABLE CLEANER
+                # ==========================================================
                 if section.content_type in ["master_scheme_table", "table_section"]:
                     print(f"🧹 Table section detected: '{section.title}'")
                     
-                    grid_data = []
-                    # 📐 1. Let pdfplumber "see" the physical lines and group the text
+                    raw_visual_table = ""
+                    # 📐 1. Extract the exact visual layout (No Python logic, just a picture in text)
                     try:
                         with pdfplumber.open(temp_pdf_path) as pdf:
                             for page_num in range(section.start_page, section.end_page + 1):
@@ -196,32 +199,32 @@ def process_document_embedding(document_id: str):
                                     if tables:
                                         for tbl in tables:
                                             for row in tbl:
-                                                # Keep the \n intact! This tells the AI what is inside the physical box.
-                                                clean_row = [str(cell).strip() if cell else "" for cell in row]
-                                                if any(clean_row):
-                                                    grid_data.append(clean_row)
+                                                # Preserve visual blanks as literal spaces
+                                                clean_row = [str(cell).replace('\n', ' ').strip() if cell else "      " for cell in row]
+                                                raw_visual_table += " | ".join(clean_row) + "\n"
+                                        
+                                        # Show the AI exactly where the page broke
+                                        raw_visual_table += "\n--- PAGE BREAK ---\n\n"
                     except Exception as plumber_err:
-                        print(f"⚠️ pdfplumber grid extraction skipped: {plumber_err}")
+                        print(f"⚠️ pdfplumber extraction skipped: {plumber_err}")
 
-                    import json
-                    # Convert the physical grid to JSON so the AI can read the boundaries perfectly
-                    raw_table_context = json.dumps(grid_data, indent=2) if grid_data else section_text.strip()
+                    if not raw_visual_table.strip():
+                        raw_visual_table = section_text
 
-                    # 🤖 2. Give the physical boundaries to the AI to use its intelligence
+                    # 🤖 2. The TRULY UNIVERSAL AI Prompt
                     clean_prompt = f"""
-                    You are an expert Data Structuring AI. I am giving you the exact physical layout of a PDF table.
-                    
-                    HOW TO READ THIS DATA:
-                    - The input is a JSON array of rows. Each row array represents ONE physical box drawn on the paper.
-                    - If a cell contains multiple items separated by '\\n', it means all those items were physically grouped inside the same drawn box.
-                    - Therefore, everything in the same JSON row array belongs together!
+                    You are an expert Data Structuring AI. You are given a raw text grid extracted directly from a PDF table.
+                    The text preserves the exact visual layout, including blank spaces, empty cells, repeating headers, and page breaks.
 
-                    YOUR TASK:
-                    Use your intelligence to flatten this physical grid. Write out the text so EVERY SINGLE student/item gets their own explicit line, paired with their supervisor/category from that same physical row.
-                    Do not output JSON. Do not output markdown tables. Return a clean, human-readable list of explicit text.
-                    
-                    PHYSICAL GRID DATA:
-                    {raw_table_context}
+                    YOUR INSTRUCTIONS:
+                    1. DEDUCE TABLE LOGIC: Analyze the context of the table. Determine if the blank spaces represent intentional empty data (like an empty column in a spreadsheet) OR implied groupings (like vertically merged cells where one category/name applies to several items).
+                    2. FLATTEN (If needed): If there are implied groupings (merged cells), you MUST flatten the table. Explicitly attach the shared category/value to EVERY individual item in that group so no item is left without its full context.
+                    3. PRESERVE (If standard): If it is a standard table where blanks are just empty data, simply extract the rows clearly and accurately without filling anything.
+                    4. IGNORE ARTIFACTS: Seamlessly stitch groups together if they span across '--- PAGE BREAK ---' markers, and ignore repeating column headers.
+                    5. OUTPUT FORMAT: Return ONLY a clean, explicit, human-readable text list of the records. Do not output markdown tables, JSON, or conversational explanations.
+
+                    RAW VISUAL TABLE:
+                    {raw_visual_table}
                     """
                     try:
                         clean_resp = ai_client.models.generate_content(
@@ -230,9 +233,9 @@ def process_document_embedding(document_id: str):
                         )
                         if clean_resp and clean_resp.text:
                             section_text = clean_resp.text.strip()
-                            print(f"✨ AI successfully used physical lines to flatten the table.")
+                            print(f"✨ AI successfully processed the universal visual table.")
                             
-                            # 🟢 DEBUG PRINT: Verify the AI's intelligence!
+                            # Debug output to verify the AI's logic
                             print("\n====== 🕵️ AI CLEANED TEXT OUTPUT ======")
                             print(section_text[:500] + "...\n[TRUNCATED]") 
                             print("========================================\n")
@@ -240,7 +243,8 @@ def process_document_embedding(document_id: str):
                     except Exception as ai_err:
                         print(f"⚠️ AI Data Normalization failed: {ai_err}")
                 else:
-                    print(f"⏩ Standard narrative section detected ('{section.title}'). Skipping table normalizer.")
+                    print(f"⏩ Standard narrative section detected. Skipping table normalizer.")
+                # ==========================================================
                 # ==========================================================
                 # ==========================================================
                 # ==========================================================
