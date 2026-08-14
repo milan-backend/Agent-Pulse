@@ -104,13 +104,18 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 print(f"   - Total Tokens      : {total_tokens}")
 
             # ROBUST JSON SHAPE RECOVERY
-            raw_json_str = response.text.strip()
+            raw_text = response.text.strip()
             
-            # Strip markdown code blocks if the AI accidentally included them
-            if raw_json_str.startswith("```json"):
-                raw_json_str = raw_json_str[7:-3].strip()
-            elif raw_json_str.startswith("```"):
-                raw_json_str = raw_json_str[3:-3].strip()
+            # ✂️ THE BULLETPROOF SLICER: Find the first '{' and the last '}'
+            start_idx = raw_text.find('{')
+            end_idx = raw_text.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1:
+                # Slice out exactly the JSON object and discard the rest (including markdown or conversational text)
+                raw_json_str = raw_text[start_idx:end_idx + 1]
+            else:
+                # Fallback just in case it's completely malformed
+                raw_json_str = raw_text
                 
             parsed_data = json.loads(raw_json_str)
             
