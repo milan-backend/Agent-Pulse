@@ -36,7 +36,7 @@ class RetrievalService:
         workspace_id: uuid.UUID,
         include_neighbor_chunks: bool = False,
         user_prompt: str = None,
-        top_k: int = 3
+        top_k: int = 10  # 🟢 THE FIX: Increase from 3 to 10
     ) -> List[Dict[str, Any]]:
         """
         Direct ID Retrieval Engine with Token-Saving Re-ranking:
