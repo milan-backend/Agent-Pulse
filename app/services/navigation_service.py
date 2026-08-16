@@ -48,7 +48,7 @@ class ActiveState:
         self.last_page: int = 0
 
 # =====================================================================
-# 3. AI Execution Call
+# 3. AI Execution Call (Optimized with Structured Outputs)
 # =====================================================================
 def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationBatchResponse:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -67,8 +67,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "5. Extract 'key_entities' (e.g., 'IIT', 'HEFA', 'NIT', 'UGC', specific scheme codes).\n"
         "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n\n"
         f"PREVIOUS BATCH STATE:\n"
-        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n\n"
-        "OUTPUT EXACT JSON ONLY conforming to NavigationBatchResponse schema."
+        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
@@ -82,25 +81,21 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 config={
                     "system_instruction": system_instruction,
                     "response_mime_type": "application/json",
+                    "response_schema": NavigationBatchResponse, # 🟢 THE MAGIC FIX: Forces perfect JSON compliance
                     "temperature": 0.0
                 }
             )
 
-            raw_text = response.text.strip()
-            start_idx = raw_text.find('{')
-            end_idx = raw_text.rfind('}')
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                meta = response.usage_metadata
+                print(f"📊 [NAVIGATION AI TOKEN USAGE]")
+                print(f"   - Prompt Tokens     : {getattr(meta, 'prompt_token_count', 0)}")
+                print(f"   - Completion Tokens : {getattr(meta, 'candidates_token_count', 0)}")
+                print(f"   - Total Tokens      : {getattr(meta, 'total_token_count', 0)}")
+
+            # Because we used response_schema, response.text is guaranteed to be perfect JSON
+            parsed_data = json.loads(response.text)
             
-            raw_json_str = raw_text[start_idx:end_idx + 1] if start_idx != -1 and end_idx != -1 else raw_text
-            parsed_data = json.loads(raw_json_str)
-            
-            if isinstance(parsed_data, list):
-                parsed_data = {
-                    "hierarchy": parsed_data,
-                    "chunk_suggestions": [],
-                    "confidence": 0.5,
-                    "notes": "Recovered from raw list format"
-                }
-                
             return NavigationBatchResponse(**parsed_data)
 
         except Exception as e:
