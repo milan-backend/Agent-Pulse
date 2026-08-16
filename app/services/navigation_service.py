@@ -36,16 +36,16 @@ class NavigationBatchResponse(BaseModel):
     chunk_suggestions: List[ChunkSuggestion] = Field(default_factory=list)
     confidence: float = Field(default=1.0)
     notes: str = Field(default="")
+    # 🟢 THE NEW UNIVERSAL ROLLING SUMMARY FIELD
+    handoff_notes: str = Field(default="", description="Machine-to-machine notes for the next batch. MUST include active table column headers if a table spans across the batch cutoff.")
 
-# =====================================================================
-# 2. State "Baton" Object
-# =====================================================================
 class ActiveState:
     def __init__(self):
         self.current_parent: Optional[str] = None
         self.current_section: Optional[str] = None
         self.current_type: Optional[str] = None
         self.last_page: int = 0
+        self.handoff_notes: str = ""  # 🟢 HOLDS THE PREVIOUS BATCH HEADERS
 
 # =====================================================================
 # 3. AI Execution Call 
@@ -57,19 +57,22 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
+    # 🟢 THE UNIVERSAL SYSTEM PROMPT
     system_instruction = (
         "You are the Universal Navigation Engine. Map the granular logical structure of the raw text.\n"
         "RULES:\n"
-        "1. DO NOT group an entire multi-page document into a single section. Identify individual major headings, institutions (e.g. IITs, NITs, IIMs, UGC), and distinct scheme tables as SEPARATE sections or subsections.\n"
-        "2. For budget tables, set 'content_type': 'master_scheme_table'. In chunk_suggestions, set 'preserve_tables': true.\n"
-        "3. Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
-        "4. Write a 1-sentence dense 'semantic_summary' explaining what specific institutions or schemes are in this section.\n"
-        "5. Extract 'key_entities' (e.g., 'IIT', 'HEFA', 'NIT', 'UGC', specific scheme codes).\n"
-        "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n\n"
+        "1. GRANULARITY: DO NOT group multi-page documents into a single section. Identify individual major headings, sub-headings, distinct topical shifts, and standalone data tables as SEPARATE sections or subsections.\n"
+        "2. CHUNKING STRATEGY: For any data tables, matrices, or financial data, set 'content_type' to 'data_table' and ensure 'preserve_tables' is true in chunk_suggestions.\n"
+        "3. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
+        "4. SUMMARY: Write a 1-sentence dense 'semantic_summary' explaining the specific contents of this section.\n"
+        "5. ENTITIES: Extract 'key_entities' (core topics, organizations, unique IDs, or locations).\n"
+        "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n"
+        "7. 🟢 HANDOFF STATE (CRITICAL): If a table, list, or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
-        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n\n"
+        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
+        f"- 🟢 MACHINE HANDOFF NOTES: {state.handoff_notes or 'No active tables or context carried over.'}\n\n"
         "OUTPUT EXACT JSON ONLY MATCHING THIS EXACT STRUCTURE (Do not use Markdown formatting):\n"
-        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\"}"
+        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
@@ -89,7 +92,6 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
 
             raw_text = response.text.strip()
             
-            # Slice out the JSON object securely
             start_idx = raw_text.find('{')
             end_idx = raw_text.rfind('}')
             
@@ -100,7 +102,6 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 
             parsed_data = json.loads(raw_json_str)
             
-            # Recover if AI returned a raw list instead of a dict
             if isinstance(parsed_data, list):
                 parsed_data = {"hierarchy": parsed_data}
                 
@@ -151,6 +152,9 @@ def build_and_save_navigation_map(
                 active_state.current_parent = last_item.parent
                 active_state.current_type = last_item.type
                 active_state.last_page = last_item.end_page
+                
+            # 🟢 PASS THE ROLLING SUMMARY TO THE NEXT BATCH
+            active_state.handoff_notes = batch_response.handoff_notes
                 
         except Exception as e:
             print(f"⚠️ Failed to parse batch {idx + 1}: {e}")
