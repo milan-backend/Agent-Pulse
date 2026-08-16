@@ -25,33 +25,19 @@ class ChunkEngine:
         strategy_hint = strategy_hint or {}
         preserve_tables = strategy_hint.get("preserve_tables", False)
 
-        # 🟢 SMART SPLITTING: If it's a table/list, split by newline to preserve rows
+        # 🟢 SMART SPLITTING: Bypass size limits for tables and inject headers!
         if preserve_tables:
-            # Split by lines, keeping rows perfectly intact
-            lines = section_text.split('\n')
-            current_chunk_words = []
-            current_chunk_text = ""
+            table_headers = strategy_hint.get("table_headers", "").strip()
+            final_text = section_text
             
-            for line in lines:
-                line_words = line.split()
-                # If adding this row exceeds the limit, save the chunk and start over
-                if len(current_chunk_words) + len(line_words) > self.chunk_size and current_chunk_words:
-                    self._append_chunk(chunks, current_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
-                    sequence += 1
-                    
-                    # Keep overlap (last few rows)
-                    overlap_text = "\n".join(current_chunk_text.split('\n')[-3:])
-                    current_chunk_text = overlap_text + "\n" + line
-                    current_chunk_words = current_chunk_text.split()
-                else:
-                    current_chunk_text += (line + "\n")
-                    current_chunk_words.extend(line_words)
-            
-            # Catch the remaining text
-            if current_chunk_text.strip():
-                self._append_chunk(chunks, current_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
+            # Inject the sticky note headers at the very top of the table
+            if table_headers:
+                final_text = f"[COLUMN HEADERS: {table_headers}]\n" + section_text
+                
+            # Save the ENTIRE table as exactly 1 chunk so context is never shattered
+            self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
 
-        # 🔴 NAIVE SPLITTING: Fallback for standard narrative paragraphs
+        # 🔴 NAIVE SPLITTING: Standard stride fallback for regular paragraphs
         else:
             words = section_text.split()
             stride = self.chunk_size - self.overlap

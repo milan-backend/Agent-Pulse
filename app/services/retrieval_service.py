@@ -35,70 +35,25 @@ class RetrievalService:
         target_chroma_ids: List[str], 
         workspace_id: uuid.UUID,
         include_neighbor_chunks: bool = False,
-        user_prompt: str = None,
-        top_k: int = 10  # 🟢 THE FIX: Increase from 3 to 10
+        user_prompt: str = None, 
+        top_k: int = 10 
     ) -> List[Dict[str, Any]]:
         """
-        Direct ID Retrieval Engine with Token-Saving Re-ranking:
-        1. Constrains the search strictly to the Vector IDs provided by the Smart Router.
-        2. Reranks those chunks using the user's query and returns only the top 3.
+        Direct ID Retrieval Engine (Section Overwrite):
+        1. Fully trusts the Smart Router's authorized Vector IDs.
+        2. Bypasses semantic re-ranking to prevent Shattered Tables.
         """
         if not target_chroma_ids:
             return []
 
-        # 1. Fetch exact documents from Chroma DB by vector IDs
+        # 🟢 THE FIX: Unconditional Retrieval. No more semantic filtering!
         try:
-            if user_prompt:
-                print(f"🎯 Re-ranking {len(target_chroma_ids)} chunks down to Top {top_k}...")
-                
-                # 🟢 THE FIX: Convert the text to a vector using the exact same Gemini model
-                gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
-                if not gemini_key:
-                    raise ValueError("Missing Gemini API Key for Retrieval")
-                
-                ai_client = genai.Client(api_key=gemini_key)
-                
-                vector_response = ai_client.models.embed_content(
-                    model="models/gemini-embedding-001",
-                    contents=user_prompt
-                )
-                prompt_vector = vector_response.embeddings[0].values
-                
-                # 🟢 THE FIX: Pass query_embeddings instead of query_texts
-                raw_results = self.collection.query(
-                    query_embeddings=[prompt_vector],
-                    n_results=top_k * 3, # Pull a slightly wider net initially 
-                    where={"workspace_id": str(workspace_id)}
-                )
-                
-                valid_ids = []
-                valid_docs = []
-                valid_metas = []
-                
-                # Intersect the semantic query results with the Router's approved section IDs
-                if raw_results and raw_results.get("ids") and len(raw_results["ids"]) > 0:
-                    for i, c_id in enumerate(raw_results["ids"][0]):
-                        if c_id in target_chroma_ids and len(valid_ids) < top_k:
-                            valid_ids.append(c_id)
-                            valid_docs.append(raw_results["documents"][0][i])
-                            valid_metas.append(raw_results["metadatas"][0][i])
-                            
-                    results = {
-                        "ids": valid_ids,
-                        "documents": valid_docs,
-                        "metadatas": valid_metas
-                    }
-                else:
-                    results = {}
-            else:
-                # Fallback: Blanket Get if no prompt is provided
-                results = self.collection.get(
-                    ids=target_chroma_ids,
-                    where={"workspace_id": str(workspace_id)}
-                )
-                
+            results = self.collection.get(
+                ids=target_chroma_ids,
+                where={"workspace_id": str(workspace_id)}
+            )
         except Exception as e:
-            print(f"⚠️ Chroma Fetch/Query error: {e}")
+            print(f"⚠️ Chroma Direct ID Fetch error: {e}")
             return []
 
         if not results or not results.get("ids"):
