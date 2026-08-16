@@ -163,12 +163,44 @@ def execute_smart_routing(
     if not decision.target_section_ids:
         return []
 
-    target_chunks = db.query(DocumentChunk).filter(
-        DocumentChunk.section_id.in_(decision.target_section_ids),
-        DocumentChunk.workspace_id == workspace_id
-    ).all()
-
-    vector_ids = [chunk.chroma_vector_id for chunk in target_chunks]
-    print(f"📡 Resolved {len(decision.target_section_ids)} sections into {len(vector_ids)} exact vector targets.")
+    # =====================================================================
+    # 🟢 PHASE 3: EXACT CHUNK FILTERING (Kill the Token Bloat)
+    # Instead of grabbing all chunks in the section, search ChromaDB 
+    # to find the exact 3 chunks inside this section that answer the question!
+    # =====================================================================
+    print(f"🎯 Narrowing down exact chunks inside the selected sections...")
     
-    return vector_ids
+    chunk_collection = chroma_client.get_or_create_collection(
+        name="rag_enterprise_vectors_v1",
+        metadata={"hnsw:space": "cosine"}
+    )
+    
+    # Safely build the Chroma where-filter
+    if len(decision.target_section_ids) == 1:
+        where_chunk_filter = {
+            "workspace_id": str(workspace_id),
+            "section_id": decision.target_section_ids[0]
+        }
+    else:
+        where_chunk_filter = {
+            "$and": [
+                {"workspace_id": str(workspace_id)},
+                {"section_id": {"$in": decision.target_section_ids}}
+            ]
+        }
+
+    try:
+        # Pass the exact same query vector we calculated at the top of the file
+        chunk_results = chunk_collection.query(
+            query_embeddings=[query_vector],
+            n_results=3,  # 🟢 LIMIT TO TOP 3 EXACT MATCHES (~1200 Tokens Max!)
+            where=where_chunk_filter
+        )
+        final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
+    except Exception as e:
+        print(f"❌ Chunk-level Vector Search failed: {e}")
+        final_vector_ids = []
+
+    print(f"📡 Resolved {len(decision.target_section_ids)} sections into {len(final_vector_ids)} highly-targeted vector chunks.")
+    
+    return final_vector_ids
