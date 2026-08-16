@@ -280,7 +280,9 @@ def process_step(self, step_id: str):
                     reconstructed_chunks = retrieval_service.execute_direct_id_retrieval(
                         target_chroma_ids=target_vector_ids,
                         workspace_id=uuid.UUID(current_workspace_id),
-                        include_neighbor_chunks=True
+                        include_neighbor_chunks=True,
+                        user_prompt=prompt,  # 🟢 Pass the prompt for semantic re-ranking
+                        top_k=3              # 🟢 Hard limit to 3 chunks to prevent token bloat
                     )
 
                     rag_telemetry_node["selected_vectors_count"] = len(reconstructed_chunks)

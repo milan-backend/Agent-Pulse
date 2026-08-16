@@ -33,25 +33,58 @@ class RetrievalService:
         self, 
         target_chroma_ids: List[str], 
         workspace_id: uuid.UUID,
-        include_neighbor_chunks: bool = False
+        include_neighbor_chunks: bool = False,
+        user_prompt: str = None,
+        top_k: int = 3
     ) -> List[Dict[str, Any]]:
         """
-        Direct ID Retrieval Engine:
-        1. Fetches exact vectors from Chroma DB using chroma_vector_ids selected by the Smart Router AI.
-        2. If include_neighbor_chunks is True, traverses prev_chunk_id / next_chunk_id in SQL 
-           to dynamically expand retrieval context without extra vector search cost.
+        Direct ID Retrieval Engine with Token-Saving Re-ranking:
+        1. Constrains the search strictly to the Vector IDs provided by the Smart Router.
+        2. Reranks those chunks using the user's query and returns only the top 3.
         """
         if not target_chroma_ids:
             return []
 
         # 1. Fetch exact documents from Chroma DB by vector IDs
         try:
-            results = self.collection.get(
-                ids=target_chroma_ids,
-                where={"workspace_id": str(workspace_id)}
-            )
+            if user_prompt:
+                print(f"🎯 Re-ranking {len(target_chroma_ids)} chunks down to Top {top_k}...")
+                
+                # Query the workspace and filter locally to ensure strict compliance across all ChromaDB versions
+                raw_results = self.collection.query(
+                    query_texts=[user_prompt],
+                    n_results=top_k * 3, # Pull a slightly wider net initially 
+                    where={"workspace_id": str(workspace_id)}
+                )
+                
+                valid_ids = []
+                valid_docs = []
+                valid_metas = []
+                
+                # Intersect the semantic query results with the Router's approved section IDs
+                if raw_results and raw_results.get("ids") and len(raw_results["ids"]) > 0:
+                    for i, c_id in enumerate(raw_results["ids"][0]):
+                        if c_id in target_chroma_ids and len(valid_ids) < top_k:
+                            valid_ids.append(c_id)
+                            valid_docs.append(raw_results["documents"][0][i])
+                            valid_metas.append(raw_results["metadatas"][0][i])
+                            
+                    results = {
+                        "ids": valid_ids,
+                        "documents": valid_docs,
+                        "metadatas": valid_metas
+                    }
+                else:
+                    results = {}
+            else:
+                # Fallback: Blanket Get if no prompt is provided
+                results = self.collection.get(
+                    ids=target_chroma_ids,
+                    where={"workspace_id": str(workspace_id)}
+                )
+                
         except Exception as e:
-            print(f"⚠️ Chroma Direct ID Fetch error: {e}")
+            print(f"⚠️ Chroma Fetch/Query error: {e}")
             return []
 
         if not results or not results.get("ids"):
