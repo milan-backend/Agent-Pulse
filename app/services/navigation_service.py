@@ -59,20 +59,21 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
-    # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMPT
+    # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMP
+   # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMPT
     system_instruction = (
         "You are the Universal Navigation Engine. Map the granular logical structure of the raw text.\n"
         "RULES:\n"
-        "1. GRANULARITY: DO NOT group multi-page documents into a single section. Identify individual major headings, sub-headings, distinct topical shifts, and standalone data tables as SEPARATE sections or subsections.\n"
-        "2. CHUNKING STRATEGY: For any data tables, matrices, or financial data, set 'content_type' to 'data_table' and ensure 'preserve_tables' is true in chunk_suggestions.\n"
-        "3. 🟢 HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field of the chunk_suggestion (e.g., 'Category | 2024 Actual | 2025 Budget'). If there is no table, leave it blank.\n"
+        "1. STRICT HEADING SPLITTING (CRITICAL): The document contains major structural headings (these may be numbered, written in ALL CAPS, or stand alone as clear topical titles). EVERY TIME you encounter a new major heading or a distinct shift in topic, you MUST start a new, completely separate section in the hierarchy.\n"
+        "2. 🟢 TABLE-TO-TEXT ISOLATION (CRITICAL): DO NOT merge narrative paragraphs with tables. If a data table ends and a narrative paragraph begins, YOU MUST split them into TWO separate sections immediately, even if there is no formal heading between them. The table section gets 'content_type': 'data_table' and 'preserve_tables': true. The paragraph gets 'content_type': 'text' and 'preserve_tables': false.\n"
+        "3. HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field. If no table, leave blank.\n"
         "4. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
-        "5. SUMMARY & ENTITIES: Write a 1-sentence dense 'semantic_summary' explaining this section and extract 'key_entities'.\n"
-        "6. 🟢 DATA CLEANING & MARKDOWN TABLES (CRITICAL): Extract text into 'normalized_text'. For any tables, you MUST format the text as a strict, valid Markdown table using pipe characters (|) and a header separator row (e.g., |---|---|). If a table has a main parent row followed by sub-rows, inject the parent name into the first column of every sub-row. USE ESCAPED NEWLINES (\\n) inside the JSON string, never raw newlines.\n"
-        "7. 🟢 HANDOFF STATE: If a table, list, or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
+        "5. UNIVERSAL ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract an exhaustive, unbounded list of ALL distinct named entities, institutions, acronyms, and proper nouns into 'key_entities' so the vector database catches everything.\n"
+        "6. MARKDOWN TABLES (CRITICAL): You MUST format ANY financial data or rows of numbers as a strict, valid Markdown table using pipe characters (|) and a header separator row (e.g., |---|---|). Even if it looks messy, CONVERT IT INTO A MARKDOWN TABLE. USE ESCAPED NEWLINES (\\n) inside the JSON string.\n"
+        "7. HANDOFF STATE: If a table or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
-        f"- 🟢 MACHINE HANDOFF NOTES: {state.handoff_notes or 'No active tables or context carried over.'}\n\n"
+        f"- MACHINE HANDOFF NOTES: {state.handoff_notes or 'No active tables or context carried over.'}\n\n"
         "OUTPUT EXACT JSON ONLY MATCHING THIS EXACT STRUCTURE (Do not use Markdown formatting):\n"
         "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"], \"table_headers\": \"...\"}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
     )
