@@ -49,6 +49,7 @@ class ActiveState:
         self.last_page: int = 0
         self.handoff_notes: str = ""  # 🟢 HOLDS THE PREVIOUS BATCH HEADERS
 
+
 # =====================================================================
 # 3. AI Execution Call 
 # =====================================================================
@@ -59,8 +60,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
-    # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMP
-   # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMPT
+    # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMPT
     system_instruction = (
         "You are the Universal Navigation Engine. Map the granular logical structure of the raw text.\n"
         "RULES:\n"
@@ -68,7 +68,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "2. 🟢 TABLE-TO-TEXT ISOLATION (CRITICAL): DO NOT merge narrative paragraphs with tables. If a data table ends and a narrative paragraph begins, YOU MUST split them into TWO separate sections immediately, even if there is no formal heading between them. The table section gets 'content_type': 'data_table' and 'preserve_tables': true. The paragraph gets 'content_type': 'text' and 'preserve_tables': false.\n"
         "3. HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field. If no table, leave blank.\n"
         "4. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
-        "5. UNIVERSAL ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract an exhaustive, unbounded list of ALL distinct named entities, institutions, acronyms, and proper nouns into 'key_entities' so the vector database catches everything.\n"
+        "5. 🟢 BOUNDED ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract the most important named entities, institutions, acronyms, and proper nouns into 'key_entities' (MAXIMUM 15 ENTITIES). Do NOT extract raw numbers, financial amounts, or math symbols as entities.\n"
         "6. MARKDOWN TABLES (CRITICAL): You MUST format ANY financial data or rows of numbers as a strict, valid Markdown table using pipe characters (|) and a header separator row (e.g., |---|---|). Even if it looks messy, CONVERT IT INTO A MARKDOWN TABLE. USE ESCAPED NEWLINES (\\n) inside the JSON string.\n"
         "7. HANDOFF STATE: If a table or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
@@ -89,7 +89,8 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 config={
                     "system_instruction": system_instruction,
                     "response_mime_type": "application/json",
-                    "temperature": 0.0
+                    "temperature": 0.0,
+                    "max_output_tokens": 8192  # 🟢 FIX: Maximum output tokens to prevent mid-JSON cutoff!
                 }
             )
 
@@ -103,7 +104,6 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
             else:
                 raw_json_str = raw_text
                 
-            # 🟢 THE FIX: Add strict=False to tolerate unescaped AI newline
             parsed_data = json.loads(raw_json_str, strict=False)
             
             if isinstance(parsed_data, list):
