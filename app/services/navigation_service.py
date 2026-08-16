@@ -196,12 +196,16 @@ def build_and_save_navigation_map(
         # =====================================================================
         # 🟢 1. TRANSPARENCY PRINT: See the exact Table Map & Chunk Strategy
         # =====================================================================
-        if item.content_type in ["data_table", "master_scheme_table"] or "preserve_tables" in str(matched_hint):
-            print(f"\n{'='*60}")
-            print(f"🛠️ [TRANSPARENCY] NAVIGATION AI BUILT TABLE: {item.title}")
-            print(f"📊 CHUNKING STRATEGY ASSIGNED: {json.dumps(matched_hint, indent=2)}")
-            print(f"📄 NORMALIZED TEXT (Markdown):\n{item.normalized_text}")
-            print(f"{'='*60}\n")
+        # =====================================================================
+        # 🟢 1. TRANSPARENCY PRINT: See EVERYTHING the AI builds
+        # =====================================================================
+        print(f"\n{'='*60}")
+        print(f"🛠️ [TRANSPARENCY] NAVIGATION AI BUILT SECTION: {item.title}")
+        print(f"🧩 TYPE RECOGNIZED: {item.content_type}")
+        print(f"📊 CHUNKING STRATEGY ASSIGNED: {json.dumps(matched_hint, indent=2)}")
+        print(f"📄 NORMALIZED TEXT:\n{item.normalized_text}")
+        print(f"{'='*60}\n")
+        # =====================================================================
         # =====================================================================
 
         db_section = DocumentSection(
