@@ -94,12 +94,18 @@ def execute_smart_routing(
     
     index_cards = []
     for sec in available_sections:
+        # 🟢 Grab the first 500 characters of the table the Navigation AI built
+        hint = sec.chunking_strategy_hint or {}
+        snippet = hint.get("normalized_text", "")[:500]
+        
         index_cards.append({
             "section_id": str(sec.id),
             "path": sec.parent_path,
             "title": sec.title,
             "type": sec.content_type,
-            "summary": sec.semantic_summary
+            "summary": sec.semantic_summary,
+            "entities": sec.key_entities,    # 🟢 Give the Router the keywords!
+            "data_preview": snippet          # 🟢 Give the Router the table preview!
         })
 
     system_instruction = (
@@ -107,7 +113,7 @@ def execute_smart_routing(
         "MISSION:\n"
         "Read the user's question and review the provided Document Index Catalog.\n"
         "Select ONLY the `section_id`s that semantically match the user's intent. "
-        "Use the `path` and `summary` to determine relevance. If the user asks for a broad overview, prioritize sections with `type: master_scheme_table`.\n\n"
+        "Use the `path`, `summary`, `entities`, and `data_preview` to determine relevance. If the user asks for a broad overview, prioritize sections with `type: master_scheme_table`.\n\n"
         "OUTPUT EXACT JSON matching this schema:\n"
         "{\"target_section_ids\": [\"uuid-string\"], \"routing_reasoning\": \"string\"}"
     )
