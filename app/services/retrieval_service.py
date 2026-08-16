@@ -4,6 +4,7 @@ import chromadb
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
+from google import genai  # 🟢 NEW: Added for manual vector embedding
 
 from app.db.session import SessionLocal
 from app.models.new_arch import DocumentChunk
@@ -50,9 +51,22 @@ class RetrievalService:
             if user_prompt:
                 print(f"🎯 Re-ranking {len(target_chroma_ids)} chunks down to Top {top_k}...")
                 
-                # Query the workspace and filter locally to ensure strict compliance across all ChromaDB versions
+                # 🟢 THE FIX: Convert the text to a vector using the exact same Gemini model
+                gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
+                if not gemini_key:
+                    raise ValueError("Missing Gemini API Key for Retrieval")
+                
+                ai_client = genai.Client(api_key=gemini_key)
+                
+                vector_response = ai_client.models.embed_content(
+                    model="models/gemini-embedding-001",
+                    contents=user_prompt
+                )
+                prompt_vector = vector_response.embeddings[0].values
+                
+                # 🟢 THE FIX: Pass query_embeddings instead of query_texts
                 raw_results = self.collection.query(
-                    query_texts=[user_prompt],
+                    query_embeddings=[prompt_vector],
                     n_results=top_k * 3, # Pull a slightly wider net initially 
                     where={"workspace_id": str(workspace_id)}
                 )
