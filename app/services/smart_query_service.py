@@ -175,25 +175,19 @@ def execute_smart_routing(
         metadata={"hnsw:space": "cosine"}
     )
     
-    # Safely build the Chroma where-filter
-    if len(decision.target_section_ids) == 1:
-        where_chunk_filter = {
-            "workspace_id": str(workspace_id),
-            "section_id": decision.target_section_ids[0]
-        }
-    else:
-        where_chunk_filter = {
-            "$and": [
-                {"workspace_id": str(workspace_id)},
-                {"section_id": {"$in": decision.target_section_ids}}
-            ]
-        }
+    # 🟢 THE FIX: Always use $and for ChromaDB multiple-key filters
+    where_chunk_filter = {
+        "$and": [
+            {"workspace_id": str(workspace_id)},
+            {"section_id": {"$in": decision.target_section_ids}}
+        ]
+    }
 
     try:
         # Pass the exact same query vector we calculated at the top of the file
         chunk_results = chunk_collection.query(
             query_embeddings=[query_vector],
-            n_results=3,  # 🟢 LIMIT TO TOP 3 EXACT MATCHES (~1200 Tokens Max!)
+            n_results=3,  # 🟢 LIMIT TO TOP 3 EXACT MATCHES
             where=where_chunk_filter
         )
         final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
