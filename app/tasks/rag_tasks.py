@@ -167,12 +167,19 @@ def process_document_embedding(document_id: str):
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
                 # ==========================================================
                 
-                # 1. Pull raw OCR/extracted text natively for this section
-                section_text = ""
-                for p in range(section.start_page, section.end_page + 1):
-                    if p in pages_dict:
-                        section_text += pages_dict[p] + "\n"
-                        
+                # 🟢 NEW: Pull the AI's strategy and cleaned text
+                hint = section.chunking_strategy_hint or {}
+                cleaned_text = hint.get("normalized_text")
+                
+                # Use the AI's cleaned text if available; fallback to raw pages if not
+                if cleaned_text and cleaned_text.strip():
+                    section_text = cleaned_text
+                else:
+                    section_text = ""
+                    for p in range(section.start_page, section.end_page + 1):
+                        if p in pages_dict:
+                            section_text += pages_dict[p] + "\n"
+                            
                 if not section_text.strip(): 
                     continue
                 
@@ -182,7 +189,8 @@ def process_document_embedding(document_id: str):
                     section_id=section.id, 
                     document_id=doc.id, 
                     workspace_id=doc.workspace_id, 
-                    agent_id=doc.agent_id
+                    agent_id=doc.agent_id,
+                    strategy_hint=hint  # 🟢 Pass the AI's instructions to the engine!
                 )
                 
                 last_chunk_db_id = None
