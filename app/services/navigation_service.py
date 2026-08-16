@@ -18,7 +18,7 @@ class HierarchyItem(BaseModel):
     parent: Optional[str] = Field(default=None, description="Exact parent title, or null.")
     start_page: int = Field(default=1)
     end_page: int = Field(default=1)
-    content_type: str = Field(default="master_scheme_table")
+    content_type: str = Field(default="data_table")
     semantic_summary: str = Field(default="No summary provided.", description="1-sentence dense summary of contents.")
     key_entities: List[str] = Field(default_factory=list)
     normalized_text: str = Field(default="", description="The fully cleaned text for this section.")
@@ -30,13 +30,15 @@ class ChunkSuggestion(BaseModel):
     preserve_tables: bool = Field(default=True)
     preserve_lists: bool = Field(default=True)
     split_triggers: List[str] = Field(default_factory=list)
+    # 🟢 THE NEW HEADER INJECTION FIELD
+    table_headers: str = Field(default="", description="If this section contains a table, extract the exact column headers here separated by a pipe '|'.")
 
 class NavigationBatchResponse(BaseModel):
     hierarchy: List[HierarchyItem] = Field(default_factory=list)
     chunk_suggestions: List[ChunkSuggestion] = Field(default_factory=list)
     confidence: float = Field(default=1.0)
     notes: str = Field(default="")
-    # 🟢 THE NEW UNIVERSAL ROLLING SUMMARY FIELD
+    # 🟢 THE UNIVERSAL ROLLING SUMMARY FIELD
     handoff_notes: str = Field(default="", description="Machine-to-machine notes for the next batch. MUST include active table column headers if a table spans across the batch cutoff.")
 
 class ActiveState:
@@ -57,22 +59,22 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         
     client = genai.Client(api_key=gemini_key)
 
-    # 🟢 THE UNIVERSAL SYSTEM PROMPT
+    # 🟢 THE UNIVERSAL TABLE-AWARE SYSTEM PROMPT
     system_instruction = (
         "You are the Universal Navigation Engine. Map the granular logical structure of the raw text.\n"
         "RULES:\n"
         "1. GRANULARITY: DO NOT group multi-page documents into a single section. Identify individual major headings, sub-headings, distinct topical shifts, and standalone data tables as SEPARATE sections or subsections.\n"
         "2. CHUNKING STRATEGY: For any data tables, matrices, or financial data, set 'content_type' to 'data_table' and ensure 'preserve_tables' is true in chunk_suggestions.\n"
-        "3. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
-        "4. SUMMARY: Write a 1-sentence dense 'semantic_summary' explaining the specific contents of this section.\n"
-        "5. ENTITIES: Extract 'key_entities' (core topics, organizations, unique IDs, or locations).\n"
-        "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n"
-        "7. 🟢 HANDOFF STATE (CRITICAL): If a table, list, or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
+        "3. 🟢 HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field of the chunk_suggestion (e.g., 'Category | 2024 Actual | 2025 Budget'). If there is no table, leave it blank.\n"
+        "4. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
+        "5. SUMMARY & ENTITIES: Write a 1-sentence dense 'semantic_summary' explaining this section and extract 'key_entities'.\n"
+        "6. 🟢 DATA CLEANING & ROW GROUPING (CRITICAL): Extract text into 'normalized_text'. If a table has a main parent row followed by sub-rows, you MUST physically inject the parent name into every single sub-row (e.g., '[Parent Name] | Sub-row | Value'). Do this universally for all grouped data so context is never lost when sliced.\n"
+        "7. 🟢 HANDOFF STATE: If a table, list, or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
         f"- 🟢 MACHINE HANDOFF NOTES: {state.handoff_notes or 'No active tables or context carried over.'}\n\n"
         "OUTPUT EXACT JSON ONLY MATCHING THIS EXACT STRUCTURE (Do not use Markdown formatting):\n"
-        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
+        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"], \"table_headers\": \"...\"}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
@@ -182,10 +184,12 @@ def build_and_save_navigation_map(
 
         # Match strategy hint by title or default to preserve_tables for tables
         matched_hint = chunk_hint_map.get(item.title.strip().lower(), {})
-        if not matched_hint and item.content_type == "master_scheme_table":
-            matched_hint = {"preserve_tables": True, "preserve_lists": True, "strategy": "row_preserving"}
+        if not matched_hint and item.content_type in ["master_scheme_table", "data_table"]:
+            matched_hint = {"preserve_tables": True, "preserve_lists": True, "strategy": "row_preserving", "table_headers": ""}
             
         matched_hint["normalized_text"] = item.normalized_text
+        # 🟢 SECURE THE EXTRACTED HEADERS IN THE PAYLOAD
+        matched_hint["table_headers"] = chunk_hint_map.get(item.title.strip().lower(), {}).get("table_headers", "")
 
         db_section = DocumentSection(
             document_id=document_id, 
