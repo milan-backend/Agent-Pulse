@@ -10,32 +10,32 @@ from google import genai
 from app.models.new_arch import DocumentSection
 
 # =====================================================================
-# 1. Pydantic Schemas
+# 1. Pydantic Schemas (Crash-Proof with Defaults)
 # =====================================================================
 class HierarchyItem(BaseModel):
-    title: str = Field(description="Formal section or subsection title.")
-    type: str = Field(description="'container', 'table_section', 'policy', 'institution_grant', 'notes'.")
-    parent: Optional[str] = Field(default=None, description="Exact parent title, or null for root.")
-    start_page: int
-    end_page: int
+    title: str = Field(default="Untitled Section", description="Formal section title.")
+    type: str = Field(default="narrative_paragraph", description="'container', 'table_section', 'institution', etc.")
+    parent: Optional[str] = Field(default=None, description="Exact parent title, or null.")
+    start_page: int = Field(default=1)
+    end_page: int = Field(default=1)
     content_type: str = Field(default="master_scheme_table")
-    semantic_summary: str = Field(description="1-sentence dense summary of specific contents.")
-    key_entities: List[str] = Field(default=[])
-    normalized_text: str = Field(default="", description="The text for this specific subsection, with table rows intact.")
+    semantic_summary: str = Field(default="No summary provided.", description="1-sentence dense summary of contents.")
+    key_entities: List[str] = Field(default_factory=list)
+    normalized_text: str = Field(default="", description="The fully cleaned text for this section.")
 
 class ChunkSuggestion(BaseModel):
-    section: str
-    strategy: str = "row_preserving"
-    reason: str = "Table structure"
-    preserve_tables: bool = True
-    preserve_lists: bool = True
+    section: str = Field(default="Untitled Section")
+    strategy: str = Field(default="row_preserving")
+    reason: str = Field(default="Table extraction")
+    preserve_tables: bool = Field(default=True)
+    preserve_lists: bool = Field(default=True)
     split_triggers: List[str] = Field(default_factory=list)
 
 class NavigationBatchResponse(BaseModel):
-    hierarchy: List[HierarchyItem] = []
-    chunk_suggestions: List[ChunkSuggestion] = []
-    confidence: float = 1.0
-    notes: str = ""
+    hierarchy: List[HierarchyItem] = Field(default_factory=list)
+    chunk_suggestions: List[ChunkSuggestion] = Field(default_factory=list)
+    confidence: float = Field(default=1.0)
+    notes: str = Field(default="")
 
 # =====================================================================
 # 2. State "Baton" Object
@@ -48,7 +48,7 @@ class ActiveState:
         self.last_page: int = 0
 
 # =====================================================================
-# 3. AI Execution Call (Optimized with Structured Outputs)
+# 3. AI Execution Call 
 # =====================================================================
 def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationBatchResponse:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -67,7 +67,8 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "5. Extract 'key_entities' (e.g., 'IIT', 'HEFA', 'NIT', 'UGC', specific scheme codes).\n"
         "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n\n"
         f"PREVIOUS BATCH STATE:\n"
-        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}"
+        f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n\n"
+        "OUTPUT EXACT JSON ONLY. DO NOT output markdown blocks."
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
@@ -81,21 +82,27 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 config={
                     "system_instruction": system_instruction,
                     "response_mime_type": "application/json",
-                    "response_schema": NavigationBatchResponse, # 🟢 THE MAGIC FIX: Forces perfect JSON compliance
                     "temperature": 0.0
                 }
             )
 
-            if hasattr(response, "usage_metadata") and response.usage_metadata:
-                meta = response.usage_metadata
-                print(f"📊 [NAVIGATION AI TOKEN USAGE]")
-                print(f"   - Prompt Tokens     : {getattr(meta, 'prompt_token_count', 0)}")
-                print(f"   - Completion Tokens : {getattr(meta, 'candidates_token_count', 0)}")
-                print(f"   - Total Tokens      : {getattr(meta, 'total_token_count', 0)}")
-
-            # Because we used response_schema, response.text is guaranteed to be perfect JSON
-            parsed_data = json.loads(response.text)
+            raw_text = response.text.strip()
             
+            # Slice out the JSON object securely
+            start_idx = raw_text.find('{')
+            end_idx = raw_text.rfind('}')
+            
+            if start_idx != -1 and end_idx != -1:
+                raw_json_str = raw_text[start_idx:end_idx + 1]
+            else:
+                raw_json_str = raw_text
+                
+            parsed_data = json.loads(raw_json_str)
+            
+            # Recover if AI returned a raw list instead of a dict
+            if isinstance(parsed_data, list):
+                parsed_data = {"hierarchy": parsed_data}
+                
             return NavigationBatchResponse(**parsed_data)
 
         except Exception as e:
@@ -105,7 +112,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
                 raise e
 
 # =====================================================================
-# 4. Master Navigation & Stitching Loop
+# 4. Master Navigation & Stitching Loop 
 # =====================================================================
 def build_and_save_navigation_map(
     db: Session,
@@ -126,8 +133,8 @@ def build_and_save_navigation_map(
         try:
             batch_response = run_navigation_batch(batch_text, active_state)
             
+            # Stitcher logic: Strict case-insensitive title matching
             for item in batch_response.hierarchy:
-                # Only stitch if it's genuinely the same continuous leaf section across a page cut
                 if master_hierarchy and master_hierarchy[-1].title.strip().lower() == item.title.strip().lower() and master_hierarchy[-1].parent == item.parent:
                     master_hierarchy[-1].end_page = max(master_hierarchy[-1].end_page, item.end_page)
                     master_hierarchy[-1].normalized_text += "\n" + item.normalized_text
@@ -156,6 +163,8 @@ def build_and_save_navigation_map(
     saved_sections: List[DocumentSection] = []
     path_to_db_id: Dict[str, uuid.UUID] = {}
     title_to_full_path: Dict[str, str] = {}
+
+    print("💾 Saving Universal Stitched Hierarchy & Index Cards to Database...")
 
     for item in master_hierarchy:
         if not item.parent:
