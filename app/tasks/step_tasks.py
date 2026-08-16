@@ -352,6 +352,16 @@ def process_step(self, step_id: str):
                 final_prompt_payload = prompt
                 if context_fragments:
                     combined_context = "\n\n".join(context_fragments)
+
+                    # =====================================================================
+                    # 🟢 3. TRANSPARENCY PRINT: See the final data given to the LLM
+                    # =====================================================================
+                    print(f"\n{'='*60}")
+                    print(f"🎯 [TRANSPARENCY] FINAL CONTEXT PASSED TO LLM")
+                    for idx, frag in enumerate(context_fragments):
+                        print(f"--- Chunk {idx + 1} ---\n{frag[:500]}... [Truncated for preview]\n")
+                    print(f"{'='*60}\n")
+                    # =====================================================================
                     
                     cleaned_context = re.sub(r'##?\s*\[SYSTEM INSTRUCTION.*?\][^\n]*', '', combined_context, flags=re.IGNORECASE)
                     cleaned_context = re.sub(r'##?\s*Official AgentPulse AI Assistant Instructions.*?(?=#|\Z)', '', cleaned_context, flags=re.DOTALL | re.IGNORECASE)

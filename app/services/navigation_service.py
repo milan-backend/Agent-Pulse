@@ -184,6 +184,7 @@ def build_and_save_navigation_map(
         title_to_full_path[item.title] = full_path
 
         # Match strategy hint by title or default to preserve_tables for tables
+        # Match strategy hint by title or default to preserve_tables for tables
         matched_hint = chunk_hint_map.get(item.title.strip().lower(), {})
         if not matched_hint and item.content_type in ["master_scheme_table", "data_table"]:
             matched_hint = {"preserve_tables": True, "preserve_lists": True, "strategy": "row_preserving", "table_headers": ""}
@@ -191,6 +192,17 @@ def build_and_save_navigation_map(
         matched_hint["normalized_text"] = item.normalized_text
         # 🟢 SECURE THE EXTRACTED HEADERS IN THE PAYLOAD
         matched_hint["table_headers"] = chunk_hint_map.get(item.title.strip().lower(), {}).get("table_headers", "")
+
+        # =====================================================================
+        # 🟢 1. TRANSPARENCY PRINT: See the exact Table Map & Chunk Strategy
+        # =====================================================================
+        if item.content_type in ["data_table", "master_scheme_table"] or "preserve_tables" in str(matched_hint):
+            print(f"\n{'='*60}")
+            print(f"🛠️ [TRANSPARENCY] NAVIGATION AI BUILT TABLE: {item.title}")
+            print(f"📊 CHUNKING STRATEGY ASSIGNED: {json.dumps(matched_hint, indent=2)}")
+            print(f"📄 NORMALIZED TEXT (Markdown):\n{item.normalized_text}")
+            print(f"{'='*60}\n")
+        # =====================================================================
 
         db_section = DocumentSection(
             document_id=document_id, 

@@ -124,6 +124,15 @@ def execute_smart_routing(
         f"{json.dumps(index_cards, indent=2)}"
     )
 
+    # =====================================================================
+    # 🟢 2. TRANSPARENCY PRINT: See the exact Catalog the Router reads
+    # =====================================================================
+    print(f"\n{'='*60}")
+    print("🧠 [TRANSPARENCY] SMART ROUTER PROMPT (What the Router sees)")
+    print(json.dumps(index_cards, indent=2))
+    print(f"{'='*60}\n")
+    # =====================================================================
+
     print(f"🧠 Routing Query through Smart Navigation AI (Scanning {len(index_cards)} Filtered Index Cards)...")
     
     response = client.models.generate_content(
