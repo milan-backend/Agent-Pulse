@@ -143,37 +143,12 @@ def process_document_embedding(document_id: str):
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
             # 4. Process Sections (Extraction + Chunking)
+           # 4. Process Sections (Extraction + Chunking)
             for section in saved_sections:
                 
-                
                 # ==========================================================
-                # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
+                # 🟢 1. EXTRACT TEXT FIRST (So we can feed a preview to ChromaDB)
                 # ==========================================================
-                if section.semantic_summary and section.semantic_summary.strip():
-                    try:
-                        # 🟢 THE FIX: Glue the extracted entities to the summary so they are searchable!
-                        entities_str = ", ".join(section.key_entities) if section.key_entities else ""
-                        dense_search_card = f"{section.semantic_summary} Keywords: {entities_str}"
-                        
-                        summary_vector_resp = ai_client.models.embed_content(
-                            model="models/gemini-embedding-001", 
-                            contents=dense_search_card  # Embed the dense card, not just the summary
-                        )
-                        nav_collection.add(
-                            ids=[str(section.id)], # Map directly to the DocumentSection UUID
-                            embeddings=[summary_vector_resp.embeddings[0].values],
-                            documents=[dense_search_card], # Save the dense card
-                            metadatas=[{
-                                "workspace_id": str(doc.workspace_id),
-                                "document_id": str(doc.id)
-                            }]
-                        )
-                    except Exception as e:
-                        print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
-                # ==========================================================
-                # ==========================================================
-                
-                # 🟢 NEW: Pull the AI's strategy and cleaned text
                 hint = section.chunking_strategy_hint or {}
                 cleaned_text = hint.get("normalized_text")
                 
@@ -188,6 +163,33 @@ def process_document_embedding(document_id: str):
                             
                 if not section_text.strip(): 
                     continue
+
+                # ==========================================================
+                # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
+                # ==========================================================
+                if section.semantic_summary and section.semantic_summary.strip():
+                    try:
+                        entities_str = ", ".join(section.key_entities) if section.key_entities else ""
+                        
+                        # 🟢 THE X-RAY FIX: Inject the Title and Data Snippet so Chroma never misses it!
+                        dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:500]}"
+                        
+                        summary_vector_resp = ai_client.models.embed_content(
+                            model="models/gemini-embedding-001", 
+                            contents=dense_search_card  # Embed the dense card!
+                        )
+                        nav_collection.add(
+                            ids=[str(section.id)],
+                            embeddings=[summary_vector_resp.embeddings[0].values],
+                            documents=[dense_search_card], 
+                            metadatas=[{
+                                "workspace_id": str(doc.workspace_id),
+                                "document_id": str(doc.id)
+                            }]
+                        )
+                    except Exception as e:
+                        print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
+                # ==========================================================
                 
                 # B. Section-Bound Chunking
                 section_chunks = chunk_engine.execute_section_chunking(
