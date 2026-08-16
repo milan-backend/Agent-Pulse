@@ -107,7 +107,7 @@ def process_document_embedding(document_id: str):
             
             # Use the parser to get both the raw text (with OCR) and the batches
             pages_dict = extract_raw_pages(temp_pdf_path)
-            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=4)
+            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=1)
 
             if not pdf_batches:
                 raise ValueError("Zero human-readable text contents extracted.")
@@ -145,19 +145,24 @@ def process_document_embedding(document_id: str):
             # 4. Process Sections (Extraction + Chunking)
             for section in saved_sections:
                 
+                
                 # ==========================================================
                 # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
                 # ==========================================================
                 if section.semantic_summary and section.semantic_summary.strip():
                     try:
+                        # 🟢 THE FIX: Glue the extracted entities to the summary so they are searchable!
+                        entities_str = ", ".join(section.key_entities) if section.key_entities else ""
+                        dense_search_card = f"{section.semantic_summary} Keywords: {entities_str}"
+                        
                         summary_vector_resp = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
-                            contents=section.semantic_summary
+                            contents=dense_search_card  # Embed the dense card, not just the summary
                         )
                         nav_collection.add(
                             ids=[str(section.id)], # Map directly to the DocumentSection UUID
                             embeddings=[summary_vector_resp.embeddings[0].values],
-                            documents=[section.semantic_summary],
+                            documents=[dense_search_card], # Save the dense card
                             metadatas=[{
                                 "workspace_id": str(doc.workspace_id),
                                 "document_id": str(doc.id)
@@ -165,6 +170,7 @@ def process_document_embedding(document_id: str):
                         )
                     except Exception as e:
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
+                # ==========================================================
                 # ==========================================================
                 
                 # 🟢 NEW: Pull the AI's strategy and cleaned text
