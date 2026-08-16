@@ -21,8 +21,9 @@ def extract_raw_pages(pdf_path: str) -> Dict[int, str]:
         # 1. Attempt standard text extraction (Fastest)
         raw_text = page.get_text("text")
         
-        # Clean up excessive newlines/spaces to save tokens
-        clean_text = " ".join(raw_text.split())
+        # 🟢 THE FIX: Preserve newlines so tables keep their shape!
+        # This removes empty lines but keeps actual line breaks intact.
+        clean_text = "\n".join([line.strip() for line in raw_text.splitlines() if line.strip()])
         
         # 2. 🟢 OCR FALLBACK: If the page has no readable text layer (e.g., scanned image)
         if not clean_text.strip():
@@ -33,8 +34,10 @@ def extract_raw_pages(pdf_path: str) -> Dict[int, str]:
                 img = Image.open(io.BytesIO(pix.tobytes("png")))
                 
                 # Extract text using Tesseract
+                # Extract text using Tesseract
                 ocr_text = pytesseract.image_to_string(img)
-                clean_text = " ".join(ocr_text.split())
+                # 🟢 THE FIX FOR OCR:
+                clean_text = "\n".join([line.strip() for line in ocr_text.splitlines() if line.strip()])
             except Exception as e:
                 print(f"⚠️ OCR failed on Page {page_num + 1}: {e}")
                 clean_text = ""
