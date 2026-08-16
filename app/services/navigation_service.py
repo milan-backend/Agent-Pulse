@@ -68,7 +68,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "3. 🟢 HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field of the chunk_suggestion (e.g., 'Category | 2024 Actual | 2025 Budget'). If there is no table, leave it blank.\n"
         "4. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
         "5. SUMMARY & ENTITIES: Write a 1-sentence dense 'semantic_summary' explaining this section and extract 'key_entities'.\n"
-        "6. 🟢 DATA CLEANING & ROW GROUPING (CRITICAL): Extract text into 'normalized_text'. If a table has a main parent row followed by sub-rows, you MUST physically inject the parent name into every single sub-row (e.g., '[Parent Name] | Sub-row | Value'). Do this universally for all grouped data so context is never lost when sliced.\n"
+        "6. 🟢 DATA CLEANING & ROW GROUPING (CRITICAL): Extract text into 'normalized_text'. If a table has a main parent row followed by sub-rows, you MUST physically inject the parent name into every single sub-row (e.g., '[Parent Name] | Sub-row | Value'). USE ESCAPED NEWLINES (\\n) inside the JSON string, never raw newlines.\n"
         "7. 🟢 HANDOFF STATE: If a table, list, or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
@@ -102,7 +102,8 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
             else:
                 raw_json_str = raw_text
                 
-            parsed_data = json.loads(raw_json_str)
+            # 🟢 THE FIX: Add strict=False to tolerate unescaped AI newline
+            parsed_data = json.loads(raw_json_str, strict=False)
             
             if isinstance(parsed_data, list):
                 parsed_data = {"hierarchy": parsed_data}
