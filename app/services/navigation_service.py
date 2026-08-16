@@ -68,7 +68,8 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "6. DATA CLEANING: Extract text into 'normalized_text'. Forward-fill implicit row groupings.\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n\n"
-        "OUTPUT EXACT JSON ONLY. DO NOT output markdown blocks."
+        "OUTPUT EXACT JSON ONLY MATCHING THIS EXACT STRUCTURE (Do not use Markdown formatting):\n"
+        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"]}], \"confidence\": 1.0, \"notes\": \"\"}"
     )
 
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
