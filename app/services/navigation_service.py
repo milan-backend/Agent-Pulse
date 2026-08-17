@@ -31,7 +31,7 @@ class ChunkSuggestion(BaseModel):
     preserve_lists: bool = Field(default=True)
     split_triggers: List[str] = Field(default_factory=list)
     # 🟢 THE NEW HEADER INJECTION FIELD
-    table_headers: str = Field(default="", description="If this section contains a table, extract the exact column headers here separated by a pipe '|'.")
+    table_headers: Optional[str] = Field(default="", description="If this section contains a table, extract the exact column headers here separated by a pipe '|'.")
 
 class NavigationBatchResponse(BaseModel):
     hierarchy: List[HierarchyItem] = Field(default_factory=list)
@@ -69,7 +69,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "3. HEADER EXTRACTION: If the section contains a table, you MUST extract the column headers and place them in the 'table_headers' field. If no table, leave blank.\n"
         "4. MATCHING: Ensure the 'section' string in chunk_suggestions EXACTLY matches the 'title' in hierarchy.\n"
         "5. 🟢 BOUNDED ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract the most important named entities, institutions, acronyms, and proper nouns into 'key_entities' (MAXIMUM 15 ENTITIES). Do NOT extract raw numbers, financial amounts, or math symbols as entities.\n"
-        "6. MARKDOWN TABLES (CRITICAL): You MUST format ANY financial data or rows of numbers as a strict, valid Markdown table using pipe characters (|) and a header separator row (e.g., |---|---|). Even if it looks messy, CONVERT IT INTO A MARKDOWN TABLE. USE ESCAPED NEWLINES (\\n) inside the JSON string.\n"
+        "6. 🟢 UNIVERSAL MARKDOWN & MERGED CELLS (CRITICAL): Format grids as strict Markdown tables. Markdown does NOT support merged cells. If a cell is blank because it implicitly inherits the value from the row above it (e.g., a Date, Category, or Department that spans multiple rows), you MUST explicitly copy that value and fill it into the blank cell. Do not leave cells empty if they logically belong to a parent category.\n"
         "7. HANDOFF STATE: If a table or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
