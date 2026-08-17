@@ -78,6 +78,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"], \"table_headers\": \"...\"}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
     )
 
+
     prompt = f"RAW PDF BATCH:\n\n{raw_text_batch}"
 
     max_retries = 3
