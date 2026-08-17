@@ -85,7 +85,7 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model="models/gemini-2.5-flash", 
+                model="gemini-3.1-flash-lite", 
                 contents=prompt,
                 config={
                     "system_instruction": system_instruction,
