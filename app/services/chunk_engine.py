@@ -26,19 +26,35 @@ class ChunkEngine:
 
         # 🟢 SMART SPLITTING: Chop massive tables row-by-row and inject headers!
         if preserve_tables:
-            table_headers = strategy_hint.get("table_headers", "").strip()
-            header_prefix = f"[COLUMN HEADERS: {table_headers}]\n" if table_headers else ""
+            table_headers = strategy_hint.get("table_headers", "")
+            if table_headers is not None:
+                table_headers = table_headers.strip()
+            else:
+                table_headers = ""
+                
+            section_title = strategy_hint.get("section", "Unknown Table").strip()
+            
+            if table_headers:
+                header_prefix = f"[TABLE CONTEXT: {section_title}]\n[COLUMN HEADERS: {table_headers}]\n"
+            else:
+                header_prefix = f"[TABLE CONTEXT: {section_title}]\n"
             
             lines = section_text.split('\n')
             current_chunk_lines = []
             current_word_count = 0
             
-            for line in lines:
+            print(f"\n🪚 [X-RAY CHUNKER] Processing Table: '{section_title}' ({len(lines)} Total Rows)")
+            
+            for line_idx, line in enumerate(lines):
                 current_chunk_lines.append(line)
-                current_word_count += len(line.split())
+                words_in_line = len(line.split())
+                current_word_count += words_in_line
+                
+                print(f"   -> Read Row {line_idx + 1}: +{words_in_line} words (Running Total: {current_word_count}/{self.chunk_size})")
                 
                 # If this chunk hits our limit, save it and start a new one
                 if current_word_count >= self.chunk_size:
+                    print(f"   🔪 Limit reached! Cutting chunk {sequence}. Injecting Headers & Overlapping last 3 rows...")
                     final_text = header_prefix + "\n".join(current_chunk_lines)
                     self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
                     sequence += 1
@@ -49,6 +65,7 @@ class ChunkEngine:
             
             # Catch the last remaining piece of the table
             if len(current_chunk_lines) > 3 or (current_chunk_lines and sequence == 1):
+                print(f"   🏁 Finalizing last piece of table into chunk {sequence}.")
                 final_text = header_prefix + "\n".join(current_chunk_lines)
                 self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
 

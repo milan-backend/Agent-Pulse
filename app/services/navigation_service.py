@@ -140,6 +140,15 @@ def build_and_save_navigation_map(
         try:
             batch_response = run_navigation_batch(batch_text, active_state)
             
+            # =====================================================================
+            # 🟢 X-RAY MODE: Print the Raw JSON Hierarchy & Handoff Notes per Batch
+            # =====================================================================
+            print(f"\n{'='*80}")
+            print(f"🧠 [X-RAY] RAW BATCH OUTPUT (BATCH {idx + 1}):")
+            print(f"📝 Handoff Notes Received: {active_state.handoff_notes or 'None'}")
+            print(json.dumps(batch_response.model_dump(), indent=2))
+            print(f"{'='*80}\n")
+            # =====================================================================
             # Stitcher logic: Strict case-insensitive title matching
             for item in batch_response.hierarchy:
                 if master_hierarchy and master_hierarchy[-1].title.strip().lower() == item.title.strip().lower() and master_hierarchy[-1].parent == item.parent:
