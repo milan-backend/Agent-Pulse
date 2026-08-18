@@ -34,19 +34,18 @@ class RetrievalService:
         self, 
         target_chroma_ids: List[str], 
         workspace_id: uuid.UUID,
-        include_neighbor_chunks: bool = False,
-        user_prompt: str = None, 
-        top_k: int = 10 
+        include_neighbor_chunks: bool = False
     ) -> List[Dict[str, Any]]:
         """
         Direct ID Retrieval Engine (Section Overwrite):
         1. Fully trusts the Smart Router's authorized Vector IDs.
-        2. Bypasses semantic re-ranking to prevent Shattered Tables.
+        2. Unconditionally fetches every requested chunk (No top_k limits).
+        3. Bypasses semantic re-ranking to prevent Shattered Tables.
         """
         if not target_chroma_ids:
             return []
 
-        # 🟢 THE FIX: Unconditional Retrieval. No more semantic filtering!
+        # 🟢 THE FIX: Unconditional Retrieval. Fetch all requested IDs!
         try:
             results = self.collection.get(
                 ids=target_chroma_ids,

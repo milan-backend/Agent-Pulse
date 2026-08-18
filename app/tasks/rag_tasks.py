@@ -22,6 +22,12 @@ from app.services.pdf_parser import process_pdf_for_navigation, extract_raw_page
 from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
 
+# 🟢 NEW ARCHITECTURE IMPORTS
+from app.services.navigation_service import build_and_save_navigation_map
+from app.services.pdf_parser import extract_smart_pages
+from app.services.chunk_engine import ChunkEngine
+from app.models.new_arch import DocumentChunk
+
 # Initialize Celery app matching your system's setup instance configuration
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
 if not CELERY_BROKER:
@@ -41,27 +47,6 @@ def get_chroma_client():
         host=CHROMA_HOST,
         headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if CHROMA_TOKEN else None
     )
-
-
-def chunk_text_by_page(text: str, page_num: int, source_filename: str, chunk_size: int = 250, chunk_overlap: int = 40) -> list[dict]:
-    """Splits plain text strings extracted from a specific page partition into overlapping paragraph blocks."""
-    if not text or not str(text).strip():
-        return []
-    words = text.split()
-    chunks_with_meta = []
-    stride = chunk_size - chunk_overlap
-    if stride <= 0:
-        stride = chunk_size
-    for i in range(0, len(words), stride):
-        chunk_text_raw = " ".join(words[i:i + chunk_size])
-        if chunk_text_raw.strip():
-            chunks_with_meta.append({
-                "text": chunk_text_raw,
-                "page_number": page_num,
-                "source_file": source_filename
-            })
-    return chunks_with_meta
-
 
 @celery_app.task(name="app.tasks.rag_tasks.process_document_embedding")
 def process_document_embedding(document_id: str):
@@ -92,8 +77,6 @@ def process_document_embedding(document_id: str):
             workspace_id=doc.workspace_id
         )
         
-        
-        
         # =====================================================================
         # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE
         # =====================================================================
@@ -105,19 +88,22 @@ def process_document_embedding(document_id: str):
             with open(temp_pdf_path, "wb") as f:
                 f.write(raw_file_bytes)
             
-            # Use the parser to get both the raw text (with OCR) and the batches
-            pages_dict = extract_raw_pages(temp_pdf_path)
-            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=4)
+            # 🟢 2. THE FIX: Use the new Cost-Routing Smart Parser
+            smart_pages = extract_smart_pages(temp_pdf_path)
+            
+            # Create a fallback dictionary for the chunking engine (text pages only)
+            pages_dict = {p["page_num"]: p["content"] for p in smart_pages if p["type"] == "plain_text"}
 
-            if not pdf_batches:
-                raise ValueError("Zero human-readable text contents extracted.")
+            if not smart_pages:
+                raise ValueError("Zero content extracted from document.")
 
+            # 🟢 3. Pass the Smart Payloads (Images + Text) to the Dual-Engine AI
             saved_sections, chunk_suggestions = build_and_save_navigation_map(
-            db=db, 
-            document_id=doc.id, 
-            workspace_id=doc.workspace_id,
-            agent_id=doc.agent_id, 
-            pdf_batches=pdf_batches
+                db=db, 
+                document_id=doc.id, 
+                workspace_id=doc.workspace_id,
+                agent_id=doc.agent_id, 
+                smart_pages=smart_pages  # 🟢 NEW: Passes the list of dicts directly
             )
             
             # 3. Setup AI & Vector DB

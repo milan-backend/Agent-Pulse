@@ -3,87 +3,96 @@ import pdfplumber
 import logging
 import io
 from PIL import Image
-import pytesseract
-from typing import Dict, List
+from typing import Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
 # =====================================================================
-# 1. RAW TEXT EXTRACTION (WITH OCR FALLBACK & VISUAL LAYOUT)
+# 1. SMART PAYLOAD EXTRACTION (COST-ROUTING ENGINE)
 # =====================================================================
-def extract_raw_pages(pdf_path: str) -> Dict[int, str]:
-    """Extracts raw text preserving EXACT visual layout for tables."""
-    pages_dict = {}
+def extract_smart_pages(pdf_path: str) -> List[Dict[str, Any]]:
+    """
+    Scans a PDF and routes pages to either TEXT or VISION payloads 
+    based on the structural presence of tables.
+    """
+    smart_pages = []
     
-    # 1. 🟢 THE FIX: Use pdfplumber to preserve the 2D visual grid
+    print(f"📄 Analyzing document structure for {pdf_path}...")
+    
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page_num, page in enumerate(pdf.pages):
-                # layout=True forces it to keep the physical spaces between columns
-                raw_text = page.extract_text(layout=True)
+        # We open the PDF with both libraries simultaneously: 
+        # pdfplumber for structural math, fitz for high-res screenshots
+        with pdfplumber.open(pdf_path) as pdf_struct:
+            doc_visual = fitz.open(pdf_path)
+            
+            for page_num, struct_page in enumerate(pdf_struct.pages):
+                real_page_num = page_num + 1
                 
-                if raw_text and raw_text.strip():
-                    # We do NOT use .strip() on the lines anymore, to protect the column spaces!
-                    pages_dict[page_num + 1] = raw_text
+                # 1. 🟢 THE TRIGGER: Does this page have a grid/table?
+                tables = struct_page.find_tables()
+                
+                if tables:
+                    # 📸 TABLE DETECTED: Take a high-res screenshot for the Vision AI
+                    print(f"   -> Page {real_page_num}: 📊 Table detected! Routing to Vision AI.")
+                    visual_page = doc_visual[page_num]
+                    
+                    # DPI 200 ensures the Vision AI can perfectly read tiny numbers
+                    pix = visual_page.get_pixmap(dpi=200) 
+                    img_bytes = pix.tobytes("png")
+                    
+                    smart_pages.append({
+                        "page_num": real_page_num,
+                        "type": "table_image",
+                        "content": img_bytes
+                    })
+                else:
+                    # 📝 NO TABLE: Extract raw text for the faster/cheaper Text AI
+                    print(f"   -> Page {real_page_num}: 📝 Plain text. Routing to Text AI.")
+                    raw_text = struct_page.extract_text(layout=True)
+                    
+                    if raw_text and raw_text.strip():
+                        smart_pages.append({
+                            "page_num": real_page_num,
+                            "type": "plain_text",
+                            "content": raw_text
+                        })
+                        
+            doc_visual.close()
+            
     except Exception as e:
-        print(f"⚠️ pdfplumber failed, falling back to PyMuPDF: {e}")
-    
-    # 2. OCR FALLBACK: If pdfplumber found nothing (e.g., scanned images)
-    if not pages_dict:
-        doc = fitz.open(pdf_path)
-        for page_num in range(doc.page_count):
-            page = doc[page_num]
-            print(f"🔄 No text layer detected on Page {page_num + 1}. Running PyTesseract OCR...")
-            try:
-                pix = page.get_pixmap(dpi=150)
-                img = Image.open(io.BytesIO(pix.tobytes("png")))
-                ocr_text = pytesseract.image_to_string(img)
-                
-                if ocr_text.strip():
-                    pages_dict[page_num + 1] = ocr_text
-            except Exception as e:
-                print(f"⚠️ OCR failed on Page {page_num + 1}: {e}")
-        doc.close()
+        print(f"❌ Smart extraction failed: {e}")
         
-    return pages_dict
+    return smart_pages
 
 # =====================================================================
-# 2. BATCH BUILDER
+# 2. BATCH BUILDER (WITH MEMORY SUPPORT)
 # =====================================================================
-def build_pdf_batches(pages_dict: Dict[int, str], pages_per_batch: int = 15) -> List[str]:
+def build_smart_batches(smart_pages: List[Dict[str, Any]], pages_per_batch: int = 1) -> List[List[Dict[str, Any]]]:
     """
-    Groups raw pages into token-efficient batches formatted for the Navigation AI.
-    Format:
-    --- PAGE 1 ---
-    text...
-    --- PAGE 2 ---
+    Groups the smart payloads into batches. 
+    We keep it at 1 page per batch to give the AI maximum focus, 
+    relying on the Continuous Memory Ledger to link them together.
     """
     batches = []
     current_batch = []
-    current_count = 0
     
-    for page_num, text in sorted(pages_dict.items()):
-        current_batch.append(f"--- PAGE {page_num} ---\n{text}\n")
-        current_count += 1
-        
-        if current_count >= pages_per_batch:
-            batches.append("\n".join(current_batch))
+    for page in smart_pages:
+        current_batch.append(page)
+        if len(current_batch) >= pages_per_batch:
+            batches.append(current_batch)
             current_batch = []
-            current_count = 0
             
-    # Append any remaining pages
     if current_batch:
-        batches.append("\n".join(current_batch))
+        batches.append(current_batch)
         
     return batches
 
 # =====================================================================
 # 3. MAIN PROCESSOR
 # =====================================================================
-def process_pdf_for_navigation(pdf_path: str, batch_size: int = 15) -> List[str]:
-    """Main entry point: Converts a PDF into AI-ready raw text batches."""
-    print(f"📄 Extracting raw text from {pdf_path}...")
-    pages = extract_raw_pages(pdf_path)
-    batches = build_pdf_batches(pages, batch_size)
-    print(f"📦 Created {len(batches)} batches for Navigation AI.")
+def process_pdf_for_navigation(pdf_path: str) -> List[List[Dict[str, Any]]]:
+    """Main entry point: Converts a PDF into AI-ready Smart Payloads."""
+    pages = extract_smart_pages(pdf_path)
+    batches = build_smart_batches(pages, pages_per_batch=1)
+    print(f"📦 Created {len(batches)} highly-focused batches for the Navigation Engine.")
     return batches

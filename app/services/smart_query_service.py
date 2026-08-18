@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import time
 import chromadb
 from typing import List, Dict
 from pydantic import BaseModel, Field
@@ -98,7 +99,6 @@ def execute_smart_routing(
     
     index_cards = []
     for sec in available_sections:
-        # 🟢 Grab the first 500 characters of the table the Navigation AI built
         hint = sec.chunking_strategy_hint or {}
         snippet = hint.get("normalized_text", "")[:500]
         
@@ -108,8 +108,8 @@ def execute_smart_routing(
             "title": sec.title,
             "type": sec.content_type,
             "summary": sec.semantic_summary,
-            "entities": sec.key_entities,    # 🟢 Give the Router the keywords!
-            "data_preview": snippet          # 🟢 Give the Router the table preview!
+            "entities": sec.key_entities,   
+            "data_preview": snippet          
         })
 
     system_instruction = (
@@ -131,26 +131,40 @@ def execute_smart_routing(
         f"{json.dumps(index_cards, indent=2)}"
     )
 
-    # =====================================================================
-    # 🟢 2. TRANSPARENCY PRINT: See the exact Catalog the Router reads
-    # =====================================================================
     print(f"\n{'='*60}")
     print("🧠 [TRANSPARENCY] SMART ROUTER PROMPT (What the Router sees)")
     print(json.dumps(index_cards, indent=2))
     print(f"{'='*60}\n")
-    # =====================================================================
 
     print(f"🧠 Routing Query through Smart Navigation AI (Scanning {len(index_cards)} Filtered Index Cards)...")
     
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite", 
-        contents=prompt,
-        config={
-            "system_instruction": system_instruction,
-            "response_mime_type": "application/json",
-            "temperature": 0.0
-        }
-    )
+    # 🟢 THE FIX: 3-Attempt Retry Loop for Google API 503/429 Errors
+    max_retries = 3
+    response = None
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model="gemini-3.1-flash-lite", 
+                contents=prompt,
+                config={
+                    "system_instruction": system_instruction,
+                    "response_mime_type": "application/json",
+                    "temperature": 0.0
+                }
+            )
+            break  # Break out if successful
+        except Exception as e:
+            error_str = str(e)
+            if ("503" in error_str or "429" in error_str) and attempt < max_retries - 1:
+                sleep_time = (attempt + 1) * 3
+                print(f"⚠️ Google API busy ({error_str[:30]}). Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
+            else:
+                print(f"❌ Smart Router LLM call permanently failed: {e}")
+                return []
+
+    if not response:
+        return []
 
     if hasattr(response, "usage_metadata") and response.usage_metadata:
         meta = response.usage_metadata
@@ -178,7 +192,6 @@ def execute_smart_routing(
     final_vector_ids = []
 
     if decision.retrieval_mode == "full_section":
-        # 💥 SHOTGUN MODE: Grab everything in the section directly from Postgres
         target_chunks = db.query(DocumentChunk).filter(
             DocumentChunk.section_id.in_(decision.target_section_ids),
             DocumentChunk.workspace_id == workspace_id
@@ -187,7 +200,6 @@ def execute_smart_routing(
         final_vector_ids = [chunk.chroma_vector_id for chunk in target_chunks]
         
     else:
-        # 🎯 SNIPER MODE: Use ChromaDB to find the exact Top 3 chunks
         chunk_collection = chroma_client.get_or_create_collection(
             name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
@@ -203,7 +215,7 @@ def execute_smart_routing(
         try:
             chunk_results = chunk_collection.query(
                 query_embeddings=[query_vector],
-                n_results=3,  # 🟢 LIMIT TO TOP 3 EXACT MATCHES
+                n_results=3,  
                 where=where_chunk_filter
             )
             final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []

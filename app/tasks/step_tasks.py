@@ -277,13 +277,15 @@ def process_step(self, step_id: str):
                 if target_vector_ids:
                     retrieval_service = RetrievalService()
 
+                    # 🟢 THE FIX: Remove top_k and user_prompt, let the Smart Router dictate the scope!
                     reconstructed_chunks = retrieval_service.execute_direct_id_retrieval(
                         target_chroma_ids=target_vector_ids,
                         workspace_id=uuid.UUID(current_workspace_id),
-                        include_neighbor_chunks=True,
-                        user_prompt=prompt,  # 🟢 Pass the prompt for semantic re-ranking
-                        top_k=3              # 🟢 Hard limit to 3 chunks to prevent token bloat
+                        include_neighbor_chunks=True
                     )
+                    
+                    # 🟢 THE FIX: Sort by sequence number so split paragraphs reassemble perfectly in order
+                    reconstructed_chunks = sorted(reconstructed_chunks, key=lambda x: x.get("sequence_number", 0))
 
                     rag_telemetry_node["selected_vectors_count"] = len(reconstructed_chunks)
 

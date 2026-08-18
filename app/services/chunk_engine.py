@@ -24,53 +24,65 @@ class ChunkEngine:
         strategy_hint = strategy_hint or {}
         preserve_tables = strategy_hint.get("preserve_tables", False)
 
-        # 🟢 SMART SPLITTING: Chop massive tables row-by-row and inject headers!
+        # =====================================================================
+        # 📊 1. ATOMIC SEMANTIC CHUNKING (For Tables & Grids)
+        # =====================================================================
         if preserve_tables:
             table_headers = strategy_hint.get("table_headers", "")
-            if table_headers is not None:
-                table_headers = table_headers.strip()
-            else:
-                table_headers = ""
-                
+            table_headers = table_headers.strip() if table_headers else ""
             section_title = strategy_hint.get("section", "Unknown Table").strip()
             
+            # Always staple the headers to the top of EVERY chunk so context is never lost
+            header_prefix = f"[TABLE CONTEXT: {section_title}]\n"
             if table_headers:
-                header_prefix = f"[TABLE CONTEXT: {section_title}]\n[COLUMN HEADERS: {table_headers}]\n"
-            else:
-                header_prefix = f"[TABLE CONTEXT: {section_title}]\n"
+                header_prefix += f"[COLUMN HEADERS: {table_headers}]\n\n"
             
-            lines = section_text.split('\n')
-            current_chunk_lines = []
+            # 🟢 THE FIX: Split by the Vision AI's invisible marker, NOT by random lines!
+            semantic_blocks = section_text.split("<!-- SEMANTIC_BREAK -->")
+            
+            current_chunk_blocks = []
             current_word_count = 0
             
-            print(f"\n🪚 [X-RAY CHUNKER] Processing Table: '{section_title}' ({len(lines)} Total Rows)")
+            print(f"\n🧠 [X-RAY CHUNKER] Processing Table: '{section_title}' ({len(semantic_blocks)} Semantic Blocks)")
             
-            for line_idx, line in enumerate(lines):
-                current_chunk_lines.append(line)
-                words_in_line = len(line.split())
-                current_word_count += words_in_line
+            for block_idx, block in enumerate(semantic_blocks):
+                block = block.strip()
+                if not block:
+                    continue
+                    
+                words_in_block = len(block.split())
                 
-                print(f"   -> Read Row {line_idx + 1}: +{words_in_line} words (Running Total: {current_word_count}/{self.chunk_size})")
-                
-                # If this chunk hits our limit, save it and start a new one
-                if current_word_count >= self.chunk_size:
-                    print(f"   🔪 Limit reached! Cutting chunk {sequence}. Injecting Headers & Overlapping last 3 rows...")
-                    final_text = header_prefix + "\n".join(current_chunk_lines)
+                # 🟢 ATOMIC MATH: Does adding this unbreakable block push us over the limit?
+                if current_word_count + words_in_block > self.chunk_size and current_chunk_blocks:
+                    print(f"   ✂️ Block {block_idx + 1} ({words_in_block} words) exceeds limit. Sealing Chunk {sequence} early at {current_word_count} words.")
+                    
+                    # Seal and save the current chunk exactly as it is
+                    final_text = header_prefix + "\n\n".join(current_chunk_blocks)
                     self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
                     sequence += 1
                     
-                    # Keep the last 3 rows for context overlap
-                    current_chunk_lines = current_chunk_lines[-3:]
-                    current_word_count = sum(len(l.split()) for l in current_chunk_lines)
+                    # Start a fresh chunk with the new block
+                    current_chunk_blocks = [block]
+                    current_word_count = words_in_block
+                else:
+                    # Safe to add to current chunk without breaking the limit
+                    current_chunk_blocks.append(block)
+                    current_word_count += words_in_block
+                    print(f"   -> Added Block {block_idx + 1}: +{words_in_block} words (Running Total: {current_word_count}/{self.chunk_size})")
             
-            # Catch the last remaining piece of the table
-            if len(current_chunk_lines) > 3 or (current_chunk_lines and sequence == 1):
-                print(f"   🏁 Finalizing last piece of table into chunk {sequence}.")
-                final_text = header_prefix + "\n".join(current_chunk_lines)
+            # Catch the final remaining blocks
+            if current_chunk_blocks:
+                print(f"   📦 Finalizing last pieces into chunk {sequence}.")
+                final_text = header_prefix + "\n\n".join(current_chunk_blocks)
                 self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
 
-        # 🔴 NAIVE SPLITTING: Standard stride fallback for regular paragraphs
+        # =====================================================================
+        # 📝 2. NARRATIVE CHUNKING (For Paragraphs)
+        # =====================================================================
         else:
+            # Note: Because this function is called inside a loop for EACH section 
+            # in rag_tasks.py, the "Hard Boundary" rule is automatically enforced! 
+            # A 600-word Introduction will NEVER bleed into the Architecture section.
             words = section_text.split()
             stride = self.chunk_size - self.overlap
             if stride <= 0:
