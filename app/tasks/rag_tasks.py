@@ -18,12 +18,6 @@ from app.core.rag_crypto import decrypt_file_bytes, encrypt_text_string
 
 # 🟢 NEW ARCHITECTURE IMPORTS
 from app.services.navigation_service import build_and_save_navigation_map
-from app.services.pdf_parser import process_pdf_for_navigation, extract_raw_pages, build_pdf_batches
-from app.services.chunk_engine import ChunkEngine
-from app.models.new_arch import DocumentChunk
-
-# 🟢 NEW ARCHITECTURE IMPORTS
-from app.services.navigation_service import build_and_save_navigation_map
 from app.services.pdf_parser import extract_smart_pages
 from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
