@@ -107,7 +107,7 @@ def process_document_embedding(document_id: str):
             
             # Use the parser to get both the raw text (with OCR) and the batches
             pages_dict = extract_raw_pages(temp_pdf_path)
-            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=1)
+            pdf_batches = build_pdf_batches(pages_dict, pages_per_batch=4)
 
             if not pdf_batches:
                 raise ValueError("Zero human-readable text contents extracted.")
