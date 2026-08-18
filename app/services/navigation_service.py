@@ -48,6 +48,7 @@ class ActiveState:
         self.current_type: Optional[str] = None
         self.last_page: int = 0
         self.handoff_notes: str = ""  # 🟢 HOLDS THE PREVIOUS BATCH HEADERS
+        self.trailing_memory: str = "" # 🟢 NEW: The Continuous Memory Ledger
 
 
 # =====================================================================
@@ -71,6 +72,10 @@ def run_navigation_batch(raw_text_batch: str, state: ActiveState) -> NavigationB
         "5. 🟢 BOUNDED ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract the most important named entities, institutions, acronyms, and proper nouns into 'key_entities' (MAXIMUM 15 ENTITIES). Do NOT extract raw numbers, financial amounts, or math symbols as entities.\n"
         "6. 🟢 UNIVERSAL MARKDOWN & MERGED CELLS (CRITICAL): Format grids as strict Markdown tables. Markdown does NOT support merged cells. If a cell is blank because it implicitly inherits the value from the row above it (e.g., a Date, Category, or Department that spans multiple rows), you MUST explicitly copy that value and fill it into the blank cell. Do not leave cells empty if they logically belong to a parent category.\n"
         "7. HANDOFF STATE: If a table or paragraph is cut off at the end of this text batch, write a summary in 'handoff_notes'. You MUST include the exact column headers of any active table so the next batch knows what the numbers mean.\n\n"
+        f"🧠 CONTINUOUS MEMORY LEDGER (CRITICAL):\n"
+        f"You are processing a new batch. The text below is the EXACT MARKDOWN you generated at the very end of the previous batch.\n"
+        f"```markdown\n{state.trailing_memory or 'No previous memory. This is the start of the document.'}\n```\n"
+        f"If the memory shows an incomplete table, you MUST continue generating the rest of the table in this batch using the exact same column structure!\n\n"
         f"PREVIOUS BATCH STATE:\n"
         f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'} | Last Page: {state.last_page}\n"
         f"- MACHINE HANDOFF NOTES: {state.handoff_notes or 'No active tables or context carried over.'}\n\n"
@@ -166,6 +171,13 @@ def build_and_save_navigation_map(
                 active_state.current_parent = last_item.parent
                 active_state.current_type = last_item.type
                 active_state.last_page = last_item.end_page
+
+                # 🟢 PASS THE ROLLING SUMMARY TO THE NEXT BATCH
+            active_state.handoff_notes = batch_response.handoff_notes
+            
+            # 🟢 FORCEFUL MEMORY CAPTURE: Grab the last 400 characters of the stitched Markdown!
+            if master_hierarchy and master_hierarchy[-1].normalized_text:
+                active_state.trailing_memory = master_hierarchy[-1].normalized_text[-400:]
                 
             # 🟢 PASS THE ROLLING SUMMARY TO THE NEXT BATCH
             active_state.handoff_notes = batch_response.handoff_notes
