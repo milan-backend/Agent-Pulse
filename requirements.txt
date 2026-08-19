@@ -22,7 +22,7 @@ chromadb>=0.5.0
 httpx
 requests
 
-google-genai==0.6.0
+google-genai>=2.18.1
 
 grpcio
 protobuf
