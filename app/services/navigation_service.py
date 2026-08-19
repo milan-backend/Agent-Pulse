@@ -62,7 +62,7 @@ def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> Navi
 
     # 🟢 DUAL-ENGINE ROUTING LOGIC
     is_vision = smart_page.get("type") == "table_image"
-    target_model = "models/gemini-2.5-pro" if is_vision else "gemini-3.1-flash-lite"
+    target_model = "models/gemini-3.6-flash" if is_vision else "gemini-3.1-flash-lite"
     
     print(f"   -> 🧠 Activating {target_model} for {smart_page.get('type')} on Page {smart_page.get('page_num')}")
 
