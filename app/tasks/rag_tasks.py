@@ -85,8 +85,8 @@ def process_document_embedding(document_id: str):
             # 🟢 2. THE FIX: Use the new Cost-Routing Smart Parser
             smart_pages = extract_smart_pages(temp_pdf_path)
             
-            # Create a fallback dictionary for the chunking engine (text pages only)
-            pages_dict = {p["page_num"]: p["content"] for p in smart_pages if p["type"] == "plain_text"}
+            # 🟢 UPDATED: Reads directly from content_text in the dual-payload
+            pages_dict = {p["page_num"]: p.get("content_text", "") for p in smart_pages}
 
             if not smart_pages:
                 raise ValueError("Zero content extracted from document.")

@@ -49,9 +49,11 @@ class ActiveState:
         self.handoff_notes: str = ""  
         self.trailing_memory: str = "" 
 
+class TriageResponse(BaseModel):
+    has_table: bool = Field(description="True if the page contains a data table, financial grid, or matrix of numbers.")
 
 # =====================================================================
-# 3. AI Execution Call (DUAL-ENGINE ROUTER WITH SPLIT PROMPTS)
+# 3. AI Execution Call (DYNAMIC CASCADING ROUTER)
 # =====================================================================
 def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> NavigationBatchResponse:
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -60,61 +62,72 @@ def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> Navi
         
     client = genai.Client(api_key=gemini_key)
 
-    # 🟢 DUAL-ENGINE ROUTING LOGIC
-    is_vision = smart_page.get("type") == "table_image"
-    target_model = "models/gemini-3.6-flash" if is_vision else "gemini-3.1-flash-lite"
+    # 🟢 STEP 1: THE INTELLIGENT TRIAGE LAYER (Gemini 3.1 Flash-Lite)
+    triage_model = "models/gemini-3.1-flash-lite"
+    triage_instruction = "Look at this page image. Does it contain any financial budgets, grids, or complex tables with columns of numbers?"
     
-    print(f"   -> 🧠 Activating {target_model} for {smart_page.get('type')} on Page {smart_page.get('page_num')}")
+    triage_contents = [
+        types.Part.from_bytes(data=smart_page["content_image"], mime_type="image/png"),
+        "Does this page have a table?"
+    ]
+    
+    # Ultra-fast, cheap classification call
+    triage_resp = client.models.generate_content(
+        model=triage_model,
+        contents=triage_contents,
+        config={
+            "system_instruction": triage_instruction,
+            "response_mime_type": "application/json",
+            "response_schema": TriageResponse, # 🟢 Forces strict boolean JSON output
+            "temperature": 0.0
+        }
+    )
+    
+    has_table = False
+    try:
+        has_table = json.loads(triage_resp.text).get("has_table", False)
+    except Exception:
+        has_table = True # Fallback to the stronger vision model if parsing fails
+        
+    # 🟢 STEP 2: DYNAMIC EXECUTION
+    target_model = "models/gemini-3.6-flash" if has_table else "models/gemini-3.1-flash-lite"
+    action = "📊 Table Detected" if has_table else "📝 Pure Text Detected"
+    print(f"   -> {action}! Routing Page {smart_page.get('page_num')} to {target_model}")
 
-    # 🟢 SPLIT SYSTEM INSTRUCTIONS BASED ON PAYLOAD TYPE
-    if is_vision:
-        # 📊 INSTRUCTIONS ONLY FOR THE VISION MODEL (TABLES)
+    # 🟢 SPLIT PROMPTS AND PAYLOADS BASED ON ROUTING
+    if has_table:
+        # VISION ROUTE (Uses the image and 3.6 Flash)
         system_instruction = (
             "You are the Vision Table Extraction Engine. Your ONLY job is to perfectly map visual grids and tables into structured data.\n"
             "RULES:\n"
-            "1. UNIVERSAL MARKDOWN & MERGED CELLS: Format grids as strict Markdown tables. Markdown does NOT support merged cells. Explicitly fill in blank merged cells with their parent values.\n"
-            "2. 🟢 ATOMIC SEMANTIC CHUNKING (CRITICAL): Whenever you see a logical semantic grouping end (e.g., all classes for Monday are finished, or a time block ends), you MUST insert the exact text `<!-- SEMANTIC_BREAK -->` on a new line before continuing to the next group.\n"
-            "3. HEADER EXTRACTION: You MUST extract the column headers and place them in the 'table_headers' field.\n"
+            "1. UNIVERSAL MARKDOWN & MERGED CELLS: Format grids as strict Markdown tables. Fill in blank merged cells with their parent values.\n"
+            "2. ATOMIC SEMANTIC CHUNKING (CRITICAL): Insert `<!-- SEMANTIC_BREAK -->` on a new line before continuing to the next group.\n"
+            "3. HEADER EXTRACTION: Extract column headers into the 'table_headers' field.\n"
             "4. TABLE ISOLATION: Set 'content_type' to 'data_table' and 'preserve_tables' to true.\n"
-            "5. HANDOFF STATE: Write a summary in 'handoff_notes'. You MUST include the exact column headers if a table spans off the bottom of the page.\n\n"
+            "5. HANDOFF STATE: Summarize in 'handoff_notes'. Include exact column headers if a table spans off the bottom of the page.\n\n"
             f"🧠 CONTINUOUS MEMORY LEDGER (CRITICAL):\n"
-            f"You are processing a new page. The text below is the EXACT MARKDOWN you generated at the very end of the previous page.\n"
-            f"```markdown\n{state.trailing_memory or 'No previous memory. This is the start of the document.'}\n```\n"
-            f"If the memory shows an incomplete table, you MUST continue generating the rest of the table using the exact same column structure!\n\n"
+            f"```markdown\n{state.handoff_notes or state.trailing_memory or 'No previous memory.'}\n```\n"
         )
-    else:
-        # 📝 INSTRUCTIONS ONLY FOR THE TEXT MODEL (PARAGRAPHS)
-        system_instruction = (
-            "You are the Text Navigation Engine. Your job is to map the granular logical structure of the narrative text.\n"
-            "RULES:\n"
-            "1. STRICT HEADING SPLITTING (CRITICAL): EVERY TIME you encounter a new major heading or a distinct shift in topic, you MUST start a new, completely separate section in the hierarchy.\n"
-            "2. BOUNDED ENTITY EXTRACTION: Write a 1-sentence dense 'semantic_summary'. Extract key entities (MAX 15). Do NOT extract raw numbers.\n"
-            "3. CONTENT TYPE: This is narrative text. Set 'content_type' to 'narrative_paragraph' and 'preserve_tables' to false.\n"
-            "4. HANDOFF STATE: If a paragraph is cut off at the end of this text batch, write a brief summary in 'handoff_notes' so the next batch knows the context.\n\n"
-            f"🧠 CONTINUOUS MEMORY LEDGER:\n"
-            f"You are processing a new page. The text below is the last thing generated on the previous page.\n"
-            f"```text\n{state.trailing_memory or 'No previous memory.'}\n```\n"
-            f"PREVIOUS BATCH STATE:\n"
-            f"- Last Active Root: {state.current_parent or 'None'} | Last Subsection: {state.current_section or 'None'}\n\n"
-        )
-
-    # 🟢 JSON SCHEMA ENFORCEMENT STRING (Appended to both)
-    schema_enforcement = (
-        "OUTPUT EXACT JSON ONLY MATCHING THIS EXACT STRUCTURE (Do not use Markdown formatting for the JSON wrapper):\n"
-        "{\"hierarchy\": [{\"title\": \"...\", \"type\": \"...\", \"parent\": null, \"start_page\": 1, \"end_page\": 1, \"content_type\": \"...\", \"semantic_summary\": \"...\", \"key_entities\": [\"...\"], \"normalized_text\": \"...\"}], \"chunk_suggestions\": [{\"section\": \"...\", \"strategy\": \"row_preserving\", \"reason\": \"...\", \"preserve_tables\": true, \"preserve_lists\": true, \"split_triggers\": [\"...\"], \"table_headers\": \"...\"}], \"confidence\": 1.0, \"notes\": \"\", \"handoff_notes\": \"...\"}"
-    )
-    
-    system_instruction += schema_enforcement
-
-    # 🟢 PAYLOAD CONSTRUCTION
-    if is_vision:
         contents = [
-            types.Part.from_bytes(data=smart_page["content"], mime_type="image/png"),
+            types.Part.from_bytes(data=smart_page["content_image"], mime_type="image/png"),
             f"Analyze this document image (Page {smart_page.get('page_num')}) and build the JSON hierarchy."
         ]
     else:
-        contents = f"RAW PDF TEXT (Page {smart_page.get('page_num')}):\n\n{smart_page['content']}"
+        # TEXT ROUTE (Uses the raw text and 3.1 Flash-Lite)
+        system_instruction = (
+            "You are the Text Navigation Engine. Your job is to map the granular logical structure of the narrative text.\n"
+            "RULES:\n"
+            "1. STRICT HEADING SPLITTING: EVERY TIME you encounter a new major heading, start a new separate section.\n"
+            "2. BOUNDED ENTITY EXTRACTION: Write a dense 'semantic_summary'. Extract key entities. Do NOT extract raw numbers.\n"
+            "3. CONTENT TYPE: Set 'content_type' to 'narrative_paragraph' and 'preserve_tables' to false.\n"
+            "4. ATOMIC SEMANTIC CHUNKING: Insert `<!-- SEMANTIC_BREAK -->` between distinct paragraphs.\n"
+            "5. HANDOFF STATE: Summarize cut-off paragraphs in 'handoff_notes'.\n\n"
+            f"🧠 CONTINUOUS MEMORY LEDGER:\n"
+            f"```text\n{state.handoff_notes or state.trailing_memory or 'No previous memory.'}\n```\n"
+        )
+        contents = f"RAW PDF TEXT (Page {smart_page.get('page_num')}):\n\n{smart_page['content_text']}"
 
+    # 🟢 FINAL GENERATION WITH STRICT SCHEMA
     max_retries = 3
     for attempt in range(max_retries):
         try:
@@ -124,22 +137,14 @@ def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> Navi
                 config={
                     "system_instruction": system_instruction,
                     "response_mime_type": "application/json",
+                    "response_schema": NavigationBatchResponse,
                     "temperature": 0.0,
                     "max_output_tokens": 8192 
                 }
             )
 
             raw_text = response.text.strip()
-            
-            start_idx = raw_text.find('{')
-            end_idx = raw_text.rfind('}')
-            
-            if start_idx != -1 and end_idx != -1:
-                raw_json_str = raw_text[start_idx:end_idx + 1]
-            else:
-                raw_json_str = raw_text
-                
-            parsed_data = json.loads(raw_json_str, strict=False)
+            parsed_data = json.loads(raw_text, strict=False)
             if isinstance(parsed_data, list):
                 parsed_data = {"hierarchy": parsed_data}
                 
