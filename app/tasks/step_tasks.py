@@ -65,8 +65,6 @@ def dynamically_expand_query_intent_local(prompt: str) -> str:
 
 
 # Initialize Celery app broker bindings
-CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
-celery_app = Celery("step_tasks", broker=CELERY_BROKER)
 
 
 def get_chroma_client():

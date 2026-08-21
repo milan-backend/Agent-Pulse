@@ -23,11 +23,6 @@ from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
 
 # Initialize Celery app matching your system's setup instance configuration
-CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
-if not CELERY_BROKER:
-    raise ValueError("CRITICAL CONFIGURATION TIMEOUT: CELERY_BROKER_URL or REDIS_URL environment variable is missing on this worker node context.")
-
-celery_app = Celery("rag_tasks", broker=CELERY_BROKER)
 
 
 def get_chroma_client():
@@ -42,7 +37,9 @@ def get_chroma_client():
         headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if CHROMA_TOKEN else None
     )
 
-@celery_app.task(name="app.tasks.rag_tasks.process_document_embedding")
+from celery import shared_task
+
+@shared_task(name="app.tasks.rag_tasks.process_document_embedding")
 def process_document_embedding(document_id: str):
     """
     Celery Background Task Worker: Restructured for Hierarchical & Agentic RAG.
