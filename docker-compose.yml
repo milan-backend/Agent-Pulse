@@ -62,7 +62,7 @@ services:
     container_name: dag_celery
 
     # 🟢 CHANGED HERE: Pointing to the master app and adding memory protection
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=10
+    command: celery -A app.core.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=10
 
     depends_on:
       db:
