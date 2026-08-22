@@ -1,4 +1,5 @@
 import uuid
+import re
 from typing import List, Dict, Any, Optional
 
 class ChunkEngine:
@@ -32,12 +33,10 @@ class ChunkEngine:
             table_headers = table_headers.strip() if table_headers else ""
             section_title = strategy_hint.get("section", "Unknown Table").strip()
             
-            # Always staple the headers to the top of EVERY chunk so context is never lost
             header_prefix = f"[TABLE CONTEXT: {section_title}]\n"
             if table_headers:
                 header_prefix += f"[COLUMN HEADERS: {table_headers}]\n\n"
             
-            # 🟢 THE FIX: Split by the Vision AI's invisible marker, NOT by random lines!
             semantic_blocks = section_text.split("<!-- SEMANTIC_BREAK -->")
             
             current_chunk_blocks = []
@@ -52,48 +51,61 @@ class ChunkEngine:
                     
                 words_in_block = len(block.split())
                 
-                # 🟢 ATOMIC MATH: Does adding this unbreakable block push us over the limit?
                 if current_word_count + words_in_block > self.chunk_size and current_chunk_blocks:
-                    print(f"   ✂️ Block {block_idx + 1} ({words_in_block} words) exceeds limit. Sealing Chunk {sequence} early at {current_word_count} words.")
+                    print(f"   ✂️ Block {block_idx + 1} ({words_in_block} words) exceeds limit. Sealing Chunk {sequence} early.")
                     
-                    # Seal and save the current chunk exactly as it is
                     final_text = header_prefix + "\n\n".join(current_chunk_blocks)
                     self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
                     sequence += 1
                     
-                    # Start a fresh chunk with the new block
                     current_chunk_blocks = [block]
                     current_word_count = words_in_block
                 else:
-                    # Safe to add to current chunk without breaking the limit
                     current_chunk_blocks.append(block)
                     current_word_count += words_in_block
                     print(f"   -> Added Block {block_idx + 1}: +{words_in_block} words (Running Total: {current_word_count}/{self.chunk_size})")
             
-            # Catch the final remaining blocks
             if current_chunk_blocks:
                 print(f"   📦 Finalizing last pieces into chunk {sequence}.")
                 final_text = header_prefix + "\n\n".join(current_chunk_blocks)
                 self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
 
         # =====================================================================
-        # 📝 2. NARRATIVE CHUNKING (For Paragraphs)
+        # 📝 2. MARKDOWN-AWARE NARRATIVE CHUNKING (The Fix for Paragraphs)
         # =====================================================================
         else:
-            # Note: Because this function is called inside a loop for EACH section 
-            # in rag_tasks.py, the "Hard Boundary" rule is automatically enforced! 
-            # A 600-word Introduction will NEVER bleed into the Architecture section.
-            words = section_text.split()
-            stride = self.chunk_size - self.overlap
-            if stride <= 0:
-                stride = self.chunk_size
+            # 🟢 STEP 1: Split the text by Markdown headers (e.g., "## Heading")
+            # This regex captures the header line so we don't lose it
+            parts = re.split(r'(^#{1,6}\s+.*$)', section_text, flags=re.MULTILINE)
+            
+            current_heading = ""
+            
+            for part in parts:
+                part = part.strip()
+                if not part:
+                    continue
+                    
+                # 🟢 STEP 2: If this part is a header, save it to memory and skip to the text
+                if re.match(r'^#{1,6}\s+', part):
+                    current_heading = part + "\n\n"
+                    continue
+                
+                # 🟢 STEP 3: It is narrative text. Apply the saved heading to every chunk!
+                words = part.split()
+                stride = self.chunk_size - self.overlap
+                if stride <= 0:
+                    stride = self.chunk_size
 
-            for i in range(0, len(words), stride):
-                chunk_words = words[i:i + self.chunk_size]
-                chunk_str = " ".join(chunk_words)
-                if chunk_str.strip():
-                    self._append_chunk(chunks, chunk_str, sequence, section_id, document_id, workspace_id, agent_id)
-                    sequence += 1
+                for i in range(0, len(words), stride):
+                    chunk_words = words[i:i + self.chunk_size]
+                    chunk_str = " ".join(chunk_words)
+                    
+                    if chunk_str.strip():
+                        # Glue the Markdown header to the top of the chunk
+                        final_chunk_text = current_heading + chunk_str if current_heading else chunk_str
+                        
+                        self._append_chunk(chunks, final_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
+                        sequence += 1
 
         return chunks
 
