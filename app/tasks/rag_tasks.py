@@ -23,6 +23,11 @@ from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
 
 # Initialize Celery app matching your system's setup instance configuration
+CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
+if not CELERY_BROKER:
+    raise ValueError("CRITICAL CONFIGURATION TIMEOUT: CELERY_BROKER_URL or REDIS_URL environment variable is missing on this worker node context.")
+
+celery_app = Celery("rag_tasks", broker=CELERY_BROKER)
 
 
 def get_chroma_client():
@@ -37,9 +42,7 @@ def get_chroma_client():
         headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if CHROMA_TOKEN else None
     )
 
-from celery import shared_task
-
-@shared_task(name="app.tasks.rag_tasks.process_document_embedding")
+@celery_app.task(name="app.tasks.rag_tasks.process_document_embedding")
 def process_document_embedding(document_id: str):
     """
     Celery Background Task Worker: Restructured for Hierarchical & Agentic RAG.
@@ -78,12 +81,6 @@ def process_document_embedding(document_id: str):
             temp_pdf_path = f"/tmp/{uuid.uuid4().hex}.pdf"
             with open(temp_pdf_path, "wb") as f:
                 f.write(raw_file_bytes)
-            
-            # 🟢 SAFE MEMORY FLUSH
-            # Clear local byte variable without corrupting the DB object!
-            import gc
-            del raw_file_bytes
-            gc.collect()
             
             # 🟢 2. THE FIX: Use the new Cost-Routing Smart Parser
             smart_pages = extract_smart_pages(temp_pdf_path)
@@ -126,19 +123,16 @@ def process_document_embedding(document_id: str):
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
             # 4. Process Sections (Extraction + Chunking)
-            # 4. Process Sections (Extraction + Chunking)
-            all_chunks_for_chroma = []
-            
-            last_chunk_db_id = None
-            
+           # 4. Process Sections (Extraction + Chunking)
             for section in saved_sections:
                 
                 # ==========================================================
-                # 🟢 1. EXTRACT TEXT FIRST
+                # 🟢 1. EXTRACT TEXT FIRST (So we can feed a preview to ChromaDB)
                 # ==========================================================
                 hint = section.chunking_strategy_hint or {}
                 cleaned_text = hint.get("normalized_text")
                 
+                # Use the AI's cleaned text if available; fallback to raw pages if not
                 if cleaned_text and cleaned_text.strip():
                     section_text = cleaned_text
                 else:
@@ -151,16 +145,18 @@ def process_document_embedding(document_id: str):
                     continue
 
                 # ==========================================================
-                # 🟢 2. Save the Index Card to the Navigation Vector DB
+                # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
                 # ==========================================================
                 if section.semantic_summary and section.semantic_summary.strip():
                     try:
                         entities_str = ", ".join(section.key_entities) if section.key_entities else ""
+                        
+                        # 🟢 THE X-RAY FIX: Inject the Title and Data Snippet so Chroma never misses it!
                         dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:3000]}"
                         
                         summary_vector_resp = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
-                            contents=dense_search_card
+                            contents=dense_search_card  # Embed the dense card!
                         )
                         nav_collection.add(
                             ids=[str(section.id)],
@@ -173,37 +169,47 @@ def process_document_embedding(document_id: str):
                         )
                     except Exception as e:
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
+                # ==========================================================
                 
-                # ==========================================================
-                # 🟢 3. Section-Bound Chunking (Queueing for Bulk Processing)
-                # ==========================================================
+                # B. Section-Bound Chunking
                 section_chunks = chunk_engine.execute_section_chunking(
                     section_text=section_text, 
                     section_id=section.id, 
                     document_id=doc.id, 
                     workspace_id=doc.workspace_id, 
                     agent_id=doc.agent_id,
-                    strategy_hint=hint
+                    strategy_hint=hint  # 🟢 Pass the AI's instructions to the engine!
                 )
                 
+                last_chunk_db_id = None
                 for chunk_payload in section_chunks:
                     pt_content = chunk_payload["text"]
+                    
+                    try:
+                        # 🟢 Updated to standard text-embedding-004 model
+                        vector_response = ai_client.models.embed_content(
+                            model="models/gemini-embedding-001", 
+                            contents=pt_content
+                        )
+                        raw_vector = vector_response.embeddings[0].values
+                    except Exception as e: 
+                        print(f"⚠️ Vector generation failed for chunk: {e}")
+                        continue
+                        
                     chroma_id = f"vec_{uuid.uuid4().hex[:12]}"
                     encrypted_doc = encrypt_text_string(pt_content, doc.workspace_id)
                     
-                    # Store in memory temporarily for the bulk API call
-                    all_chunks_for_chroma.append({
-                        "id": chroma_id,
-                        "text": pt_content,
-                        "encrypted_doc": encrypted_doc,
-                        "metadata": {
+                    collection.add(
+                        ids=[chroma_id], 
+                        embeddings=[raw_vector], 
+                        documents=[encrypted_doc],
+                        metadatas=[{
                             "workspace_id": str(doc.workspace_id), 
                             "section_id": str(section.id), 
                             "document_id": str(doc.id)
-                        }
-                    })
+                        }]
+                    )
                     
-                    # Link Postgres hierarchy 
                     new_db_chunk = DocumentChunk(
                         document_id=doc.id, 
                         section_id=section.id, 
@@ -216,7 +222,7 @@ def process_document_embedding(document_id: str):
                     )
                     
                     db.add(new_db_chunk)
-                    db.flush()  # 🟢 ADDED: Generates new_db_chunk.id required for the linked list pointer
+                    db.flush()
                     
                     if last_chunk_db_id:
                         prev_chunk = db.query(DocumentChunk).filter(DocumentChunk.id == last_chunk_db_id).first()
@@ -224,41 +230,6 @@ def process_document_embedding(document_id: str):
                             prev_chunk.next_chunk_id = new_db_chunk.id
                             
                     last_chunk_db_id = new_db_chunk.id
-
-            # ==========================================================
-            # 🟢 4. BULK VECTOR EMBEDDING & CHROMA INSERTION (10x FASTER)
-            # ==========================================================
-            BATCH_SIZE = 100
-            for i in range(0, len(all_chunks_for_chroma), BATCH_SIZE):
-                batch = all_chunks_for_chroma[i:i + BATCH_SIZE]
-                
-                batch_texts = [c["text"] for c in batch]
-                batch_ids = [c["id"] for c in batch]
-                batch_docs = [c["encrypted_doc"] for c in batch]
-                batch_metas = [c["metadata"] for c in batch]
-                
-                try:
-                    # ONE network call for 100 chunks!
-                    vector_response = ai_client.models.embed_content(
-                        model="models/gemini-embedding-001",
-                        contents=batch_texts
-                    )
-                    
-                    batch_embeddings = [emb.values for emb in vector_response.embeddings]
-                    
-                    collection.add(
-                        ids=batch_ids,
-                        embeddings=batch_embeddings,
-                        documents=batch_docs,
-                        metadatas=batch_metas
-                    )
-                    
-                    # 🟢 SAFE COMMIT: Commits the batch to Postgres securely
-                    db.commit() 
-                    
-                    print(f"⚡ Batch processed and inserted {len(batch)} chunks lightning fast.")
-                except Exception as e:
-                    print(f"⚠️ Bulk vector generation/insertion failed for batch: {e}")
 
             # Cleanup
             if os.path.exists(temp_pdf_path):

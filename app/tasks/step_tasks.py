@@ -65,6 +65,8 @@ def dynamically_expand_query_intent_local(prompt: str) -> str:
 
 
 # Initialize Celery app broker bindings
+CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
+celery_app = Celery("step_tasks", broker=CELERY_BROKER)
 
 
 def get_chroma_client():
@@ -263,13 +265,14 @@ def process_step(self, step_id: str):
                     "event_name": "SYMMETRIC_SMART_ROUTING",
                     "selected_vectors_count": 0
                 }
-                
+
                 # 1. Run Smart Navigation Router (Phase 2)
                 target_vector_ids = execute_smart_routing(
                     user_prompt=prompt,
                     workspace_id=uuid.UUID(current_workspace_id),
                     db=db
                 )
+
                 # 2. Direct ID Retrieval from Chroma DB
                 if target_vector_ids:
                     retrieval_service = RetrievalService()
