@@ -72,7 +72,7 @@ def process_document_embedding(document_id: str):
         )
         
         # =====================================================================
-        # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE
+        # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE (UNIFIED MARKDOWN)
         # =====================================================================
         try:
             print(f"🧠 Commencing Knowledge Ingestion Pipeline for Document ID: {doc.id}")
@@ -82,34 +82,29 @@ def process_document_embedding(document_id: str):
             with open(temp_pdf_path, "wb") as f:
                 f.write(raw_file_bytes)
             
-            # 🟢 2. THE FIX: Use the new Cost-Routing Smart Parser
+            # 🟢 2. UNIFIED ENGINE: Extract Pure Markdown
             smart_pages = extract_smart_pages(temp_pdf_path)
-            
-            # 🟢 UPDATED: Reads directly from content_text in the dual-payload
-            pages_dict = {p["page_num"]: p.get("content_text", "") for p in smart_pages}
 
             if not smart_pages:
                 raise ValueError("Zero content extracted from document.")
 
-            # 🟢 3. Pass the Smart Payloads (Images + Text) to the Dual-Engine AI
+            # 🟢 3. Pass the Markdown Payloads to the Unified AI
             saved_sections, chunk_suggestions = build_and_save_navigation_map(
                 db=db, 
                 document_id=doc.id, 
                 workspace_id=doc.workspace_id,
                 agent_id=doc.agent_id, 
-                smart_pages=smart_pages  # 🟢 NEW: Passes the list of dicts directly
+                smart_pages=smart_pages
             )
             
-            # 3. Setup AI & Vector DB
+            # 4. Setup AI & Vector DB
             chroma_client = get_chroma_client()
             
-            # The original collection for raw text chunks
             collection = chroma_client.get_or_create_collection(
                 name="rag_enterprise_vectors_v1", 
                 metadata={"hnsw:space": "cosine"}
             )
             
-            # 🟢 NEW: The lightweight collection for the Smart Router Index Cards
             nav_collection = chroma_client.get_or_create_collection(
                 name="navigation_index_cards",
                 metadata={"hnsw:space": "cosine"}
@@ -122,41 +117,32 @@ def process_document_embedding(document_id: str):
             ai_client = genai.Client(api_key=paid_api_key)
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
-            # 4. Process Sections (Extraction + Chunking)
-           # 4. Process Sections (Extraction + Chunking)
+            # 5. Process Sections (Extraction + Chunking)
             for section in saved_sections:
                 
                 # ==========================================================
-                # 🟢 1. EXTRACT TEXT FIRST (So we can feed a preview to ChromaDB)
+                # 🟢 A. GET THE TEXT (Simplified: Now exclusively relies on AI output)
                 # ==========================================================
                 hint = section.chunking_strategy_hint or {}
-                cleaned_text = hint.get("normalized_text")
+                section_text = hint.get("normalized_text", "")
                 
-                # Use the AI's cleaned text if available; fallback to raw pages if not
-                if cleaned_text and cleaned_text.strip():
-                    section_text = cleaned_text
-                else:
-                    section_text = ""
-                    for p in range(section.start_page, section.end_page + 1):
-                        if p in pages_dict:
-                            section_text += pages_dict[p] + "\n"
-                            
-                if not section_text.strip(): 
+                if not section_text or not section_text.strip(): 
+                    print(f"⚠️ Warning: Section '{section.title}' has no text. Skipping.")
                     continue
 
                 # ==========================================================
-                # 🟢 OPTION 3: Save the Index Card to the Navigation Vector DB
+                # 🟢 B. Save the Index Card to the Navigation Vector DB
                 # ==========================================================
                 if section.semantic_summary and section.semantic_summary.strip():
                     try:
                         entities_str = ", ".join(section.key_entities) if section.key_entities else ""
                         
-                        # 🟢 THE X-RAY FIX: Inject the Title and Data Snippet so Chroma never misses it!
+                        # Inject the Title and Data Snippet so Chroma never misses it!
                         dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:3000]}"
                         
                         summary_vector_resp = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
-                            contents=dense_search_card  # Embed the dense card!
+                            contents=dense_search_card
                         )
                         nav_collection.add(
                             ids=[str(section.id)],
@@ -169,16 +155,17 @@ def process_document_embedding(document_id: str):
                         )
                     except Exception as e:
                         print(f"⚠️ Navigation vector generation failed for section {section.id}: {e}")
-                # ==========================================================
                 
-                # B. Section-Bound Chunking
+                # ==========================================================
+                # 🟢 C. Section-Bound Chunking
+                # ==========================================================
                 section_chunks = chunk_engine.execute_section_chunking(
                     section_text=section_text, 
                     section_id=section.id, 
                     document_id=doc.id, 
                     workspace_id=doc.workspace_id, 
                     agent_id=doc.agent_id,
-                    strategy_hint=hint  # 🟢 Pass the AI's instructions to the engine!
+                    strategy_hint=hint
                 )
                 
                 last_chunk_db_id = None
@@ -186,7 +173,6 @@ def process_document_embedding(document_id: str):
                     pt_content = chunk_payload["text"]
                     
                     try:
-                        # 🟢 Updated to standard text-embedding-004 model
                         vector_response = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
                             contents=pt_content
@@ -237,7 +223,7 @@ def process_document_embedding(document_id: str):
 
             doc.status = "ready"
             db.commit()
-            print(f"🚀 Success: Hierarchical ingestion complete for '{doc.filename}'.")
+            print(f"🚀 Success: Unified hierarchical ingestion complete for '{doc.filename}'.")
             return True
             
         except Exception as pipeline_err:
