@@ -263,20 +263,12 @@ def process_step(self, step_id: str):
                     "event_name": "SYMMETRIC_SMART_ROUTING",
                     "selected_vectors_count": 0
                 }
-
-                # 1. Run Smart Navigation Router (Phase 2)
                 
-                # 🟢 THE FIX: Fetch active document IDs to filter out ghost vectors
-                active_docs = db.query(UploadedDocument).filter(
-                    UploadedDocument.workspace_id == current_workspace_id
-                ).all()
-                active_doc_ids = [doc.id for doc in active_docs]
-
+                # 1. Run Smart Navigation Router (Phase 2)
                 target_vector_ids = execute_smart_routing(
                     user_prompt=prompt,
                     workspace_id=uuid.UUID(current_workspace_id),
-                    db=db,
-                    document_ids=active_doc_ids
+                    db=db
                 )
                 # 2. Direct ID Retrieval from Chroma DB
                 if target_vector_ids:
