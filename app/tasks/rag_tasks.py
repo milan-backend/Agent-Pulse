@@ -70,7 +70,7 @@ def process_document_embedding(document_id: str):
             iv=doc.encryption_iv,
             workspace_id=doc.workspace_id
         )
-        
+
         # =====================================================================
         # 🎯 HIERARCHICAL KNOWLEDGE INGESTION PIPELINE (UNIFIED MARKDOWN)
         # =====================================================================
@@ -135,10 +135,20 @@ def process_document_embedding(document_id: str):
                 # ==========================================================
                 if section.semantic_summary and section.semantic_summary.strip():
                     try:
-                        entities_str = ", ".join(section.key_entities) if section.key_entities else ""
+                        import json
                         
-                        # Inject the Title and Data Snippet so Chroma never misses it!
-                        dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:3000]}"
+                        # 🟢 THE FIX: The Smart Router expects strict JSON formatting!
+                        index_card_dict = {
+                            "section_id": str(section.id),
+                            "path": str(section.parent_path) if section.parent_path else str(section.title),
+                            "title": str(section.title),
+                            "type": str(section.content_type),
+                            "summary": str(section.semantic_summary),
+                            "entities": section.key_entities if section.key_entities else [],
+                            "data_preview": section_text[:3000]
+                        }
+                        
+                        dense_search_card = json.dumps(index_card_dict)
                         
                         summary_vector_resp = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
