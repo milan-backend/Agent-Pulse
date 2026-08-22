@@ -66,12 +66,16 @@ def execute_smart_routing(
         query_vector = query_vector_resp.embeddings[0].values
 
         # 2. Setup the Workspace Filter
-        where_filter = {"workspace_id": str(workspace_id)}
+        # 2. Setup the Workspace Filter (Fixed for ChromaDB Strict Syntax)
         if document_ids:
-            if len(document_ids) == 1:
-                where_filter["document_id"] = str(document_ids[0])
-            else:
-                where_filter["document_id"] = {"$in": [str(d) for d in document_ids]}
+            where_filter = {
+                "$and": [
+                    {"workspace_id": str(workspace_id)},
+                    {"document_id": {"$in": [str(d) for d in document_ids]}}
+                ]
+            }
+        else:
+            where_filter = {"workspace_id": str(workspace_id)}
 
         # 3. Pull strictly the Top 15 best semantic matches
         chroma_results = nav_collection.query(
