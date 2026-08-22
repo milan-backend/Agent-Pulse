@@ -215,7 +215,7 @@ def execute_smart_routing(
         try:
             chunk_results = chunk_collection.query(
                 query_embeddings=[query_vector],
-                n_results=3,  
+                n_results=10,  
                 where=where_chunk_filter
             )
             final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
