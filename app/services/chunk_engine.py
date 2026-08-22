@@ -73,39 +73,29 @@ class ChunkEngine:
         # =====================================================================
         # 📝 2. MARKDOWN-AWARE NARRATIVE CHUNKING (The Fix for Paragraphs)
         # =====================================================================
+        # =====================================================================
+        # 📝 2. NARRATIVE CHUNKING (The Fix for Paragraphs)
+        # =====================================================================
         else:
-            # 🟢 STEP 1: Split the text by Markdown headers (e.g., "## Heading")
-            # This regex captures the header line so we don't lose it
-            parts = re.split(r'(^#{1,6}\s+.*$)', section_text, flags=re.MULTILINE)
+            # 🟢 THE FIX: Grab the title directly from the hint and glue it to the front!
+            section_title = strategy_hint.get("section", "Unknown Section").strip()
+            header_prefix = f"[DOCUMENT SECTION: {section_title}]\n\n"
             
-            current_heading = ""
-            
-            for part in parts:
-                part = part.strip()
-                if not part:
-                    continue
-                    
-                # 🟢 STEP 2: If this part is a header, save it to memory and skip to the text
-                if re.match(r'^#{1,6}\s+', part):
-                    current_heading = part + "\n\n"
-                    continue
-                
-                # 🟢 STEP 3: It is narrative text. Apply the saved heading to every chunk!
-                words = part.split()
-                stride = self.chunk_size - self.overlap
-                if stride <= 0:
-                    stride = self.chunk_size
+            words = section_text.split()
+            stride = self.chunk_size - self.overlap
+            if stride <= 0:
+                stride = self.chunk_size
 
-                for i in range(0, len(words), stride):
-                    chunk_words = words[i:i + self.chunk_size]
-                    chunk_str = " ".join(chunk_words)
+            for i in range(0, len(words), stride):
+                chunk_words = words[i:i + self.chunk_size]
+                chunk_str = " ".join(chunk_words)
+                
+                if chunk_str.strip():
+                    # Glue the context tag to every split chunk
+                    final_chunk_text = header_prefix + chunk_str
                     
-                    if chunk_str.strip():
-                        # Glue the Markdown header to the top of the chunk
-                        final_chunk_text = current_heading + chunk_str if current_heading else chunk_str
-                        
-                        self._append_chunk(chunks, final_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
-                        sequence += 1
+                    self._append_chunk(chunks, final_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
+                    sequence += 1
 
         return chunks
 
