@@ -188,45 +188,53 @@ def execute_smart_routing(
     if not decision.target_section_ids:
         return []
 
-    # =====================================================================
+   # =====================================================================
     # 🟢 PHASE 3: DYNAMIC RETRIEVAL (Sniper vs. Full Section)
     # =====================================================================
-    print(f"🎯 Activating {decision.retrieval_mode.upper()} Mode for {len(decision.target_section_ids)} sections...")
+    print(f"🎯 Activating {decision.retrieval_mode.upper()} Mode...")
     
     final_vector_ids = []
 
     if decision.retrieval_mode == "full_section":
+        # Broad Search: Pull EVERY chunk from the AI's selected sections
         target_chunks = db.query(DocumentChunk).filter(
             DocumentChunk.section_id.in_(decision.target_section_ids),
             DocumentChunk.workspace_id == workspace_id
         ).order_by(DocumentChunk.sequence_number.asc()).all()
         
         final_vector_ids = [chunk.chroma_vector_id for chunk in target_chunks]
+        print(f"📡 Retrieved {len(final_vector_ids)} chunks for Full Section reading.")
         
     else:
+        # 🟢 THE SNIPER FIX: Unleash the Vector DB! 
+        # Do not restrict by section_id. Let Chroma mathematically search the entire document!
         chunk_collection = chroma_client.get_or_create_collection(
             name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
         )
         
-        where_chunk_filter = {
-            "$and": [
-                {"workspace_id": str(workspace_id)},
-                {"section_id": {"$in": decision.target_section_ids}}
-            ]
-        }
+        if document_ids:
+            where_chunk_filter = {
+                "$and": [
+                    {"workspace_id": str(workspace_id)},
+                    {"document_id": {"$in": [str(d) for d in document_ids]}}
+                ]
+            }
+        else:
+            where_chunk_filter = {"workspace_id": str(workspace_id)}
 
         try:
+            # Pull the top 10 best matching chunks from ANYWHERE in the document
             chunk_results = chunk_collection.query(
                 query_embeddings=[query_vector],
-                n_results=5,  
+                n_results=10,  
                 where=where_chunk_filter
             )
             final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
         except Exception as e:
             print(f"❌ Chunk-level Vector Search failed: {e}")
             final_vector_ids = []
+            
+        print(f"📡 Sniper resolved {len(final_vector_ids)} highly-targeted vector chunks across all sections.")
 
-    print(f"📡 Resolved {len(decision.target_section_ids)} sections into {len(final_vector_ids)} highly-targeted vector chunks.")
-    
     return final_vector_ids
