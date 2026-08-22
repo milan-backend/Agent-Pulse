@@ -104,7 +104,7 @@ def execute_smart_routing(
     index_cards = []
     for sec in available_sections:
         hint = sec.chunking_strategy_hint or {}
-        snippet = hint.get("normalized_text", "")[:500]
+        snippet = hint.get("normalized_text", "")[:150]
         
         index_cards.append({
             "section_id": str(sec.id),
@@ -219,7 +219,7 @@ def execute_smart_routing(
         try:
             chunk_results = chunk_collection.query(
                 query_embeddings=[query_vector],
-                n_results=10,  
+                n_results=5,  
                 where=where_chunk_filter
             )
             final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []

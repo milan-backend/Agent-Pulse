@@ -84,6 +84,9 @@ def process_document_embedding(document_id: str):
             
             # 🟢 2. UNIFIED ENGINE: Extract Pure Markdown
             smart_pages = extract_smart_pages(temp_pdf_path)
+            
+            # 🟢 THE FIX: BRING BACK THE PAGES DICTIONARY! We need the RAW Markdown!
+            pages_dict = {p["page_num"]: p.get("content_text", "") for p in smart_pages}
 
             if not smart_pages:
                 raise ValueError("Zero content extracted from document.")
@@ -121,10 +124,14 @@ def process_document_embedding(document_id: str):
             for section in saved_sections:
                 
                 # ==========================================================
-                # 🟢 A. GET THE TEXT (Simplified: Now exclusively relies on AI output)
+                # 🟢 A. GET THE TEXT (The Fix: Use the RAW Markdown directly!)
                 # ==========================================================
                 hint = section.chunking_strategy_hint or {}
-                section_text = hint.get("normalized_text", "")
+                
+                # Rebuild the exact Markdown using the start and end pages
+                section_text = ""
+                for p in range(section.start_page, section.end_page + 1):
+                    section_text += pages_dict.get(p, "") + "\n"
                 
                 if not section_text or not section_text.strip(): 
                     print(f"⚠️ Warning: Section '{section.title}' has no text. Skipping.")
