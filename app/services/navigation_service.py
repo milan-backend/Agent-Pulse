@@ -97,13 +97,14 @@ def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> Navi
     # =========================================================
     print(f"   -> 📝 Running Text Engine (3.1) on Page {smart_page.get('page_num')}...")
     text_instruction = (
-        "You are the Text Navigation Engine. Your job is to map the granular logical structure of narrative text.\n"
+        "You are the Text Navigation Engine for a RAG pipeline. Your job is to parse narrative text and group it logically.\n"
+        "CRITICAL DIRECTIVE: You must be absolutely perfect in your extraction. Your output feeds directly into ChromaDB. If you miss keywords or generate poor summaries, ChromaDB will fail to fetch this information when the user asks a question!\n"
         "RULES:\n"
-        "1. STRICT HEADING SPLITTING: EVERY TIME you encounter a new major heading, start a new separate section.\n"
-        "2. BOUNDED ENTITY EXTRACTION: Write a dense 'semantic_summary'. Extract key entities. Do NOT extract raw numbers.\n"
+        "1. STRICT HEADING SPLITTING & 400-WORD LIMIT: Group text logically based on Markdown Headings. A single section MUST NEVER exceed 400 words. If a topic is longer, split it, but you MUST write the exact same Markdown Heading at the beginning of EVERY split section.\n"
+        "2. AGGRESSIVE ENTITY EXTRACTION: Write a dense 'semantic_summary'. You MUST extract the EXACT proper nouns and acronyms (e.g., IIT, NIT, ABC, PM-USHA) into the 'key_entities' array. Do not use generic terms.\n"
         "3. IGNORE TABLE MARKERS: If you see '[🚨 TABLE DETECTED - ROUTE THIS SECTION TO VISION AI 🚨]', completely ignore it and process only the surrounding narrative paragraphs.\n"
         "4. CONTENT TYPE: Set 'content_type' to 'narrative_paragraph' and 'preserve_tables' to false.\n"
-        "5. HANDOFF STATE: Summarize cut-off paragraphs in 'handoff_notes'.\n\n"
+        "5. HANDOFF STATE: If a paragraph is cut off, write the exact Markdown Heading and the broken sentence in 'handoff_notes' so the next page can stitch it seamlessly.\n\n"
         f"🧠 CONTINUOUS MEMORY LEDGER:\n"
         f"```text\n{state.handoff_notes or state.trailing_memory or 'No previous memory.'}\n```\n"
     )
@@ -120,13 +121,14 @@ def run_navigation_batch(smart_page: Dict[str, Any], state: ActiveState) -> Navi
     if has_table:
         print(f"   -> 📊 Table Detected! Running Vision Engine (3.6) on Page {smart_page.get('page_num')} for tables...")
         vision_instruction = (
-            "You are the Vision Table Extraction Engine. Your ONLY job is to extract visual grids, matrices, and tables.\n"
+            "You are the Vision Table Extraction Engine for a RAG pipeline. Your ONLY job is to extract visual grids, matrices, and tables.\n"
+            "CRITICAL DIRECTIVE: You must be absolutely perfect in your extraction. Your output feeds directly into ChromaDB. If you miss keywords, lose headers, or chunk poorly, ChromaDB will fail to fetch this table when the user asks a question!\n"
             "RULES:\n"
-            "1. STRICT TABLE ONLY: IGNORE ALL NORMAL PARAGRAPHS AND NARRATIVE TEXT. ONLY extract structured visual tables.\n"
-            "2. UNIVERSAL MARKDOWN & MERGED CELLS: Format grids as strict Markdown tables. Fill in blank merged cells with parent values.\n"
+            "1. STRICT TABLE ONLY & 400-WORD LIMIT: ONLY extract structured visual tables. You MUST NEVER create a table chunk larger than 400 words. If a table is massive, split it into multiple smaller sections. Keep connected rows together. NEVER break a single row's data. EVERY split chunk MUST start with the exact Markdown Table Headers.\n"
+            "2. AGGRESSIVE ENTITY EXTRACTION: Even though it's a table, you MUST extract exact acronyms (e.g., IIT, NIT, IIM) and proper nouns from the rows into the 'key_entities' array. Do not use generic terms.\n"
             "3. HEADER EXTRACTION: Extract column headers into the 'table_headers' field.\n"
             "4. TABLE ISOLATION: Set 'content_type' to 'data_table' and 'preserve_tables' to true.\n"
-            "5. HANDOFF STATE: Include exact column headers in 'handoff_notes' if a table spans off the bottom.\n\n"
+            "5. TABLE HANDOFF NOTES (LAST 3 ROWS): If a table spans off the bottom, your 'handoff_notes' MUST include: 1) The exact Table Headers, and 2) The EXACT LAST 3 ROWS of data. The next AI agent needs this to stitch the table without duplicating data.\n\n"
             f"🧠 CONTINUOUS MEMORY LEDGER (CRITICAL):\n"
             f"```markdown\n{state.handoff_notes or state.trailing_memory or 'No previous memory.'}\n```\n"
         )
