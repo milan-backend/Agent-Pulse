@@ -219,7 +219,7 @@ def execute_smart_routing(
             
         try:
             # Drop from 10 to 5 since step_tasks grabs neighbors anyway. Keeps tokens ultra-low!
-            chunk_results = chunk_collection.query(query_embeddings=[query_vector], n_results=3, where=where_chunk_filter)
+            chunk_results = chunk_collection.query(query_embeddings=[query_vector], n_results=1, where=where_chunk_filter)
             final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
         except Exception as e:
             print(f"❌ Chunk-level Vector Search failed: {e}")
