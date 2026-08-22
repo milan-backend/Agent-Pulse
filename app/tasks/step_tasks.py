@@ -267,10 +267,21 @@ def process_step(self, step_id: str):
                 }
 
                 # 1. Run Smart Navigation Router (Phase 2)
+                # 1. Run Smart Navigation Router (Phase 2)
+                
+                # 🟢 THE FIX: Fetch active document IDs AND cast them to STRINGS for ChromaDB
+                active_docs = db.query(UploadedDocument).filter(
+                    UploadedDocument.workspace_id == current_workspace_id
+                ).all()
+                
+                # Cast the UUID objects to strings so ChromaDB accepts the filter!
+                active_doc_ids = [str(doc.id) for doc in active_docs]
+
                 target_vector_ids = execute_smart_routing(
                     user_prompt=prompt,
                     workspace_id=uuid.UUID(current_workspace_id),
-                    db=db
+                    db=db,
+                    document_ids=active_doc_ids
                 )
 
                 # 2. Direct ID Retrieval from Chroma DB
