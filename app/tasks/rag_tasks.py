@@ -156,7 +156,7 @@ def process_document_embedding(document_id: str):
                 if section.semantic_summary and section.semantic_summary.strip():
                     try:
                         entities_str = ", ".join(section.key_entities) if section.key_entities else ""
-                        dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:500]}"
+                        dense_search_card = f"Title: {section.title} | Summary: {section.semantic_summary} | Keywords: {entities_str} | Data Snippet: {section_text[:3000]}"
                         
                         summary_vector_resp = ai_client.models.embed_content(
                             model="models/gemini-embedding-001", 
