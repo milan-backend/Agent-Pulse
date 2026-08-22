@@ -126,7 +126,10 @@ def process_document_embedding(document_id: str):
             chunk_engine = ChunkEngine(chunk_size=400, overlap=50)
 
             # 4. Process Sections (Extraction + Chunking)
+            # 4. Process Sections (Extraction + Chunking)
             all_chunks_for_chroma = []
+            
+            last_chunk_db_id = None
             
             for section in saved_sections:
                 
@@ -183,7 +186,6 @@ def process_document_embedding(document_id: str):
                     strategy_hint=hint
                 )
                 
-                last_chunk_db_id = None
                 for chunk_payload in section_chunks:
                     pt_content = chunk_payload["text"]
                     chroma_id = f"vec_{uuid.uuid4().hex[:12]}"
