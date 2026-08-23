@@ -16,6 +16,25 @@ from app.services.pdf_parser import extract_smart_pages
 from app.services.chunk_engine import ChunkEngine
 from app.models.new_arch import DocumentChunk
 
+import re
+
+def extract_chunk_keywords(text: str) -> str:
+    """
+    Extracts high-signal tokens (acronyms, numbers, capitalized nouns)
+    instantly in Python without making any external LLM API calls.
+    """
+    if not text:
+        return ""
+    
+    # 1. Finds acronyms (e.g., IGNOU)
+    # 2. Finds numbers/decimals (e.g., 12123.00)
+    # 3. Finds capitalized nouns (e.g., Education)
+    tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b|\b[A-Z][a-z]{3,}\b', text)
+    
+    # Deduplicate while preserving order, keep top 15
+    unique_tokens = list(dict.fromkeys(tokens))
+    return ", ".join(unique_tokens[:15])
+
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
 if not CELERY_BROKER:
     raise ValueError("CRITICAL: CELERY_BROKER_URL missing.")
@@ -99,6 +118,9 @@ def process_document_embedding(document_id: str):
                 chunk_uuid = chunk_payload["id"]  # 🟢 The Master Pointer
                 pt_content = chunk_payload["text"]
                 
+                # 🟢 Extract the specific needles for this chunk!
+                chunk_specific_keywords = extract_chunk_keywords(pt_content)
+                
                 # A. Generate Vector
                 vector_resp = ai_client.models.embed_content(
                     model="models/gemini-embedding-001", 
@@ -113,15 +135,16 @@ def process_document_embedding(document_id: str):
                     section_id=section.id, 
                     workspace_id=doc.workspace_id,
                     sequence_number=chunk_payload["sequence_number"],
-                    prev_chunk_id=chunk_payload["prev_chunk_id"],  # 🟢 The Linked List
-                    next_chunk_id=chunk_payload["next_chunk_id"]   # 🟢 The Linked List
+                    chunk_keywords=chunk_specific_keywords, # 🟢 Save granular keywords to DB
+                    prev_chunk_id=chunk_payload["prev_chunk_id"],  
+                    next_chunk_id=chunk_payload["next_chunk_id"]   
                 )
                 db.add(new_db_chunk)
                 
                 # C. Save to ChromaDB (The Search Vault & Index of Indexes)
                 encrypted_doc = encrypt_text_string(pt_content, doc.workspace_id)
                 collection.add(
-                    ids=[str(chunk_uuid)],               # 🟢 EXACT SAME ID AS POSTGRES
+                    ids=[str(chunk_uuid)],               
                     embeddings=[raw_vector], 
                     documents=[encrypted_doc],
                     metadatas=[{
@@ -130,6 +153,7 @@ def process_document_embedding(document_id: str):
                         "parent_path": str(section.parent_path) if section.parent_path else str(section.title),
                         "type": str(section.content_type),
                         "parent_keywords": str(section.parent_keywords) if section.parent_keywords else "",
+                        "chunk_keywords": chunk_specific_keywords, # 🟢 Inject granular keywords into metadata
                         "semantic_summary": str(section.semantic_summary) if section.semantic_summary else "",
                         "document_id": str(doc.id),
                         "workspace_id": str(doc.workspace_id)
