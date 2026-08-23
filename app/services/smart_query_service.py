@@ -210,18 +210,24 @@ def execute_smart_routing(
 
     scored_pool.sort(key=lambda x: x[0], reverse=True)
     top_5_candidates = scored_pool[:5]
-
+    
     # -----------------------------------------------------------------
     # Step E: Build Enriched Index Cards for Smart Router AI
     # -----------------------------------------------------------------
     index_cards = []
     for score, cid, item in top_5_candidates:
         meta = item["meta"]
+        
+        # 🟢 THE FIX: Truncate the keywords so they don't bloat the LLM prompt tokens!
+        raw_kw = str(meta.get("chunk_keywords", ""))
+        # Only show the first 150 characters to the Smart Router
+        compact_keywords = raw_kw[:150] + "..." if len(raw_kw) > 150 else raw_kw
+
         index_cards.append({
             "chunk_id": cid,
             "parent_section": meta.get("parent_path") or meta.get("title", "Unknown Section"),
             "section_summary": meta.get("semantic_summary", "No summary available"),
-            "chunk_keywords": meta.get("chunk_keywords", ""),
+            "chunk_keywords": compact_keywords,  # 🟢 Use the compacted version here
             "semantic_match_confidence": f"{item['match_pct']}%",
             "snippet_preview": item["preview"] + "..."
         })
