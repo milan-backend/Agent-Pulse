@@ -4,7 +4,6 @@ import chromadb
 from typing import List, Dict, Any
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
-from google import genai  # 🟢 NEW: Added for manual vector embedding
 
 from app.db.session import SessionLocal
 from app.models.new_arch import DocumentChunk
@@ -25,6 +24,7 @@ class RetrievalService:
             headers={"Authorization": f"Bearer {chroma_token}"} if chroma_token else None
         )
         
+        # 🟢 We are strictly using the single Unified Collection
         self.collection = self.chroma_client.get_or_create_collection(
             name="rag_enterprise_vectors_v1",
             metadata={"hnsw:space": "cosine"}
@@ -32,23 +32,25 @@ class RetrievalService:
 
     def execute_direct_id_retrieval(
         self, 
-        target_chroma_ids: List[str], 
-        workspace_id: uuid.UUID,
-        include_neighbor_chunks: bool = False
+        target_chunk_ids: List[str],  # 🟢 Directly accepts the list of UUIDs (including neighbors) from the Smart Router
+        workspace_id: uuid.UUID
     ) -> List[Dict[str, Any]]:
         """
-        Direct ID Retrieval Engine (Section Overwrite):
-        1. Fully trusts the Smart Router's authorized Vector IDs.
-        2. Unconditionally fetches every requested chunk (No top_k limits).
-        3. Bypasses semantic re-ranking to prevent Shattered Tables.
+        Direct ID Retrieval Engine:
+        1. Fully trusts the authorized Chunk IDs from the Router.
+        2. Unconditionally fetches every requested chunk (Bypasses semantic math entirely).
+        3. Decrypts and sorts the text into perfect reading order.
         """
-        if not target_chroma_ids:
+        if not target_chunk_ids:
             return []
 
-        # 🟢 THE FIX: Unconditional Retrieval. Fetch all requested IDs!
+        # =====================================================================
+        # 🟢 STEP 1: INSTANT CHROMA FETCH (No Vector Math)
+        # =====================================================================
         try:
+            print(f"⚡ Fetching {len(target_chunk_ids)} exact chunks from ChromaDB...")
             results = self.collection.get(
-                ids=target_chroma_ids,
+                ids=target_chunk_ids,
                 where={"workspace_id": str(workspace_id)}
             )
         except Exception as e:
@@ -62,61 +64,41 @@ class RetrievalService:
         db: Session = SessionLocal()
         
         try:
+            # =====================================================================
+            # 🟢 STEP 2: DECRYPT & FETCH SEQUENCE NUMBERS
+            # =====================================================================
             for idx, chroma_id in enumerate(results["ids"]):
                 encrypted_doc = results["documents"][idx] if results.get("documents") else ""
                 meta = results["metadatas"][idx] if results.get("metadatas") else {}
 
+                # 1. Decrypt the raw text
                 decrypted_text = decrypt_text_string(encrypted_doc, workspace_id)
 
-                # Query SQL for chunk record & neighbor expansion
+                # 2. Query Postgres ONLY to get the Sequence Number for sorting
                 chunk_record = db.query(DocumentChunk).filter(
-                    DocumentChunk.chroma_vector_id == chroma_id,
+                    DocumentChunk.id == chroma_id,
                     DocumentChunk.workspace_id == workspace_id
                 ).first()
 
                 retrieved_chunks.append({
-                    "chroma_id": chroma_id,
-                    "document_id": meta.get("document_id"),
+                    "chunk_id": chroma_id,
                     "section_id": meta.get("section_id"),
                     "text": decrypted_text,
-                    "sequence_number": chunk_record.sequence_number if chunk_record else 1
+                    "sequence_number": chunk_record.sequence_number if chunk_record else 0
                 })
-
-                # 2. Dynamic Depth Expansion via Relational Linked List
-                if include_neighbor_chunks and chunk_record:
-                    neighbor_ids = []
-                    if chunk_record.prev_chunk_id:
-                        neighbor_ids.append(chunk_record.prev_chunk_id)
-                    if chunk_record.next_chunk_id:
-                        neighbor_ids.append(chunk_record.next_chunk_id)
-
-                    if neighbor_ids:
-                        neighbors = db.query(DocumentChunk).filter(DocumentChunk.id.in_(neighbor_ids)).all()
-                        neighbor_chroma_ids = [n.chroma_vector_id for n in neighbors if n.chroma_vector_id not in target_chroma_ids]
-                        
-                        if neighbor_chroma_ids:
-                            n_results = self.collection.get(ids=neighbor_chroma_ids)
-                            if n_results and n_results.get("ids"):
-                                for n_idx, n_chroma_id in enumerate(n_results["ids"]):
-                                    n_enc = n_results["documents"][n_idx]
-                                    n_dec = decrypt_text_string(n_enc, workspace_id)
-                                    retrieved_chunks.append({
-                                        "chroma_id": n_chroma_id,
-                                        "document_id": meta.get("document_id"),
-                                        "section_id": meta.get("section_id"),
-                                        "text": n_dec,
-                                        "sequence_number": 0  # Neighbor context tag
-                                    })
 
         finally:
             db.close()
 
-        # Deduplicate retrieved chunks by content
-        seen = set()
-        unique_chunks = []
-        for c in retrieved_chunks:
-            if c["text"] not in seen:
-                seen.add(c["text"])
-                unique_chunks.append(c)
+        # =====================================================================
+        # 🟢 STEP 3: DEDUPLICATE & SORT FOR THE LLM
+        # =====================================================================
+        # 1. Deduplicate by chunk_id just in case
+        unique_chunks_map = {c["chunk_id"]: c for c in retrieved_chunks}
+        unique_chunks = list(unique_chunks_map.values())
+        
+        # 2. Sort by sequence_number so the Final LLM reads the paragraphs in the exact correct order
+        unique_chunks.sort(key=lambda x: x["sequence_number"])
 
+        print(f"✅ Successfully retrieved, decrypted, and sorted {len(unique_chunks)} chunks for the Response AI.")
         return unique_chunks

@@ -11,22 +11,28 @@ from google import genai
 from app.models.new_arch import DocumentSection, DocumentChunk
 
 # =====================================================================
-# 1. AI Output Schema (Strict & Simple)
+# 1. AI Output Schema (Upgraded to Target Chunks Directly)
 # =====================================================================
 class RoutingDecision(BaseModel):
-    target_section_ids: List[str] = Field(
-        description="The exact list of string UUIDs for the sections containing the answer."
-    )
-    retrieval_mode: str = Field(
-        default="sniper",
-        description="Must be 'sniper' for specific facts/numbers/single-rows, or 'full_section' for broad explanations, full procedures, or complete tables."
+    # 🟢 NEW: The LLM outputs the exact chunk ID, not just the broad section!
+    target_chunk_ids: List[str] = Field(
+        description="The exact list of string UUIDs for the chunks containing the most accurate answers."
     )
     routing_reasoning: str = Field(
-        description="A brief explanation of why these specific sections and retrieval mode were chosen."
+        description="Brief explanation of why these specific chunks were chosen."
     )
 
 # =====================================================================
-# 2. The Smart Query Engine (Option 3: Hierarchical Vector Search)
+# 2. Reciprocal Rank Fusion (RRF) Math Function
+# =====================================================================
+def calculate_rrf(vector_rank: int, keyword_rank: int, k: int = 60) -> float:
+    """Calculates the RRF score. If a chunk isn't in a list, its rank is infinity."""
+    v_score = 1.0 / (k + vector_rank) if vector_rank else 0.0
+    k_score = 1.0 / (k + keyword_rank) if keyword_rank else 0.0
+    return v_score + k_score
+
+# =====================================================================
+# 3. The New Hybrid Smart Router
 # =====================================================================
 def execute_smart_routing(
     user_prompt: str, 
@@ -36,14 +42,8 @@ def execute_smart_routing(
 ) -> List[str]:
     
     gemini_key = os.getenv("INTELLIGENCE_LAYER_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
-        raise ValueError("CRITICAL: API key for Smart Router AI is missing.")
-        
     client = genai.Client(api_key=gemini_key)
 
-    # =====================================================================
-    # 🟢 STEP 1: VECTOR SEARCH FILTER (ChromaDB gets the Top 15)
-    # =====================================================================
     CHROMA_HOST = os.getenv("CHROMA_HOST")
     CHROMA_TOKEN = os.getenv("CHROMA_TOKEN")
     chroma_client = chromadb.HttpClient(
@@ -51,179 +51,123 @@ def execute_smart_routing(
         headers={"Authorization": f"Bearer {CHROMA_TOKEN}"} if CHROMA_TOKEN else None
     )
     
-    nav_collection = chroma_client.get_or_create_collection(
-        name="navigation_index_cards",
+    # 🟢 We only use the ONE unified collection now!
+    collection = chroma_client.get_or_create_collection(
+        name="rag_enterprise_vectors_v1",
         metadata={"hnsw:space": "cosine"}
     )
 
-    print("🔍 Embedding user question for Navigation Search...")
-    try:
-        # 1. Turn the question into a mathematical vector
-        query_vector_resp = client.models.embed_content(
-            model="models/gemini-embedding-001",
-            contents=user_prompt
-        )
-        query_vector = query_vector_resp.embeddings[0].values
-
-        # 2. Setup the Workspace Filter
-        # 2. Setup the Workspace Filter (Fixed for ChromaDB Strict Syntax)
-        if document_ids:
-            where_filter = {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"document_id": {"$in": [str(d) for d in document_ids]}}
-                ]
-            }
-        else:
-            where_filter = {"workspace_id": str(workspace_id)}
-
-        # 3. Pull strictly the Top 15 best semantic matches
-        chroma_results = nav_collection.query(
-            query_embeddings=[query_vector],
-            n_results=15,
-            where=where_filter
-        )
-        
-        top_section_ids = chroma_results["ids"][0] if chroma_results["ids"] else []
-    except Exception as e:
-        print(f"❌ Navigation Vector Search failed: {e}")
-        return []
-
-    if not top_section_ids:
-        print("⚠️ No relevant index cards found in ChromaDB.")
-        return []
-
-    # =====================================================================
-    # 🟢 STEP 2: BUILD THE MINI-CATALOG & ASK GEMINI
-    # =====================================================================
-    # Fetch full details from Postgres ONLY for the 15 IDs Chroma found
-    available_sections = db.query(DocumentSection).filter(
-        DocumentSection.id.in_(top_section_ids)
-    ).all()
+    print("🔍 Executing Dual Hybrid Search (Vector + Keyword)...")
     
+    # Extract naive keywords from prompt for the BM25-style dragnet
+    keywords = [word for word in user_prompt.split() if len(word) > 4]
+    
+    # 1. VECTOR SEARCH (Finds Meaning)
+    query_vector_resp = client.models.embed_content(
+        model="models/gemini-embedding-001",
+        contents=user_prompt
+    )
+    query_vector = query_vector_resp.embeddings[0].values
+
+    vector_results = collection.query(
+        query_embeddings=[query_vector],
+        n_results=15,
+        where={"workspace_id": str(workspace_id)}
+    )
+    
+    # 2. KEYWORD SEARCH (Finds Exact Matches using Chroma $contains)
+    keyword_filter = {"$or": [{"chunk_keywords": {"$contains": kw}} for kw in keywords]} if keywords else {}
+    keyword_where = {"$and": [{"workspace_id": str(workspace_id)}, keyword_filter]} if keyword_filter else {"workspace_id": str(workspace_id)}
+    
+    keyword_results = collection.query(
+        query_embeddings=[query_vector], # Chroma requires a vector even for metadata filtering
+        n_results=15,
+        where=keyword_where
+    )
+
+    # =====================================================================
+    # 🟢 STEP 2: RRF MERGE & DEDUPLICATION
+    # =====================================================================
+    # Map the ranks for each returned chunk ID
+    vector_ids = vector_results["ids"][0] if vector_results["ids"] else []
+    keyword_ids = keyword_results["ids"][0] if keyword_results["ids"] else []
+    
+    # Extract the metadata (The Index Cards) we saved during ingestion
+    vector_metas = vector_results["metadatas"][0] if vector_results["metadatas"] else []
+    keyword_metas = keyword_results["metadatas"][0] if keyword_results["metadatas"] else []
+    
+    master_metadata_map = {}
+    for idx, cid in enumerate(vector_ids):
+        master_metadata_map[cid] = {"meta": vector_metas[idx], "v_rank": idx + 1, "k_rank": None}
+    for idx, cid in enumerate(keyword_ids):
+        if cid in master_metadata_map:
+            master_metadata_map[cid]["k_rank"] = idx + 1
+        else:
+            master_metadata_map[cid] = {"meta": keyword_metas[idx], "v_rank": None, "k_rank": idx + 1}
+
+    # Calculate RRF and sort to get the absolute TOP 5 deduplicated chunks
+    rrf_scores = []
+    for cid, data in master_metadata_map.items():
+        score = calculate_rrf(data["v_rank"], data["k_rank"])
+        rrf_scores.append((score, cid, data["meta"]))
+    
+    rrf_scores.sort(key=lambda x: x[0], reverse=True)
+    top_5_cards = rrf_scores[:5]
+
+    if not top_5_cards:
+        return []
+
+    # =====================================================================
+    # 🟢 STEP 3: THE SMART ROUTER (LLM JUDGE)
+    # =====================================================================
     index_cards = []
-    for sec in available_sections:
-        hint = sec.chunking_strategy_hint or {}
-        snippet = hint.get("normalized_text", "")[:150]
-        
+    for score, cid, meta in top_5_cards:
         index_cards.append({
-            "section_id": str(sec.id),
-            "path": sec.parent_path,
-            "title": sec.title,
-            "type": sec.content_type,
-            "summary": sec.semantic_summary,
-            "entities": sec.key_entities,   
-            "data_preview": snippet          
+            "chunk_id": cid,
+            "section_id": meta.get("section_id"),
+            "path": meta.get("parent_path"),
+            "type": meta.get("type"),
+            "summary": meta.get("semantic_summary"),
         })
 
     system_instruction = (
-        "You are the Smart Query Router for AgentPulse.\n"
-        "MISSION:\n"
-        "Read the user's question and review the provided Document Index Catalog.\n"
-        "Select ONLY the `section_id`s that semantically match the user's intent. "
-        "Use the `path`, `summary`, `entities`, and `data_preview` to determine relevance. If the user asks for a broad overview, prioritize sections with `type: master_scheme_table`.\n\n"
-        "RETRIEVAL MODE RULES:\n"
-        "- Use 'sniper' if the user asks for a specific fact, definition, number, or a single row of data.\n"
-        "- Use 'full_section' if the user asks for a complete list, a full procedure, an entire timetable, or a broad summary.\n\n"
+        "You are the Smart Query Router for an Enterprise RAG pipeline.\n"
+        "CRITICAL ANTI-TUNNEL VISION MANDATE:\n"
+        "Read the user's question and review ALL 5 Document Index Cards.\n"
+        "You MUST evaluate every card. Select the `chunk_id`s that contain the exact answer. "
+        "If multiple chunks hold pieces of the answer, return ALL of their `chunk_id`s.\n\n"
         "OUTPUT EXACT JSON matching this schema:\n"
-        "{\"target_section_ids\": [\"uuid-string\"], \"retrieval_mode\": \"sniper or full_section\", \"routing_reasoning\": \"string\"}"
+        "{\"target_chunk_ids\": [\"uuid-string\"], \"routing_reasoning\": \"string\"}"
     )
 
-    prompt = (
-        f"USER QUESTION: \"{user_prompt}\"\n\n"
-        f"DOCUMENT INDEX CATALOG:\n"
-        f"{json.dumps(index_cards, indent=2)}"
-    )
-
-    print(f"\n{'='*60}")
-    print("🧠 [TRANSPARENCY] SMART ROUTER PROMPT (What the Router sees)")
-    print(json.dumps(index_cards, indent=2))
-    print(f"{'='*60}\n")
-
-    print(f"🧠 Routing Query through Smart Navigation AI (Scanning {len(index_cards)} Filtered Index Cards)...")
+    prompt = f"USER QUESTION: \"{user_prompt}\"\n\nINDEX CARDS:\n{json.dumps(index_cards, indent=2)}"
     
-    # 🟢 THE FIX: 3-Attempt Retry Loop for Google API 503/429 Errors
-    max_retries = 3
-    response = None
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model="gemini-3.1-flash-lite", 
-                contents=prompt,
-                config={
-                    "system_instruction": system_instruction,
-                    "response_mime_type": "application/json",
-                    "temperature": 0.0
-                }
-            )
-            break  # Break out if successful
-        except Exception as e:
-            error_str = str(e)
-            if ("503" in error_str or "429" in error_str) and attempt < max_retries - 1:
-                sleep_time = (attempt + 1) * 3
-                print(f"⚠️ Google API busy ({error_str[:30]}). Retrying in {sleep_time} seconds...")
-                time.sleep(sleep_time)
-            else:
-                print(f"❌ Smart Router LLM call permanently failed: {e}")
-                return []
-
-    if not response:
-        return []
-
-    if hasattr(response, "usage_metadata") and response.usage_metadata:
-        meta = response.usage_metadata
-        print(f"📊 [SMART ROUTER TOKEN USAGE]")
-        print(f"   - Prompt Tokens     : {getattr(meta, 'prompt_token_count', 0)}")
-        print(f"   - Completion Tokens : {getattr(meta, 'candidates_token_count', 0)}")
-        print(f"   - Total Tokens      : {getattr(meta, 'total_token_count', 0)}")
-
-    try:
-        decision = RoutingDecision.model_validate_json(response.text)
-        print(f"✅ Router AI Decision: {decision.routing_reasoning}")
-        print(f"🎯 Selected Sections: {len(decision.target_section_ids)}")
-    except Exception as e:
-        print(f"❌ Failed to parse Router AI output: {e}")
-        return []
-
-    if not decision.target_section_ids:
-        return []
-
-   # =====================================================================
-    # 🟢 PHASE 3: DYNAMIC RETRIEVAL (RESTORED AGENTIC BOUNDARY)
+    response = client.models.generate_content(
+        model="gemini-3.1-flash-lite", 
+        contents=prompt,
+        config={
+            "system_instruction": system_instruction,
+            "response_mime_type": "application/json",
+            "temperature": 0.0
+        }
+    )
+    
+    decision = RoutingDecision.model_validate_json(response.text)
+    
     # =====================================================================
-    print(f"🎯 Activating {decision.retrieval_mode.upper()} Mode for {len(decision.target_section_ids)} sections...")
-    final_vector_ids = []
+    # 🟢 STEP 4: THE POSTGRESQL LINKED-LIST FETCH (No 2nd Vector Search!)
+    # =====================================================================
+    print(f"🎯 Router selected Chunk IDs: {decision.target_chunk_ids}")
+    final_chunk_ids_to_fetch = set(decision.target_chunk_ids)
 
-    if decision.retrieval_mode == "full_section":
-        target_chunks = db.query(DocumentChunk).filter(DocumentChunk.section_id.in_(decision.target_section_ids), DocumentChunk.workspace_id == workspace_id).order_by(DocumentChunk.sequence_number.asc()).all()
-        final_vector_ids = [chunk.chroma_vector_id for chunk in target_chunks]
-    else:
-        chunk_collection = chroma_client.get_or_create_collection(name="rag_enterprise_vectors_v1", metadata={"hnsw:space": "cosine"})
-        
-        # 🟢 THE FIX: Put your exact section_id boundary back using strict $and syntax
-        if document_ids:
-            where_chunk_filter = {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"document_id": {"$in": [str(d) for d in document_ids]}},
-                    {"section_id": {"$in": decision.target_section_ids}}
-                ]
-            }
-        else:
-            where_chunk_filter = {
-                "$and": [
-                    {"workspace_id": str(workspace_id)},
-                    {"section_id": {"$in": decision.target_section_ids}}
-                ]
-            }
-            
-        try:
-            # Drop from 10 to 5 since step_tasks grabs neighbors anyway. Keeps tokens ultra-low!
-            chunk_results = chunk_collection.query(query_embeddings=[query_vector], n_results=1, where=where_chunk_filter)
-            final_vector_ids = chunk_results["ids"][0] if chunk_results["ids"] else []
-        except Exception as e:
-            print(f"❌ Chunk-level Vector Search failed: {e}")
-            final_vector_ids = []
+    # Fetch the neighbors from Postgres to guarantee unbreakable context
+    target_chunks = db.query(DocumentChunk).filter(DocumentChunk.id.in_(decision.target_chunk_ids)).all()
+    
+    for chunk in target_chunks:
+        if chunk.prev_chunk_id:
+            final_chunk_ids_to_fetch.add(str(chunk.prev_chunk_id))
+        if chunk.next_chunk_id:
+            final_chunk_ids_to_fetch.add(str(chunk.next_chunk_id))
 
-    print(f"📡 Sniper resolved {len(final_vector_ids)} highly-targeted vector chunks inside your locked boundary.")
-    return final_vector_ids
+    # Return the exact list of IDs. The next file will just run chroma.get(ids=...)
+    return list(final_chunk_ids_to_fetch)

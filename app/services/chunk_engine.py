@@ -3,133 +3,104 @@ import re
 from typing import List, Dict, Any, Optional
 
 class ChunkEngine:
-    def __init__(self, chunk_size: int = 400, overlap: int = 50):
-        self.chunk_size = chunk_size
+    def __init__(self, table_row_limit: int = 5, narrative_chunk_size: int = 400, overlap: int = 50):
+        self.table_row_limit = table_row_limit  # 🟢 NEW: Fixed 5-row slicing
+        self.narrative_chunk_size = narrative_chunk_size
         self.overlap = overlap
 
     def execute_section_chunking(
         self, 
-        section_text: str, 
-        section_id: Optional[uuid.UUID], 
+        section_text: str,
+        section_id: uuid.UUID, 
         document_id: uuid.UUID, 
         workspace_id: uuid.UUID, 
-        agent_id: Optional[uuid.UUID] = None,
-        strategy_hint: Dict[str, Any] = None
+        content_type: str,            # "data_table" or "narrative"
+        table_headers: Optional[str]  # Passed directly from the new Postgres schema
     ) -> List[Dict[str, Any]]:
+        
         if not section_text or not section_text.strip():
             return []
 
         chunks = []
         sequence = 1
-        
-        strategy_hint = strategy_hint or {}
-        preserve_tables = strategy_hint.get("preserve_tables", False)
-        section_title = strategy_hint.get("section", "Unknown Section").strip()
 
         # =====================================================================
-        # 📊 1. SEMANTIC TABLE CHUNKING (With Smart Row Grouping)
+        # 📊 1. MATHEMATICAL TABLE CHUNKING (The 5-Row Slicer)
         # =====================================================================
-        if preserve_tables:
-            row_groupings = strategy_hint.get("row_groupings", [])
-            header_prefix = f"[TABLE CONTEXT: {section_title}]\n\n"
+        if content_type == "data_table":
+            print(f"\n🧠 [X-RAY CHUNKER] Slicing Table mathematically (Max {self.table_row_limit} rows per chunk)")
             
-            # Extract rows from pure Markdown table (lines starting with |)
+            # Extract clean rows from pure Markdown
             lines = section_text.strip().split("\n")
-            
-            data_rows = []
-            for line in lines:
-                line = line.strip()
-                if line.startswith("|"):
-                    if re.search(r"\|[\-\s:]+\|", line):
-                        continue # Skip markdown separator like |---|---|
-                    data_rows.append(line)
+            data_rows = [
+                line.strip() for line in lines 
+                if line.strip().startswith("|") and not re.search(r"\|[\-\s:]+\|", line.strip())
+            ]
             
             if not data_rows:
-                # Fallback if the AI mistakenly flagged text as a table
-                self._append_chunk(chunks, section_text, sequence, section_id, document_id, workspace_id, agent_id)
-                return chunks
+                # Fallback to narrative if parsing fails
+                content_type = "narrative"
+            else:
+                # If headers weren't provided by AI, grab the first row manually
+                headers = table_headers if table_headers else data_rows[0]
+                actual_data_rows = data_rows[1:] if not table_headers else data_rows
                 
-            markdown_header = data_rows[0]
-            actual_data_rows = data_rows[1:]
-            
-            # Fallback: If AI fails to provide groups, treat each row as its own group
-            if not row_groupings:
-                row_groupings = [{"start_row": i+1, "end_row": i+1} for i in range(len(actual_data_rows))]
-            
-            current_chunk_rows = []
-            current_word_count = len(markdown_header.split())
-            
-            print(f"\n🧠 [X-RAY CHUNKER] Processing Table: '{section_title}' ({len(actual_data_rows)} Rows, {len(row_groupings)} Groups)")
-            
-            for group in row_groupings:
-                start = group.get("start_row", 1) if isinstance(group, dict) else getattr(group, "start_row", 1)
-                end = group.get("end_row", start) if isinstance(group, dict) else getattr(group, "end_row", start)
-                
-                # Zero-indexed list slices (start-1 because AI returns 1-indexed rows)
-                group_rows = actual_data_rows[start-1 : end]
-                if not group_rows:
-                    continue
+                # 🟢 Mathematical Slicing (Step by 5)
+                for i in range(0, len(actual_data_rows), self.table_row_limit):
+                    row_slice = actual_data_rows[i : i + self.table_row_limit]
                     
-                group_text = "\n".join(group_rows)
-                words_in_group = len(group_text.split())
-                
-                # 🟢 THE LOGIC YOU INVENTED: If group exceeds space, shift entire group to next chunk!
-                if current_word_count + words_in_group > self.chunk_size and current_chunk_rows:
-                    print(f"   ✂️ Group ({words_in_group} words) exceeds limit. Sealing Chunk {sequence} early.")
-                    final_text = header_prefix + markdown_header + "\n" + "\n".join(current_chunk_rows)
-                    self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
+                    # Glue the headers to the top of the slice!
+                    final_text = f"{headers}\n" + "\n".join(row_slice)
+                    
+                    self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id)
                     sequence += 1
-                    
-                    # Start fresh chunk with the shifted group
-                    current_chunk_rows = group_rows
-                    current_word_count = len(markdown_header.split()) + words_in_group
-                else:
-                    current_chunk_rows.extend(group_rows)
-                    current_word_count += words_in_group
-                    print(f"   -> Added Group (Rows {start}-{end}): +{words_in_group} words (Running Total: {current_word_count}/{self.chunk_size})")
-                    
-            if current_chunk_rows:
-                print(f"   📦 Finalizing last pieces into chunk {sequence}.")
-                final_text = header_prefix + markdown_header + "\n" + "\n".join(current_chunk_rows)
-                self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id, agent_id)
 
         # =====================================================================
         # 📝 2. NARRATIVE CHUNKING (For Paragraphs)
         # =====================================================================
-        else:
-            header_prefix = f"[DOCUMENT SECTION: {section_title}]\n\n"
-            
-            print(f"\n📝 [X-RAY CHUNKER] Processing Paragraph: '{section_title}'")
+        if content_type == "narrative":
+            print(f"\n📝 [X-RAY CHUNKER] Processing Narrative Paragraph")
             
             words = section_text.split()
-            stride = self.chunk_size - self.overlap
-            if stride <= 0: stride = self.chunk_size
+            stride = self.narrative_chunk_size - self.overlap
+            if stride <= 0: stride = self.narrative_chunk_size
 
             for i in range(0, len(words), stride):
-                chunk_words = words[i:i + self.chunk_size]
+                chunk_words = words[i:i + self.narrative_chunk_size]
                 chunk_str = " ".join(chunk_words)
                 
                 if chunk_str.strip():
-                    final_chunk_text = header_prefix + chunk_str
-                    self._append_chunk(chunks, final_chunk_text, sequence, section_id, document_id, workspace_id, agent_id)
+                    self._append_chunk(chunks, chunk_str, sequence, section_id, document_id, workspace_id)
                     sequence += 1
+
+        # =====================================================================
+        # 🔗 3. BUILD THE LINKED-LIST (The Retrieval Safety Net)
+        # =====================================================================
+        # Now that all chunks are created, we link them together using their UUIDs.
+        for i in range(len(chunks)):
+            if i > 0:
+                chunks[i]["prev_chunk_id"] = chunks[i-1]["id"]
+            if i < len(chunks) - 1:
+                chunks[i]["next_chunk_id"] = chunks[i+1]["id"]
 
         return chunks
 
-    def _append_chunk(self, chunks_list, text, sequence, section_id, document_id, workspace_id, agent_id):
+    def _append_chunk(self, chunks_list, text, sequence, section_id, document_id, workspace_id):
         text = text.strip()
         if not text:
             return
             
-        extractive_summary = text[:150].strip() + "..." if len(text) > 150 else text
+        # 🟢 GENERATE THE UUID HERE! 
+        # This becomes the exact ID for both PostgreSQL and ChromaDB.
+        chunk_id = uuid.uuid4()
         
         chunks_list.append({
+            "id": chunk_id,
             "text": text,
             "section_id": section_id,
             "document_id": document_id,
             "workspace_id": workspace_id,
-            "agent_id": agent_id,
             "sequence_number": sequence,
-            "word_count": len(text.split()),
-            "telemetry_summary": extractive_summary
+            "prev_chunk_id": None, # Will be filled in Step 3
+            "next_chunk_id": None  # Will be filled in Step 3
         })
