@@ -259,6 +259,13 @@ def execute_smart_routing(
         }
     )
 
+    # 🟢 NEW: Extract and print the exact token usage for the routing decision
+    if response.usage_metadata:
+        p_tokens = response.usage_metadata.prompt_token_count
+        c_tokens = response.usage_metadata.candidates_token_count
+        t_tokens = response.usage_metadata.total_token_count
+        print(f"📊 [SMART ROUTER TOKENS] Prompt: {p_tokens} | Completion: {c_tokens} | Total: {t_tokens}")
+
     decision = RoutingDecision.model_validate_json(response.text)
     print(f"🎯 Router Decision ({len(decision.target_chunk_ids)} selected): {decision.routing_reasoning}")
 
