@@ -18,22 +18,16 @@ from app.models.new_arch import DocumentChunk
 
 import re
 
-def extract_chunk_keywords(text: str) -> str:
+def extract_query_keywords(prompt: str) -> List[str]:
     """
-    Extracts high-signal tokens (acronyms, numbers, capitalized nouns)
-    instantly in Python without making any external LLM API calls.
+    Extracts ONLY high-signal needles (Acronyms and Numbers) from the prompt.
+    This prevents generic words like 'What' or 'University' from flooding the ChromaDB $or filter.
     """
-    if not text:
-        return ""
+    # 1. Finds acronyms 2+ letters long (e.g., IGNOU, UGC)
+    # 2. Finds exact numbers/decimals (e.g., 12123.00, 2026)
+    tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b', prompt)
     
-    # 1. Finds acronyms (e.g., IGNOU)
-    # 2. Finds numbers/decimals (e.g., 12123.00)
-    # 3. Finds capitalized nouns (e.g., Education)
-    tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b|\b[A-Z][a-z]{3,}\b', text)
-    
-    # Deduplicate while preserving order, keep top 15
-    unique_tokens = list(dict.fromkeys(tokens))
-    return ", ".join(unique_tokens[:15])
+    return list(dict.fromkeys(tokens))
 
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
 if not CELERY_BROKER:
