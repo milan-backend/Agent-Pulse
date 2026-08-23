@@ -45,12 +45,18 @@ class ChunkEngine:
                 headers = table_headers if table_headers else data_rows[0]
                 actual_data_rows = data_rows[1:] if not table_headers else data_rows
                 
+                # 🟢 NEW FIX: Generate the Markdown separator row so the LLM reads it as a table!
+                col_count = headers.count("|") - 1
+                if col_count < 1: 
+                    col_count = 1
+                separator_row = "|" + "|".join(["---"] * col_count) + "|"
+                
                 # 🟢 Mathematical Slicing (Step by 5)
                 for i in range(0, len(actual_data_rows), self.table_row_limit):
                     row_slice = actual_data_rows[i : i + self.table_row_limit]
                     
-                    # Glue the headers to the top of the slice!
-                    final_text = f"{headers}\n" + "\n".join(row_slice)
+                    # 🟢 Inject the headers AND the separator row!
+                    final_text = f"{headers}\n{separator_row}\n" + "\n".join(row_slice)
                     
                     self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id)
                     sequence += 1
