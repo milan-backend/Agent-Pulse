@@ -46,8 +46,14 @@ def distance_to_match_percentage(distance: float) -> int:
 
 
 def extract_query_keywords(prompt: str) -> List[str]:
-    """Extracts significant tokens, acronyms, and alphanumeric identifiers from prompt."""
-    tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b|\b[A-Za-z]{3,}\b', prompt)
+    """
+    Extracts ONLY high-signal needles (Acronyms and Numbers) from the prompt.
+    This prevents generic words like 'What' or 'University' from flooding the ChromaDB $or filter.
+    """
+    # 1. Finds acronyms 2+ letters long (e.g., IGNOU, UGC)
+    # 2. Finds exact numbers/decimals (e.g., 12123.00, 2026)
+    tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b', prompt)
+    
     return list(dict.fromkeys(tokens))
 
 
