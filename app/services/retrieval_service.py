@@ -82,6 +82,7 @@ class RetrievalService:
 
                 retrieved_chunks.append({
                     "chunk_id": chroma_id,
+                    "document_id": meta.get("document_id"),
                     "section_id": meta.get("section_id"),
                     "text": decrypted_text,
                     "sequence_number": chunk_record.sequence_number if chunk_record else 0

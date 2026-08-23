@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from google import genai
 
 from app.models.new_arch import DocumentSection, DocumentChunk
+from app.core.rag_crypto import decrypt_text_string
 
 # =====================================================================
 # 1. AI Output Schema (Upgraded to Target Chunks Directly)
@@ -61,6 +62,16 @@ def execute_smart_routing(
     
     # Extract naive keywords from prompt for the BM25-style dragnet
     keywords = [word for word in user_prompt.split() if len(word) > 4]
+
+    # 🟢 NEW: Strict Workspace & Document Boundary Filter
+    where_filter = {"workspace_id": str(workspace_id)}
+    if document_ids:
+        where_filter = {
+            "$and": [
+                {"workspace_id": str(workspace_id)},
+                {"document_id": {"$in": document_ids}}
+            ]
+        }
     
     # 1. VECTOR SEARCH (Finds Meaning)
     query_vector_resp = client.models.embed_content(
@@ -72,44 +83,48 @@ def execute_smart_routing(
     vector_results = collection.query(
         query_embeddings=[query_vector],
         n_results=15,
-        where={"workspace_id": str(workspace_id)}
+        where=where_filter
     )
     
-    # 2. KEYWORD SEARCH (Finds Exact Matches using Chroma $contains)
+    # 2. KEYWORD SEARCH
     keyword_filter = {"$or": [{"chunk_keywords": {"$contains": kw}} for kw in keywords]} if keywords else {}
-    keyword_where = {"$and": [{"workspace_id": str(workspace_id)}, keyword_filter]} if keyword_filter else {"workspace_id": str(workspace_id)}
+    keyword_where = {"$and": [{"workspace_id": str(workspace_id)}, keyword_filter]} if keyword_filter else where_filter
     
     keyword_results = collection.query(
-        query_embeddings=[query_vector], # Chroma requires a vector even for metadata filtering
+        query_embeddings=[query_vector], 
         n_results=15,
         where=keyword_where
     )
 
     # =====================================================================
-    # 🟢 STEP 2: RRF MERGE & DEDUPLICATION
+    # 🟢 STEP 2: RRF MERGE, DEDUPLICATION, & DECRYPTION PREVIEW
     # =====================================================================
-    # Map the ranks for each returned chunk ID
-    vector_ids = vector_results["ids"][0] if vector_results["ids"] else []
-    keyword_ids = keyword_results["ids"][0] if keyword_results["ids"] else []
+    vector_ids = vector_results["ids"][0] if vector_results.get("ids") else []
+    vector_metas = vector_results["metadatas"][0] if vector_results.get("metadatas") else []
+    vector_docs = vector_results["documents"][0] if vector_results.get("documents") else []
     
-    # Extract the metadata (The Index Cards) we saved during ingestion
-    vector_metas = vector_results["metadatas"][0] if vector_results["metadatas"] else []
-    keyword_metas = keyword_results["metadatas"][0] if keyword_results["metadatas"] else []
+    keyword_ids = keyword_results["ids"][0] if keyword_results.get("ids") else []
+    keyword_metas = keyword_results["metadatas"][0] if keyword_results.get("metadatas") else []
+    keyword_docs = keyword_results["documents"][0] if keyword_results.get("documents") else []
     
     master_metadata_map = {}
+    
     for idx, cid in enumerate(vector_ids):
-        master_metadata_map[cid] = {"meta": vector_metas[idx], "v_rank": idx + 1, "k_rank": None}
+        # 🟢 Decrypt a 300-character sneak peek so the LLM knows the answer is here!
+        snippet = decrypt_text_string(vector_docs[idx], workspace_id)[:300] if vector_docs else ""
+        master_metadata_map[cid] = {"meta": vector_metas[idx], "v_rank": idx + 1, "k_rank": None, "preview": snippet}
+        
     for idx, cid in enumerate(keyword_ids):
         if cid in master_metadata_map:
             master_metadata_map[cid]["k_rank"] = idx + 1
         else:
-            master_metadata_map[cid] = {"meta": keyword_metas[idx], "v_rank": None, "k_rank": idx + 1}
+            snippet = decrypt_text_string(keyword_docs[idx], workspace_id)[:300] if keyword_docs else ""
+            master_metadata_map[cid] = {"meta": keyword_metas[idx], "v_rank": None, "k_rank": idx + 1, "preview": snippet}
 
-    # Calculate RRF and sort to get the absolute TOP 5 deduplicated chunks
     rrf_scores = []
     for cid, data in master_metadata_map.items():
         score = calculate_rrf(data["v_rank"], data["k_rank"])
-        rrf_scores.append((score, cid, data["meta"]))
+        rrf_scores.append((score, cid, data))
     
     rrf_scores.sort(key=lambda x: x[0], reverse=True)
     top_5_cards = rrf_scores[:5]
@@ -121,21 +136,21 @@ def execute_smart_routing(
     # 🟢 STEP 3: THE SMART ROUTER (LLM JUDGE)
     # =====================================================================
     index_cards = []
-    for score, cid, meta in top_5_cards:
+    for score, cid, data in top_5_cards:
+        meta = data["meta"]
         index_cards.append({
             "chunk_id": cid,
-            "section_id": meta.get("section_id"),
             "path": meta.get("parent_path"),
-            "type": meta.get("type"),
             "summary": meta.get("semantic_summary"),
+            "data_preview": data["preview"] + "..." # 🟢 The LLM can now see the text!
         })
 
+    # 🟢 We softened the prompt so it stops rejecting valid data!
     system_instruction = (
         "You are the Smart Query Router for an Enterprise RAG pipeline.\n"
-        "CRITICAL ANTI-TUNNEL VISION MANDATE:\n"
         "Read the user's question and review ALL 5 Document Index Cards.\n"
-        "You MUST evaluate every card. Select the `chunk_id`s that contain the exact answer. "
-        "If multiple chunks hold pieces of the answer, return ALL of their `chunk_id`s.\n\n"
+        "You MUST evaluate every card. Select the `chunk_id`s that are RELEVANT or LIKELY to contain pieces of the answer. "
+        "Do not be overly strict; if a card's data_preview or summary seems related to the topic, select it.\n\n"
         "OUTPUT EXACT JSON matching this schema:\n"
         "{\"target_chunk_ids\": [\"uuid-string\"], \"routing_reasoning\": \"string\"}"
     )
