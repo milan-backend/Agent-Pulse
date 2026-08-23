@@ -18,19 +18,21 @@ from app.models.new_arch import DocumentChunk
 
 import re
 
-import re
-
 def extract_chunk_keywords(text: str) -> str:
     """
-    Extracts high-signal tokens (acronyms, numbers, capitalized nouns)
-    instantly in Python without making any external LLM API calls.
+    Extracts high-signal tokens instantly in Python without LLM API calls.
+    Keeps ALL unique tokens instead of truncating them!
     """
     if not text:
         return ""
     
+    # 1. Finds acronyms (e.g., IGNOU)
+    # 2. Finds numbers/decimals (e.g., 12123.00)
+    # 3. Finds capitalized nouns and proper names (e.g., Indira, Education)
     tokens = re.findall(r'\b[A-Z]{2,}\b|\b\d+(?:\.\d+)?\b|\b[A-Z][a-z]{3,}\b', text)
+    
     unique_tokens = list(dict.fromkeys(tokens))
-    return ", ".join(unique_tokens[:15])
+    return ", ".join(unique_tokens)  # 🟢 REMOVED THE [:15] LIMIT! Keep them all!
 
 CELERY_BROKER = os.getenv("CELERY_BROKER_URL") or os.getenv("REDIS_URL")
 if not CELERY_BROKER:
