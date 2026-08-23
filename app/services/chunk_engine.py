@@ -30,33 +30,49 @@ class ChunkEngine:
         if content_type == "data_table":
             print(f"\n🧠 [X-RAY CHUNKER] Slicing Table mathematically (Max {self.table_row_limit} rows per chunk)")
             
-            # Extract clean rows from pure Markdown
+            # Extract clean rows from Markdown
             lines = section_text.strip().split("\n")
             data_rows = [
                 line.strip() for line in lines 
-                if line.strip().startswith("|") and not re.search(r"\|[\-\s:]+\|", line.strip())
+                if line.strip().startswith("|") and not re.search(r"^\|[\-\s:|]+\|$", line.strip())
             ]
             
             if not data_rows:
-                # Fallback to narrative if parsing fails
                 content_type = "narrative"
             else:
-                # If headers weren't provided by AI, grab the first row manually
-                headers = table_headers if table_headers else data_rows[0]
-                actual_data_rows = data_rows[1:] if not table_headers else data_rows
-                
-                # 🟢 NEW FIX: Generate the Markdown separator row so the LLM reads it as a table!
-                col_count = headers.count("|") - 1
-                if col_count < 1: 
-                    col_count = 1
-                separator_row = "|" + "|".join(["---"] * col_count) + "|"
-                
-                # 🟢 Mathematical Slicing (Step by 5)
+                # 🟢 1. Multi-Row Header Resolution
+                if table_headers and table_headers.strip():
+                    header_block = table_headers.strip()
+                    header_lines = [h.strip() for h in header_block.split("\n") if h.strip()]
+                    actual_data_rows = [r for r in data_rows if r not in header_lines]
+                else:
+                    # If top 2 rows are years + categories (e.g. Budget / Revenue), combine them
+                    if len(data_rows) >= 2 and any(k in data_rows[1].lower() for k in ["revenue", "capital", "total", "actual", "budget"]):
+                        header_block = f"{data_rows[0]}\n{data_rows[1]}"
+                        actual_data_rows = data_rows[2:]
+                    else:
+                        header_block = data_rows[0]
+                        actual_data_rows = data_rows[1:]
+
+                # 🟢 2. Dynamic Separator Width (Matches the widest row)
+                sample_rows = [header_block] + actual_data_rows[:5]
+                max_cols = 1
+                for r in sample_rows:
+                    for line in r.split("\n"):
+                        cols = line.count("|") - 1
+                        if cols > max_cols:
+                            max_cols = cols
+
+                separator_row = "|" + "|".join(["---"] * max_cols) + "|"
+
+                # 🟢 3. Guaranteed Header + Separator on Every Slice
+                if not actual_data_rows:
+                    actual_data_rows = [header_block]
+
                 for i in range(0, len(actual_data_rows), self.table_row_limit):
                     row_slice = actual_data_rows[i : i + self.table_row_limit]
                     
-                    # 🟢 Inject the headers AND the separator row!
-                    final_text = f"{headers}\n{separator_row}\n" + "\n".join(row_slice)
+                    final_text = f"{header_block}\n{separator_row}\n" + "\n".join(row_slice)
                     
                     self._append_chunk(chunks, final_text, sequence, section_id, document_id, workspace_id)
                     sequence += 1
