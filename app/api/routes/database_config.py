@@ -12,6 +12,7 @@ from app.core.encryption import encrypt_vault_secret
 from app.api.deps_user import get_current_user
 from app.core.workspace_access import get_workspace_membership
 from app.services.feature_access import require_feature
+from app.tasks.schema_tasks import sync_database_schemas
 
 router = APIRouter(tags=["Database Onboarding"])
 
@@ -107,6 +108,9 @@ def connect_live_database(
         db.add(config)
 
     db.commit()
+
+    # 👉 ADD THIS LINE: Fire the background worker asynchronously
+    sync_database_schemas.delay(workspace_id=workspace_id)
 
     return {
         "status": "success", 
