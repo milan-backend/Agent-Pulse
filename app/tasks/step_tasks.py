@@ -339,14 +339,38 @@ def process_step(self, step_id: str):
                             if customer_identity:
                                enforced_filters["customer_id"] = customer_identity
                             
-                            sql_adapter = UniversalSQLAdapter(config)
-                            db_rows = sql_adapter.execute_query(
-                                table=sql_spec.target_table,
-                                columns=sql_spec.columns,
-                                filters=enforced_filters,
-                                sort_by=sql_spec.sort_by,
-                                limit=sql_spec.limit
-                            )
+                            # Import the global connection adapter and text parser
+                            from app.core.sql_adapter import sql_adapter
+                            from sqlalchemy import text
+                            
+                            # 1. Build the base SELECT query
+                            cols = ", ".join(sql_spec.columns) if sql_spec.columns else "*"
+                            sql_query = f"SELECT {cols} FROM {sql_spec.target_table}"
+                            
+                            # 2. Build secure WHERE clause using bound parameters (Prevents SQL Injection)
+                            where_clauses = []
+                            query_params = {}
+                            
+                            for col_name, col_value in enforced_filters.items():
+                                param_key = f"param_{col_name}"
+                                where_clauses.append(f"{col_name} = :{param_key}")
+                                query_params[param_key] = col_value
+                                
+                            if where_clauses:
+                                sql_query += " WHERE " + " AND ".join(where_clauses)
+                                
+                            # 3. Add Sorting and Limits
+                            if sql_spec.sort_by:
+                                sql_query += f" ORDER BY {sql_spec.sort_by}"
+                                
+                            if sql_spec.limit:
+                                sql_query += f" LIMIT {sql_spec.limit}"
+                                
+                            # 4. Execute securely via the active connection pool
+                            engine = sql_adapter.get_engine(config)
+                            with engine.connect() as connection:
+                                result = connection.execute(text(sql_query), query_params)
+                                db_rows = [dict(row._mapping) for row in result]
                             
                             sql_telemetry_node["records_retrieved"] = len(db_rows)
                             sql_telemetry_node["table_queried"] = sql_spec.target_table
