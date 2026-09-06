@@ -1082,22 +1082,28 @@ export interface DBConnectionPayload {
 }
 
 export const databaseApi = {
-  connectDatabase: async (workspaceId: string | null, payload: DBConnectionPayload) => {
-    // 1. Fetch token
-    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+  connectDatabase: async (providedWorkspaceId: string | null, payload: DBConnectionPayload) => {
+    // 1. Safely resolve token and workspace context for SSR/CSR environments
+    const isClient = typeof window !== "undefined";
+    const token = isClient ? localStorage.getItem("token") : null;
     
-    // 2. Setup standard auth headers matching your existing API patterns
+    // 2. Cascade fallback: provided ID -> active workspace -> default workspace
+    const workspaceId = providedWorkspaceId 
+      || (isClient ? localStorage.getItem("active_workspace_id") : null) 
+      || (isClient ? localStorage.getItem("workspace_id") : null);
+
+    if (!workspaceId) {
+      throw new Error("Session Error: Missing workspace context. Please refresh your browser or log in again.");
+    }
+
+    // 3. Construct headers strictly matching your global authHeaders pattern
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "workspace-id": workspaceId,
     };
 
-    // 3. Inject the workspace ID specifically for this route
-    if (workspaceId) {
-      headers["workspace-id"] = workspaceId;
-    }
-
-    // 4. Use your global request wrapper to send the data safely
+    // 4. Dispatch securely via the global interceptor pipeline
     return request("/database/connect", {
       method: "POST",
       headers,
