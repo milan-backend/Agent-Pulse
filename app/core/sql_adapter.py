@@ -16,13 +16,9 @@ class UniversalSQLAdapter:
     def _build_database_url(self, config: WorkspaceConfig) -> str:
         """Constructs the SQLAlchemy connection URL dynamically."""
         
-        # 1. Decrypt the password right before connecting (Zero Retention)
         password = decrypt_vault_secret(config.db_password_encrypted)
-        
-        # 2. Safely URL-encode the password in case it contains special characters like '@' or '/'
         safe_password = quote_plus(password)
         
-        # 3. Map db_type to standard SQLAlchemy dialects/drivers
         dialect_map = {
             "postgresql": "postgresql+psycopg2",
             "mysql": "mysql+pymysql",
@@ -30,42 +26,37 @@ class UniversalSQLAdapter:
         
         driver = dialect_map.get(config.db_type.lower(), config.db_type.lower())
         
-        # Construct the URL: dialect+driver://username:password@host:port/database
         url = f"{driver}://{config.db_username}:{safe_password}@{config.db_host}:{config.db_port}/{config.db_name}"
+        
+        # 👉 ADD THIS: Hardcode SSL directly into the URL string for SNI compliance
+        if config.db_type.lower() == "postgresql":
+            url += "?sslmode=require"
+            
         return url
 
     def get_engine(self, config: WorkspaceConfig) -> Engine:
         """Returns a cached SQLAlchemy Engine or creates a new one for the tenant."""
         workspace_id = str(config.workspace_id)
         
-        # Reuse existing connection pool if it exists
         if workspace_id in self.active_engines:
             return self.active_engines[workspace_id]
             
         try:
             db_url = self._build_database_url(config)
             
-            # 👉 ADD THIS: Dynamically enforce SSL for Render PostgreSQL
-            connect_args = {}
-            if config.db_type.lower() == "postgresql":
-                connect_args["sslmode"] = "require"
-            
             # create_engine initializes the connection pool
-            # pool_pre_ping=True ensures the engine tests the connection before using it, preventing stale connection crashes
             engine = create_engine(
                 db_url,
                 pool_pre_ping=True,
                 pool_size=5,
-                max_overflow=10,
-                connect_args=connect_args  # 👉 ADD THIS LINE
+                max_overflow=10
+                # (Notice we removed connect_args from here!)
             )
             
             self.active_engines[workspace_id] = engine
             return engine
             
         except Exception as e:
-            # We log the actual error for our backend team, but raise a generic error to the frontend 
-            # to prevent leaking infrastructure details.
             print(f"Engine creation failed for workspace {workspace_id}: {e}")
             raise HTTPException(status_code=500, detail="Failed to connect to workspace database.")
 
