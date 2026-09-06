@@ -32,8 +32,8 @@ class SQLExtractionSpec(BaseModel):
     )
     # 👉 FIXED: Removed Optional, using a standard integer default
     limit: int = Field(
-        default=1,
-        description="Number of rows to return (default is 1 for latest/single entity queries)."
+        default=100,
+        description="Number of rows to return. Use 100 for 'all' queries, or 1 for 'latest/recent' queries."
     )
     routing_reasoning: str = Field(
         description="Brief explanation of why this table, columns, and filters were chosen."
@@ -189,7 +189,7 @@ class SmartSQLQueryService:
             "1. Select ONLY ONE target_table that best answers the query.\n"
             "2. Select only necessary columns relevant to the answer.\n"
             "3. Extract filters strictly from the question (e.g., status, dates). NEVER invent user IDs.\n"
-            "4. For queries asking for 'my latest', 'my recent', or 'where is my', sort by the relevant timestamp DESC and set limit=1.\n"
+            "4. If the user asks for 'all', leave limit at 100. If they ask for 'latest', 'recent', or 'where is my', sort DESC and set limit=1.\n"
             "5. If none of the tables can answer the request, output empty columns and target_table.\n\n"
             "Respond STRICTLY with valid JSON adhering to the SQLExtractionSpec schema."
         )
