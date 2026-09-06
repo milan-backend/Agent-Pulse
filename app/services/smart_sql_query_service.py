@@ -9,6 +9,10 @@ from google import genai
 # =====================================================================
 # 1. Output Schema for Pass 2 (SQL Extraction)
 # =====================================================================
+class SQLFilter(BaseModel):
+    column: str = Field(description="The exact column name to filter by.")
+    value: str = Field(description="The value to match against the column.")
+
 class SQLExtractionSpec(BaseModel):
     target_table: str = Field(
         description="The exact name of the table to query, chosen strictly from candidate schemas."
@@ -16,15 +20,18 @@ class SQLExtractionSpec(BaseModel):
     columns: List[str] = Field(
         description="The list of specific column names to fetch (e.g., ['id', 'status', 'delivery_date'])."
     )
-    filters: Dict[str, Any] = Field(
-        default_factory=dict,
-        description="Key-value pairs for WHERE clauses extracted from user prompt (e.g., {'status': 'shipped'}). NEVER guess or hardcode user identity."
+    # 👉 FIXED: Replaced Dict[str, Any] with a strict list of objects
+    filters: List[SQLFilter] = Field(
+        default_factory=list,
+        description="List of column-value pairs for WHERE clauses extracted from user prompt. NEVER guess or hardcode user identity."
     )
-    sort_by: Optional[str] = Field(
-        default=None,
-        description="Column to sort by, with direction if relevant (e.g., 'created_at DESC')."
+    # 👉 FIXED: Removed Optional, using an empty string default
+    sort_by: str = Field(
+        default="",
+        description="Column to sort by, with direction if relevant (e.g., 'created_at DESC'). Leave empty if none."
     )
-    limit: Optional[int] = Field(
+    # 👉 FIXED: Removed Optional, using a standard integer default
+    limit: int = Field(
         default=1,
         description="Number of rows to return (default is 1 for latest/single entity queries)."
     )

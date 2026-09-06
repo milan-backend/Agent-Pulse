@@ -332,10 +332,12 @@ def process_step(self, step_id: str):
                             # 🛡️ IRON WALL: Force User ID into filters
                             # Assuming the user_id is passed in the durable step input
                             customer_identity = step.input_data.get("customer_id") if isinstance(step.input_data, dict) else None
-                            
-                            enforced_filters = dict(sql_spec.filters)
+
+                            # ✅ FIXED: Loop through the strict Pydantic list and convert it back to a standard dictionary
+                            enforced_filters = {f.column: f.value for f in sql_spec.filters}
+
                             if customer_identity:
-                                enforced_filters["customer_id"] = customer_identity
+                               enforced_filters["customer_id"] = customer_identity
                             
                             sql_adapter = UniversalSQLAdapter(config)
                             db_rows = sql_adapter.execute_query(
