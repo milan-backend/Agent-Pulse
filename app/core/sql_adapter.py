@@ -45,13 +45,19 @@ class UniversalSQLAdapter:
         try:
             db_url = self._build_database_url(config)
             
+            # 👉 ADD THIS: Dynamically enforce SSL for Render PostgreSQL
+            connect_args = {}
+            if config.db_type.lower() == "postgresql":
+                connect_args["sslmode"] = "require"
+            
             # create_engine initializes the connection pool
             # pool_pre_ping=True ensures the engine tests the connection before using it, preventing stale connection crashes
             engine = create_engine(
                 db_url,
                 pool_pre_ping=True,
                 pool_size=5,
-                max_overflow=10
+                max_overflow=10,
+                connect_args=connect_args  # 👉 ADD THIS LINE
             )
             
             self.active_engines[workspace_id] = engine
