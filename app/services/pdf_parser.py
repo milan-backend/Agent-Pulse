@@ -13,8 +13,12 @@ def extract_smart_pages(pdf_path: str) -> List[Dict[str, Any]]:
     
     try:
         # 1. Extract perfectly formatted Markdown page-by-page natively
-        # This keeps all paragraphs, lists, and tables perfectly intact!
-        md_chunks = pymupdf4llm.to_markdown(pdf_path, page_chunks=True)
+        # 🟢 FIX: Added 'language="hin+eng"' so Tesseract can read Hindi (Devanagari)!
+        md_chunks = pymupdf4llm.to_markdown(
+            pdf_path, 
+            page_chunks=True,
+            language="hin+eng"  # 🟢 Tells the OCR engine to expect both Hindi and English
+        )
         
         for i, page_data in enumerate(md_chunks):
             # Fallback to index + 1 if metadata is missing

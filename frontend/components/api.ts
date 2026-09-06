@@ -1063,3 +1063,45 @@ export const fetchAuditLogs = async (filters: AuditLogFilters) => {
     method: "GET"
   });
 };
+
+
+/* =========================================================
+DATABASE ONBOARDING (LIVE SQL)
+========================================================= */
+
+export interface DBConnectionPayload {
+  db_type: string;
+  db_host: string;
+  db_port: number;
+  db_name: string;
+  db_username: string;
+  db_password: string;
+  jwks_url: string;
+  sync_all_tables: boolean;
+  allowed_tables: string[];
+}
+
+export const databaseApi = {
+  connectDatabase: async (workspaceId: string | null, payload: DBConnectionPayload) => {
+    // 1. Fetch token
+    const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    
+    // 2. Setup standard auth headers matching your existing API patterns
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    // 3. Inject the workspace ID specifically for this route
+    if (workspaceId) {
+      headers["workspace-id"] = workspaceId;
+    }
+
+    // 4. Use your global request wrapper to send the data safely
+    return request("/database/connect", {
+      method: "POST",
+      headers,
+      body: payload,
+    });
+  }
+};

@@ -4,8 +4,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 🟢 1. EXACT PLACE: Install system binaries (Tesseract & Poppler) right after WORKDIR
+# 🟢 Added tesseract-ocr-hin to your existing list!
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
+    tesseract-ocr-hin \
     poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 

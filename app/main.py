@@ -21,6 +21,7 @@ from app.api.routes import tasks
 from app.api.routes import user_api_key
 from app.api.routes import documents
 from app.api.routes import audit_routes
+from app.api.routes import database_config
 
 from app.api.routes import billing, webhooks
 
@@ -80,3 +81,4 @@ app.include_router(webhooks.router, prefix="/webhooks", tags=["Webhooks"])
 app.include_router(user_api_key.router, prefix="/api-keys", tags=["API Keys"])
 app.include_router(documents.router, prefix="/documents", tags=["RAG Documents"])
 app.include_router(audit_routes.router)
+app.include_router(database_config.router,prefix="/database", tags=["Database Onboarding"])

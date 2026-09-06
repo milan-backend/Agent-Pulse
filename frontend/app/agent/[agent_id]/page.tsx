@@ -15,7 +15,8 @@ import {
   KeyRound,
   FileText,
   AlertTriangle,
-  ArrowUpRight
+  ArrowUpRight,
+  Database // 🟢 ADDED: Database icon for the new route
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
@@ -137,7 +138,7 @@ export default function AgentRuntimePage() {
             <p className="mt-2 text-zinc-400 text-sm">Runtime Agent Control</p>
           </div>
 
-          <div className="flex flex-col gap-3">  
+          <div className="flex flex-col gap-3 group">  
             <Link href="/dashboard/agents" className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold transition-all hover:bg-cyan-500/10">  
               <ArrowLeft size={18} className="text-zinc-400" /> 
               <span>Back To Agents</span>  
@@ -167,12 +168,17 @@ export default function AgentRuntimePage() {
               <span>Agent Knowledge</span>  
             </Link> 
 
+            {/* 🟢 NEW: Live Database Link */}
+            <Link href={`/agent/${agent.id}/database`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-blue-400 hover:border-blue-500/20 hover:bg-blue-500/5">  
+              <Database size={18} className="text-zinc-500" /> 
+              <span>Live Database</span>  
+            </Link> 
+
             <Link href={`/agent/${agent.id}/tasks`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-purple-300 hover:border-purple-500/20 hover:bg-purple-500/5">  
               <Activity size={18} className="text-zinc-500" /> 
               <span>Agent Tasks</span>  
             </Link>  
 
-            {/*  THIS NEW LINK HERE TO SHOW THE BUTTON ON THE MAIN OVERVIEW SIDEBAR */}
             <Link href={`/agent/${agent.id}/monitor`} className="flex items-center gap-3 rounded-2xl bg-[#0b1628] border border-cyan-500/5 px-5 py-4 font-bold text-zinc-300 transition-all hover:text-cyan-400 hover:border-cyan-500/20 hover:bg-cyan-500/5">  
               <Cpu size={18} className="text-zinc-500 group-hover:text-cyan-400" /> 
               <span>Pipeline Monitor</span>  
@@ -210,7 +216,7 @@ export default function AgentRuntimePage() {
             </div>
             
             <Link 
-              href={`/dashboard/billing`} // Or your billing/upgrade route context
+              href={`/dashboard/billing`} 
               className="shrink-0 flex items-center gap-2 rounded-xl bg-red-500 px-5 py-3 text-sm font-bold text-white transition-all hover:bg-red-600 shadow-md active:scale-95"
             >
               <span>Upgrade Plan</span>
@@ -246,7 +252,6 @@ export default function AgentRuntimePage() {
         <div className="mt-10 grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 flex-shrink-0 w-full">  
           <Card title="Missions" value={Number(agent.mission_count || 0).toLocaleString()} icon={<Activity size={22} strokeWidth={2.5} />} />  
           
-          {/* Highlight the Total Cost card in subtle amber/red color context if limit is reached */}
           <div className={`rounded-3xl border p-6 transition-all overflow-hidden min-w-0 shadow-lg ${
             isLimitExceeded 
               ? "border-red-500/30 bg-red-950/10 hover:border-red-500/50" 

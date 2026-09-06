@@ -131,3 +131,10 @@ class Workspace(Base):
         back_populates="workspace",
         cascade="all, delete-orphan"
     )
+
+    config = relationship(
+        "WorkspaceConfig",
+        back_populates="workspace",
+        uselist=False, # Enforces the 1-to-1 relationship
+        cascade="all, delete-orphan"
+    )

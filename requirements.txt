@@ -39,3 +39,4 @@ pytesseract
 pdf2image
 PyMuPDF
 pymupdf4llm
+PyJWT[crypto]
