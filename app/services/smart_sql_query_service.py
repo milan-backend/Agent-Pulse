@@ -21,17 +21,14 @@ class SQLExtractionSpec(BaseModel):
     columns: List[str] = Field(
         description="The list of specific column names to fetch (e.g., ['id', 'status', 'delivery_date'])."
     )
-    # 👉 FIXED: Replaced Dict[str, Any] with a strict list of objects
     filters: List[SQLFilter] = Field(
         default_factory=list,
         description="List of column-value pairs for WHERE clauses extracted from user prompt. NEVER guess or hardcode user identity."
     )
-    # 👉 FIXED: Removed Optional, using an empty string default
     sort_by: str = Field(
         default="",
         description="Column to sort by, with direction if relevant (e.g., 'created_at DESC'). Leave empty if none."
     )
-    # 👉 FIXED: Removed Optional, using a standard integer default
     limit: int = Field(
         default=100,
         description="Number of rows to return. Use 100 for 'all' queries, or 1 for 'latest/recent' queries."
@@ -182,9 +179,6 @@ class SmartSQLQueryService:
         # -------------------------------------------------------------
         # Step E: Smart SQL Extraction AI (Pass 2)
         # -------------------------------------------------------------
-        # -------------------------------------------------------------
-        # Step E: Smart SQL Extraction AI (Pass 2)
-        # -------------------------------------------------------------
         system_instruction = (
             "You are the Enterprise SQL Extraction Engine.\n"
             "Your task is to analyze candidate database table schemas and determine the exact table, "
@@ -195,6 +189,7 @@ class SmartSQLQueryService:
             "3. If filtering by multiple items (e.g., Rohan, Kavita), use the 'IN' operator and put all items in the 'values' list.\n"
             "4. If the user asks for 'all', leave limit at 100. If they ask for 'latest', 'recent', or 'where is my', sort DESC and set limit=1.\n"
             "5. If none of the tables can answer the request, output empty columns and target_table.\n\n"
+            "CRITICAL FILTERING RULE FOR TEXT: When creating ILIKE filters for text columns (like names, products, or descriptions), you MUST strip out conversational noise words (e.g., 'order', 'purchase', 'item', 'details', 'my', 'the'). Filter ONLY on the core unique noun. For example, if the prompt is 'status of Amit's charger order', your filter value should be '%charger%', NEVER '%charger order%'.\n\n"
             "Respond STRICTLY with valid JSON adhering to the SQLExtractionSpec schema."
         )
 

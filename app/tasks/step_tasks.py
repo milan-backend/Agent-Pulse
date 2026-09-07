@@ -277,8 +277,15 @@ def process_step(self, step_id: str):
                 telemetry_timeline.append({"event_name": "INTENT_CLASSIFICATION", "route": intent.data_route})
                 print(f"🚦 [CELERY WORKER] Gatekeeper classified intent as: {intent.data_route}")
 
+                # 🟢 DECOMPOSITION ROUTING TARGETS (Graceful fallback to original prompt)
+                target_rag_prompt = getattr(intent, "rag_sub_query", None) or prompt
+                target_sql_prompt = getattr(intent, "sql_sub_query", None) or prompt
+
+                if intent.data_route == "HYBRID":
+                    print(f"🔀 [HYBRID DECOMPOSITION] SQL Target: '{target_sql_prompt}' | RAG Target: '{target_rag_prompt}'")
+
                 # -------------------------------------------------------------
-                # BRANCH A: KNOWLEDGE BASE ROUTE (Your Existing Code)
+                # BRANCH A: KNOWLEDGE BASE ROUTE
                 # -------------------------------------------------------------
                 if intent.data_route in ["KNOWLEDGE_BASE", "HYBRID"]:
                     active_docs = db.query(UploadedDocument).filter(
@@ -287,7 +294,7 @@ def process_step(self, step_id: str):
                     active_doc_ids = [str(doc.id) for doc in active_docs]
 
                     target_chunk_ids = execute_smart_routing(
-                        user_prompt=prompt,
+                        user_prompt=target_rag_prompt,
                         workspace_id=uuid.UUID(current_workspace_id),
                         db=db,
                         document_ids=active_doc_ids
@@ -315,7 +322,7 @@ def process_step(self, step_id: str):
                                 documents_influencing_list.append(document.filename)
 
                 # -------------------------------------------------------------
-                # BRANCH B: LIVE SQL ROUTE (The New Engine)
+                # BRANCH B: LIVE SQL ROUTE
                 # -------------------------------------------------------------
                 if intent.data_route in ["LIVE_DATA", "HYBRID"]:
                     # Ensure we have a database config for this workspace
@@ -323,16 +330,12 @@ def process_step(self, step_id: str):
                     
                     if config:
                         sql_spec = SmartSQLQueryService.execute_sql_routing(
-                            user_prompt=prompt,
+                            user_prompt=target_sql_prompt,
                             workspace_id=uuid.UUID(current_workspace_id),
                             schema_keywords=intent.schema_keywords
                         )
                         
                         if sql_spec and sql_spec.target_table:
-                            # 🛡️ IRON WALL: Force User ID into filters
-                            # Assuming the user_id is passed in the durable step input
-                            customer_identity = step.input_data.get("customer_id") if isinstance(step.input_data, dict) else None
-
                             # 🛡️ IRON WALL: Force User ID into filters
                             customer_identity = step.input_data.get("customer_id") if isinstance(step.input_data, dict) else None
 

@@ -1,6 +1,6 @@
 import os
 import json
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel, Field
 from google import genai
 
@@ -18,6 +18,15 @@ class QueryIntentClassification(BaseModel):
         default_factory=list,
         description="If LIVE_DATA or HYBRID, list 3-5 keywords to search the database schema (e.g., ['order', 'tracking', 'status']). If KNOWLEDGE_BASE only, leave empty."
     )
+    # --- NEW FIELDS FOR DECOMPOSITION ---
+    sql_sub_query: Optional[str] = Field(
+        default=None, 
+        description="If HYBRID, a clean query focusing ONLY on the entity database lookup (e.g. 'Amit USB-C Fast Charger status'). Leave empty if not HYBRID."
+    )
+    rag_sub_query: Optional[str] = Field(
+        default=None, 
+        description="If HYBRID, a clean query focusing ONLY on the concept for the Knowledge Base (e.g. 'store policy processing timeline business days'). Leave empty if not HYBRID."
+    )
     routing_reasoning: str = Field(
         description="Brief explanation of why this route was chosen."
     )
@@ -34,6 +43,7 @@ class IntentRouterService:
 
         print(f"🚦 [GATEKEEPER] Analyzing intent for prompt: '{user_prompt}'")
 
+        # --- UPDATED SYSTEM INSTRUCTION ---
         system_instruction = (
             "You are the Master Gatekeeper for an enterprise AI system.\n"
             "Your ONLY job is to route the user's query to the correct data pipeline based on the NATURE of the question, regardless of the industry.\n\n"
@@ -41,6 +51,10 @@ class IntentRouterService:
             "- LIVE_DATA: The user is asking for structured, transactional, or analytical data. Route here if they ask for counts ('how many'), specific entity records ('what is the status of', 'who is'), lists, metrics, or financial figures tied to specific IDs or names.\n"
             "- KNOWLEDGE_BASE: The user is asking for static, unstructured, or document-based information. Route here if they ask for policies, procedures, manuals, definitions, reports, 'how to' guides, or general company rules.\n"
             "- HYBRID: The user asks for BOTH (e.g., 'What is Kavita's current title [Live Data], and what is the official travel policy [Knowledge Base]?').\n\n"
+            "QUERY DECOMPOSITION (CRITICAL FOR HYBRID ROUTES):\n"
+            "If the intent is HYBRID, you must decompose the query into two distinct parts to prevent search engine confusion:\n"
+            "1. sql_sub_query: Extract only the target person, item, and attribute for the live database. Strip out words like 'policy', 'rules', 'according to'.\n"
+            "2. rag_sub_query: Extract only the concept or rule to look up in the documents. Strip out specific customer names, order numbers, or live transactional references.\n\n"
             "KEYWORD EXTRACTION (CRITICAL):\n"
             "1. If LIVE_DATA or HYBRID: Extract 1-4 core conceptual nouns that represent the entities or attributes the user wants (e.g., 'orders', 'status', 'employees', 'revenue', 'patients'). Do NOT extract verbs or stop words.\n"
             "2. If KNOWLEDGE_BASE ONLY: You MUST leave schema_keywords completely empty ( [] ) so the document retrieval engine can run pure mathematical vector searches without interference.\n\n"
