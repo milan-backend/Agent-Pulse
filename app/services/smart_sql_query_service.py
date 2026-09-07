@@ -11,7 +11,8 @@ from google import genai
 # =====================================================================
 class SQLFilter(BaseModel):
     column: str = Field(description="The exact column name to filter by.")
-    value: str = Field(description="The value to match against the column.")
+    operator: str = Field(description="The SQL operator to use: '=', 'IN', '>', '<', etc.")
+    values: List[str] = Field(description="The list of values to match. Use a list of one item for '='.")
 
 class SQLExtractionSpec(BaseModel):
     target_table: str = Field(
@@ -181,14 +182,17 @@ class SmartSQLQueryService:
         # -------------------------------------------------------------
         # Step E: Smart SQL Extraction AI (Pass 2)
         # -------------------------------------------------------------
+        # -------------------------------------------------------------
+        # Step E: Smart SQL Extraction AI (Pass 2)
+        # -------------------------------------------------------------
         system_instruction = (
             "You are the Enterprise SQL Extraction Engine.\n"
             "Your task is to analyze candidate database table schemas and determine the exact table, "
             "columns, and filters required to fulfill the user request.\n\n"
             "DECISION RULES:\n"
             "1. Select ONLY ONE target_table that best answers the query.\n"
-            "2. Select only necessary columns relevant to the answer.\n"
-            "3. Extract filters strictly from the question (e.g., status, dates). NEVER invent user IDs.\n"
+            "2. Select necessary columns, but ALWAYS include primary identifiers like 'name' or 'id' in your columns list so the output has context.\n"
+            "3. If filtering by multiple items (e.g., Rohan, Kavita), use the 'IN' operator and put all items in the 'values' list.\n"
             "4. If the user asks for 'all', leave limit at 100. If they ask for 'latest', 'recent', or 'where is my', sort DESC and set limit=1.\n"
             "5. If none of the tables can answer the request, output empty columns and target_table.\n\n"
             "Respond STRICTLY with valid JSON adhering to the SQLExtractionSpec schema."

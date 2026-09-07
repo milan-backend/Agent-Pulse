@@ -333,13 +333,9 @@ def process_step(self, step_id: str):
                             # Assuming the user_id is passed in the durable step input
                             customer_identity = step.input_data.get("customer_id") if isinstance(step.input_data, dict) else None
 
-                            # ✅ FIXED: Loop through the strict Pydantic list and convert it back to a standard dictionary
-                            enforced_filters = {f.column: f.value for f in sql_spec.filters}
+                            # 🛡️ IRON WALL: Force User ID into filters
+                            customer_identity = step.input_data.get("customer_id") if isinstance(step.input_data, dict) else None
 
-                            if customer_identity:
-                               enforced_filters["customer_id"] = customer_identity
-                            
-                            # Import the global connection adapter and text parser
                             from app.core.sql_adapter import sql_adapter
                             from sqlalchemy import text
                             
@@ -351,10 +347,27 @@ def process_step(self, step_id: str):
                             where_clauses = []
                             query_params = {}
                             
-                            for col_name, col_value in enforced_filters.items():
-                                param_key = f"param_{col_name}"
-                                where_clauses.append(f"{col_name} = :{param_key}")
-                                query_params[param_key] = col_value
+                            # Handle dynamic AI filters (Safely parsing lists for the 'IN' operator)
+                            for idx, f in enumerate(sql_spec.filters):
+                                op = f.operator.upper()
+                                if op == 'IN' and f.values:
+                                    # Create safe bind keys for lists: :p_0_0, :p_0_1, etc.
+                                    bind_keys = []
+                                    for v_idx, val in enumerate(f.values):
+                                        pk = f"p_{idx}_{v_idx}"
+                                        bind_keys.append(f":{pk}")
+                                        query_params[pk] = val
+                                    where_clauses.append(f"{f.column} IN ({', '.join(bind_keys)})")
+                                elif f.values:
+                                    # Standard single value operator (=, >, <)
+                                    pk = f"p_{idx}"
+                                    where_clauses.append(f"{f.column} {op} :{pk}")
+                                    query_params[pk] = f.values[0]
+                            
+                            # 3. Add Mandatory Tenant/Identity Guardrail
+                            if customer_identity:
+                                where_clauses.append("customer_id = :cust_id")
+                                query_params["cust_id"] = customer_identity
                                 
                             if where_clauses:
                                 sql_query += " WHERE " + " AND ".join(where_clauses)
