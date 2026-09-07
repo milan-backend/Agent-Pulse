@@ -209,13 +209,13 @@ def execute_smart_routing(
         scored_pool.append((rrf, cid, data))
 
     scored_pool.sort(key=lambda x: x[0], reverse=True)
-    top_5_candidates = scored_pool[:5]
+    top_candidates = scored_pool[:12]
     
     # -----------------------------------------------------------------
     # Step E: Build Enriched Index Cards for Smart Router AI
     # -----------------------------------------------------------------
     index_cards = []
-    for score, cid, item in top_5_candidates:
+    for score, cid, item in top_candidates:
         meta = item["meta"]
         
         # 🟢 THE FIX: Truncate the keywords so they don't bloat the LLM prompt tokens!
