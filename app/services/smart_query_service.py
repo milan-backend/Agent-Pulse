@@ -209,7 +209,7 @@ def execute_smart_routing(
         scored_pool.append((rrf, cid, data))
 
     scored_pool.sort(key=lambda x: x[0], reverse=True)
-    top_candidates = scored_pool[:12]
+    top_candidates = scored_pool[:5]
     
     # -----------------------------------------------------------------
     # Step E: Build Enriched Index Cards for Smart Router AI
