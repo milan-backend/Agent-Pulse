@@ -288,8 +288,13 @@ def process_step(self, step_id: str):
                 # BRANCH A: KNOWLEDGE BASE ROUTE
                 # -------------------------------------------------------------
                 if intent.data_route in ["KNOWLEDGE_BASE", "HYBRID"]:
+                    from sqlalchemy import or_
                     active_docs = db.query(UploadedDocument).filter(
-                        UploadedDocument.workspace_id == current_workspace_id
+                        UploadedDocument.workspace_id == current_workspace_id,
+                        or_(
+                            UploadedDocument.agent_id == None, 
+                            UploadedDocument.agent_id == agent.id
+                        )
                     ).all()
                     active_doc_ids = [str(doc.id) for doc in active_docs]
 
@@ -326,12 +331,16 @@ def process_step(self, step_id: str):
                 # -------------------------------------------------------------
                 if intent.data_route in ["LIVE_DATA", "HYBRID"]:
                     # Ensure we have a database config for this workspace
-                    config = db.query(WorkspaceConfig).filter_by(workspace_id=current_workspace_id).first()
+                    config = db.query(WorkspaceConfig).filter_by(
+                        workspace_id=current_workspace_id,
+                        agent_id=agent.id 
+                    ).first()
                     
                     if config:
                         sql_spec = SmartSQLQueryService.execute_sql_routing(
                             user_prompt=target_sql_prompt,
                             workspace_id=uuid.UUID(current_workspace_id),
+                            agent_id=agent.id, # 👈 Pass the agent_id to the router!
                             schema_keywords=intent.schema_keywords
                         )
                         

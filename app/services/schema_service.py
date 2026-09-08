@@ -107,6 +107,8 @@ class SchemaSyncService:
         a '1 Table = 1 Chunk' Semantic Card, and stores it in ChromaDB.
         """
         workspace_id_str = str(config.workspace_id)
+        # 👈 NEW: Extract the agent ID from the config
+        agent_id_str = str(config.agent_id) 
         
         # 1. Introspect client's database
         raw_catalog = SchemaIntrospectionService.introspect_workspace_db(config)
@@ -124,7 +126,7 @@ class SchemaSyncService:
                     catalog[table_name] = raw_catalog[table_name]
 
         if not catalog:
-            print(f"⚠️ [SCHEMA SYNC] No valid tables matched allowed_tables for {workspace_id_str}")
+            print(f"⚠️ [SCHEMA SYNC] No valid tables matched allowed_tables for agent {agent_id_str}")
             return 0
 
         # 3. Setup AI Client and ChromaDB Client
@@ -143,12 +145,13 @@ class SchemaSyncService:
             metadata={"hnsw:space": "cosine"}
         )
 
-        # 4. Remove previous schema entries for this tenant to avoid stale cards
+        # 4. Remove previous schema entries for THIS SPECIFIC AGENT to avoid stale cards
         try:
             collection.delete(
                 where={
                     "$and": [
                         {"workspace_id": workspace_id_str},
+                        {"agent_id": agent_id_str}, # 👈 NEW: Protects other agents' schemas from being deleted
                         {"content_type": "db_schema"}
                     ]
                 }
@@ -183,11 +186,13 @@ class SchemaSyncService:
                 contents=schema_text
             )
             
-            ids.append(f"schema_{workspace_id_str}_{table_name}")
+            # 👈 NEW: Added agent_id to the unique string ID so it doesn't overwrite other agents
+            ids.append(f"schema_{workspace_id_str}_{agent_id_str}_{table_name}")
             documents.append(schema_text)
             embeddings.append(embed_resp.embeddings[0].values)
             metadatas.append({
                 "workspace_id": workspace_id_str,
+                "agent_id": agent_id_str, # 👈 NEW: Injected into ChromaDB metadata for the router to filter by
                 "content_type": "db_schema",
                 "table_name": table_name,
                 "schema_keywords": keywords
@@ -201,6 +206,6 @@ class SchemaSyncService:
                 embeddings=embeddings,
                 metadatas=metadatas
             )
-            print(f"📦 [CHROMA SYNC] Indexed {len(ids)} table schemas for workspace: {workspace_id_str}")
+            print(f"📦 [CHROMA SYNC] Indexed {len(ids)} table schemas for agent: {agent_id_str}")
 
         return len(ids)

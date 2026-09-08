@@ -155,7 +155,8 @@ def process_document_embedding(document_id: str):
                         "chunk_keywords": chunk_specific_keywords, # 🟢 Inject granular keywords into metadata
                         "semantic_summary": str(section.semantic_summary) if section.semantic_summary else "",
                         "document_id": str(doc.id),
-                        "workspace_id": str(doc.workspace_id)
+                        "workspace_id": str(doc.workspace_id),
+                        "agent_id": str(doc.agent_id) if doc.agent_id else "workspace_global"
                     }]
                 )
                 

@@ -57,6 +57,7 @@ class SmartSQLQueryService:
         cls,
         user_prompt: str,
         workspace_id: uuid.UUID,
+        agent_id: uuid.UUID,
         schema_keywords: List[str]
     ) -> Optional[SQLExtractionSpec]:
         """
@@ -94,6 +95,7 @@ class SmartSQLQueryService:
         base_filter = {
             "$and": [
                 {"workspace_id": workspace_id_str},
+                {"agent_id": str(agent_id)},
                 {"content_type": "db_schema"}
             ]
         }

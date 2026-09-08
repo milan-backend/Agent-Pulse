@@ -145,18 +145,18 @@ def execute_smart_routing(
     k_ids = keyword_results["ids"][0] if keyword_results.get("ids") else []
 
     if not v_ids and not k_ids:
-        print("⚠️ 0 primary matches found. Triggering Workspace-Wide Chunk Fallback...")
+        print("⚠️ 0 primary matches found. Triggering Isolated Fallback Search...")
         fallback_results = collection.query(
             query_embeddings=[query_vector],
             n_results=10,
-            where={"workspace_id": str(workspace_id)},
+            where=where_filter, # 👈 🛡️ THE FIX: Strictly use the isolated document_ids list!
             include=["metadatas", "documents", "distances"]
         )
         v_ids = fallback_results["ids"][0] if fallback_results.get("ids") else []
         vector_results = fallback_results
 
     if not v_ids and not k_ids:
-        print("❌ No matching chunks found in workspace.")
+        print("❌ No matching chunks found in allowed documents.")
         return []
 
     # -----------------------------------------------------------------
