@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { 
-  Cpu, Activity, ArrowLeft, Pause, Settings, KeyRound, FileText, Database, 
-  Server, Lock, CheckCircle2, Copy, Plus, X, TerminalSquare
+  Cpu, Activity, ArrowLeft, Settings, KeyRound, FileText, Database, 
+  Server, Lock, Copy, Plus, X, TerminalSquare, Trash2
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -15,10 +15,13 @@ export default function AgentDatabasePage() {
   const agentId = params?.agent_id as string;
   const router = useRouter();
 
+  // --- STATE ---
   const [loading, setLoading] = useState(false);
+  const [loadingConnections, setLoadingConnections] = useState(true);
+  const [connections, setConnections] = useState<any[]>([]);
   const [newTable, setNewTable] = useState("");
   
-  const [payload, setPayload] = useState<DBConnectionPayload>({
+  const defaultPayload: DBConnectionPayload = {
     db_type: "postgresql",
     db_host: "",
     db_port: 5432,
@@ -28,10 +31,31 @@ export default function AgentDatabasePage() {
     jwks_url: "",
     sync_all_tables: true,
     allowed_tables: []
-  });
+  };
+  
+  const [payload, setPayload] = useState<DBConnectionPayload>(defaultPayload);
 
+  // --- FETCH CONNECTIONS ---
+  const fetchConnections = async () => {
+    try {
+      setLoadingConnections(true);
+      const workspaceId = localStorage.getItem("workspace_id");
+      const data = await databaseApi.getConnections(workspaceId, agentId);
+      setConnections(data);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to fetch active connections.");
+    } finally {
+      setLoadingConnections(false);
+    }
+  };
+
+  useEffect(() => {
+    if (agentId) fetchConnections();
+  }, [agentId]);
+
+  // --- HANDLERS ---
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     if (name === "db_port") {
       setPayload(prev => ({ ...prev, [name]: parseInt(value) || 0 }));
     } else {
@@ -54,6 +78,7 @@ export default function AgentDatabasePage() {
     }));
   };
 
+  // --- CONNECT LOGIC ---
   const handleConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -65,9 +90,14 @@ export default function AgentDatabasePage() {
     try {
       setLoading(true);
       const workspaceId = localStorage.getItem("workspace_id");
-      const response = await databaseApi.connectDatabase(workspaceId, payload);
+      
+      // 🚀 Now passing agentId correctly
+      const response = await databaseApi.connectDatabase(workspaceId, agentId, payload);
       toast.success(response.message || "Database connected securely!");
-      router.push(`/agent/${agentId}/monitor`);
+      
+      // Reset form and refresh list
+      setPayload(defaultPayload);
+      fetchConnections();
     } catch (error: any) {
       toast.error(error.message || "Failed to connect to database");
     } finally {
@@ -75,62 +105,40 @@ export default function AgentDatabasePage() {
     }
   };
 
-  // 🟢 DYNAMIC READ-ONLY SCRIPT GENERATOR (Password Masked)
+  // --- DELETE LOGIC ---
+  const handleDelete = async (connectionId: string) => {
+    if (!confirm("Are you sure? The AI will lose access to this database and its schema will be deleted from memory.")) return;
+    
+    try {
+      const workspaceId = localStorage.getItem("workspace_id");
+      await databaseApi.deleteConnection(workspaceId, agentId, connectionId);
+      toast.success("Connection securely deleted.");
+      fetchConnections();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete connection.");
+    }
+  };
+
+  // --- SCRIPT GENERATOR ---
   const getReadOnlyScript = () => {
     const db = payload.db_name || "[database_name]";
     const user = payload.db_username || "agentpulse_ro";
-    
-    // 🛡️ SECURITY PATCH: Never expose the plaintext password in the generated script window
     const pass = "********"; 
 
     if (payload.db_type === "postgresql") {
-      let script = `-- 1. Create the read-only user (Replace stars with your password)\nCREATE ROLE ${user} WITH LOGIN PASSWORD '${pass}';\n\n`;
+      let script = `-- 1. Create the read-only user\nCREATE ROLE ${user} WITH LOGIN PASSWORD '${pass}';\n\n`;
       script += `-- 2. Grant connection access\nGRANT CONNECT ON DATABASE ${db} TO ${user};\nGRANT USAGE ON SCHEMA public TO ${user};\n\n`;
       if (payload.sync_all_tables) {
         script += `-- 3. Grant access to ALL tables\nGRANT SELECT ON ALL TABLES IN SCHEMA public TO ${user};\nALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO ${user};`;
       } else {
         script += `-- 3. Grant access to SPECIFIC tables\n`;
-        if (payload.allowed_tables.length === 0) script += `-- (Add tables in the form to generate grants)\n`;
         payload.allowed_tables.forEach(t => {
           script += `GRANT SELECT ON TABLE ${t} TO ${user};\n`;
         });
       }
       return script;
     } 
-    
-    if (payload.db_type === "mysql") {
-      let script = `-- 1. Create the read-only user (Replace stars with your password)\nCREATE USER '${user}'@'%' IDENTIFIED BY '${pass}';\n\n`;
-      if (payload.sync_all_tables) {
-        script += `-- 2. Grant access to ALL tables\nGRANT SELECT ON ${db}.* TO '${user}'@'%';\n`;
-      } else {
-        script += `-- 2. Grant access to SPECIFIC tables\n`;
-        if (payload.allowed_tables.length === 0) script += `-- (Add tables in the form to generate grants)\n`;
-        payload.allowed_tables.forEach(t => {
-          script += `GRANT SELECT ON ${db}.${t} TO '${user}'@'%';\n`;
-        });
-      }
-      script += `\nFLUSH PRIVILEGES;`;
-      return script;
-    }
-
-    if (payload.db_type === "mongodb") {
-      return `// MongoDB uses JS shell commands\n\nuse ${db};\n\ndb.createUser({\n  user: "${user}",\n  pwd: "${pass}",\n  roles: [\n    { role: "read", db: "${db}" }\n  ]\n});`;
-    }
-
-    if (payload.db_type === "sqlserver") {
-      let script = `-- 1. Create Login and User\nUSE [master];\nCREATE LOGIN [${user}] WITH PASSWORD = '${pass}';\n\nUSE [${db}];\nCREATE USER [${user}] FOR LOGIN [${user}];\n\n`;
-      if (payload.sync_all_tables) {
-        script += `-- 2. Grant read to ALL tables\nALTER ROLE db_datareader ADD MEMBER [${user}];`;
-      } else {
-        script += `-- 2. Grant read to SPECIFIC tables\n`;
-        payload.allowed_tables.forEach(t => {
-          script += `GRANT SELECT ON [${t}] TO [${user}];\n`;
-        });
-      }
-      return script;
-    }
-
-    return `-- Script generation for ${payload.db_type} is not yet supported in this preview.`;
+    return `-- Script generation for ${payload.db_type} is not yet fully supported in this preview.`;
   };
 
   const copyScript = () => {
@@ -194,7 +202,7 @@ export default function AgentDatabasePage() {
       {/* MAIN CONTAINER */}  
       <main className="flex-1 p-8 overflow-y-auto h-full flex flex-col min-w-0 bg-[#020817] scrollbar-thin scrollbar-thumb-zinc-900">  
         
-        <div className="flex items-center justify-between gap-6 flex-wrap flex-shrink-0 w-full bg-[#08111f]/30 border border-blue-500/10 p-6 rounded-3xl shadow-[0_0_20px_rgba(59,130,246,0.03)]">  
+        <div className="flex items-center justify-between gap-6 flex-wrap flex-shrink-0 w-full bg-[#08111f]/30 border border-blue-500/10 p-6 rounded-3xl shadow-[0_0_20px_rgba(59,130,246,0.03)] mb-8">  
           <div className="flex items-center gap-6 min-w-0">  
             <div className="h-24 w-24 rounded-3xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-[0_0_35px_rgba(59,130,246,0.15)] shrink-0">  
               <Database size={48} className="text-blue-400" />  
@@ -206,12 +214,58 @@ export default function AgentDatabasePage() {
           </div>  
         </div>  
 
-        <div className="mt-8 grid lg:grid-cols-2 gap-8">
+        {/* 🟢 NEW: ACTIVE CONNECTIONS LIST */}
+        <div className="mb-8 rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 shadow-lg">
+          <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-zinc-100">
+            <Database className="text-cyan-400" /> Active Connections
+          </h2>
+          
+          {loadingConnections ? (
+            <div className="text-zinc-500 font-medium animate-pulse">Fetching active connections...</div>
+          ) : connections.length === 0 ? (
+            <div className="text-zinc-500 italic bg-[#040b18] p-6 rounded-2xl border border-dashed border-cyan-500/20 text-center">
+              No live databases connected to this agent yet. Set one up below!
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {connections.map((conn) => (
+                <div key={conn.id} className="p-5 border border-cyan-500/20 bg-[#040b18] rounded-2xl flex flex-col gap-3 relative group hover:border-cyan-500/40 transition-colors shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <div className="truncate pr-4">
+                      <h3 className="font-bold text-white text-lg truncate">{conn.db_name}</h3>
+                      <p className="text-sm text-zinc-400 truncate">{conn.db_type} • {conn.db_host}</p>
+                    </div>
+                    <button 
+                      onClick={() => handleDelete(conn.id)} 
+                      title="Disconnect Database"
+                      className="text-zinc-600 hover:text-red-400 transition-colors p-2 bg-red-500/0 hover:bg-red-500/10 rounded-lg shrink-0"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-3 py-1.5 rounded-lg w-fit border border-cyan-500/10">
+                      User: {conn.db_user}
+                    </div>
+                    {conn.sync_all_tables ? (
+                      <span className="text-xs text-emerald-400 font-medium">All Tables</span>
+                    ) : (
+                      <span className="text-xs text-blue-400 font-medium">Filtered Scope</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* CONNECTION FORM & SCRIPT GENERATOR */}
+        <div className="grid lg:grid-cols-2 gap-8">
           
           {/* LEFT: THE CONFIGURATION FORM */}
           <div className="rounded-3xl border border-cyan-500/10 bg-[#08111f] p-8 shadow-lg">
             <h2 className="text-2xl font-bold mb-6 flex items-center gap-3 text-zinc-100">
-              <Server className="text-cyan-400" /> Connection Setup
+              <Server className="text-cyan-400" /> Connect New Database
             </h2>
             
             <form id="db-form" onSubmit={handleConnect} className="space-y-6">
@@ -234,12 +288,10 @@ export default function AgentDatabasePage() {
                   </select>
                 </div>
 
-                {/* 🟢 NEW: Schema Access Radio Toggles */}
                 <div className="space-y-4">
                   <h3 className="text-sm font-semibold text-zinc-400">Schema Access</h3>
                   
                   <div className="flex items-center gap-8">
-                    {/* ALL TABLES RADIO */}
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <div className="relative flex items-center justify-center">
                         <input 
@@ -254,7 +306,6 @@ export default function AgentDatabasePage() {
                       <span className="text-zinc-300 font-medium group-hover:text-white transition-colors">All tables</span>
                     </label>
 
-                    {/* SELECTED TABLES RADIO */}
                     <label className="flex items-center gap-3 cursor-pointer group">
                       <div className="relative flex items-center justify-center">
                         <input 
@@ -270,7 +321,6 @@ export default function AgentDatabasePage() {
                     </label>
                   </div>
 
-                  {/* SMART TABLE ADDER */}
                   {!payload.sync_all_tables && (
                     <div className="mt-4 animate-fade-in space-y-3 p-4 bg-[#040b18]/50 border border-cyan-500/10 rounded-xl">
                       <div className="flex gap-2">

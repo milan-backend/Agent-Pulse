@@ -1,15 +1,17 @@
+import uuid
+from datetime import datetime
 from sqlalchemy import (
     Column,
     String,
     Integer,
     DateTime,
-    ForeignKey
+    ForeignKey,
+    Boolean,
+    JSON,
+    UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
-from datetime import datetime
-import uuid
-from sqlalchemy import Column, Boolean, JSON
 
 from app.db.session import Base
 
@@ -22,11 +24,18 @@ class WorkspaceConfig(Base):
         default=uuid.uuid4
     )
 
-    # 1-to-1 relationship with your existing Workspace model
+    # 1. WORKSPACE LINK: Removed unique=True
     workspace_id = Column(
         UUID(as_uuid=True),
         ForeignKey("workspaces.id", ondelete="CASCADE"),
-        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    # 2. AGENT LINK: Added to scope databases to specific agents
+    agent_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=False,
         index=True
     )
@@ -42,7 +51,6 @@ class WorkspaceConfig(Base):
     db_password_encrypted = Column(String, nullable=False)
 
     # --- Identity Verification (The Iron Wall) ---
-    # The URL where we fetch the company's public keys to verify JWTs
     jwks_url = Column(String, nullable=False)
 
     created_at = Column(
@@ -56,12 +64,21 @@ class WorkspaceConfig(Base):
         onupdate=datetime.utcnow
     )
 
-    # Add these to WorkspaceConfig
     sync_all_tables = Column(Boolean, default=True, nullable=False)
-    allowed_tables = Column(JSON, default=list, nullable=False) # Stores ["users", "orders"] if sync_all_tables is False
+    allowed_tables = Column(JSON, default=list, nullable=False) 
 
-    # Relationship back to the Workspace
+    # 3. RELATIONSHIPS
     workspace = relationship(
         "Workspace",
-        back_populates="config"
+        back_populates="configs" # 👈 Matches the new plural name in workspace.py
+    )
+
+    agent = relationship(
+        "Agent",
+        backref="db_configs" # 👈 Automatically adds .db_configs to the Agent model
+    )
+
+    # 4. COMPOSITE UNIQUE CONSTRAINT
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "agent_id", name="uq_workspace_agent_db_config"),
     )

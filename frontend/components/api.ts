@@ -1082,12 +1082,13 @@ export interface DBConnectionPayload {
 }
 
 export const databaseApi = {
-  connectDatabase: async (providedWorkspaceId: string | null, payload: DBConnectionPayload) => {
-    // 1. Safely resolve token and workspace context for SSR/CSR environments
+  // =======================================================
+  // 1. CONNECT NEW DATABASE
+  // =======================================================
+  connectDatabase: async (providedWorkspaceId: string | null, agentId: string, payload: DBConnectionPayload) => {
     const isClient = typeof window !== "undefined";
     const token = isClient ? localStorage.getItem("token") : null;
     
-    // 2. Cascade fallback: provided ID -> active workspace -> default workspace
     const workspaceId = providedWorkspaceId 
       || (isClient ? localStorage.getItem("active_workspace_id") : null) 
       || (isClient ? localStorage.getItem("workspace_id") : null);
@@ -1096,18 +1097,73 @@ export const databaseApi = {
       throw new Error("Session Error: Missing workspace context. Please refresh your browser or log in again.");
     }
 
-    // 3. Construct headers strictly matching your global authHeaders pattern
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "workspace-id": workspaceId,
     };
 
-    // 4. Dispatch securely via the global interceptor pipeline
-    return request("/database/connect", {
+    // 🚀 Pass agent_id strictly as a query parameter
+    return request(`/database/connect?agent_id=${agentId}`, {
       method: "POST",
       headers,
       body: payload,
+    });
+  },
+
+  // =======================================================
+  // 2. GET ACTIVE CONNECTIONS
+  // =======================================================
+  getConnections: async (providedWorkspaceId: string | null, agentId: string) => {
+    const isClient = typeof window !== "undefined";
+    const token = isClient ? localStorage.getItem("token") : null;
+    
+    const workspaceId = providedWorkspaceId 
+      || (isClient ? localStorage.getItem("active_workspace_id") : null) 
+      || (isClient ? localStorage.getItem("workspace_id") : null);
+
+    if (!workspaceId) {
+      throw new Error("Session Error: Missing workspace context. Please refresh your browser or log in again.");
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "workspace-id": workspaceId,
+    };
+
+    // 🚀 Pass agent_id strictly as a query parameter
+    return request(`/database/connections?agent_id=${agentId}`, {
+      method: "GET",
+      headers,
+    });
+  },
+
+  // =======================================================
+  // 3. DELETE CONNECTION
+  // =======================================================
+  deleteConnection: async (providedWorkspaceId: string | null, agentId: string, connectionId: string) => {
+    const isClient = typeof window !== "undefined";
+    const token = isClient ? localStorage.getItem("token") : null;
+    
+    const workspaceId = providedWorkspaceId 
+      || (isClient ? localStorage.getItem("active_workspace_id") : null) 
+      || (isClient ? localStorage.getItem("workspace_id") : null);
+
+    if (!workspaceId) {
+      throw new Error("Session Error: Missing workspace context. Please refresh your browser or log in again.");
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "workspace-id": workspaceId,
+    };
+
+    // 🚀 Pass agent_id strictly as a query parameter alongside the dynamic connectionId route
+    return request(`/database/connections/${connectionId}?agent_id=${agentId}`, {
+      method: "DELETE",
+      headers,
     });
   }
 };
