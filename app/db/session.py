@@ -7,6 +7,13 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+# NEW ADDITION: Force psycopg2 instead of psycopg (v3)
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif DATABASE_URL.startswith("postgresql://") and "psycopg2" not in DATABASE_URL:
+        DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,       # 🟢 Tests connection before running queries; automatically reconnects dropped SSL links
@@ -29,7 +36,6 @@ SessionLocal = sessionmaker(
 )
 
 Base = declarative_base()
-
 
 def get_db():
     db = SessionLocal()
