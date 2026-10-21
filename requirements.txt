@@ -41,3 +41,4 @@ PyMuPDF
 pymupdf4llm
 PyJWT[crypto]
 psycopg2-binary==2.9.9
+psycopg-binary
